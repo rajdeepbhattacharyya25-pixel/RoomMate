@@ -1,0 +1,36 @@
+{
+  "projectId": "7490169641002141903",
+  "projectUrl": "https://stitch.withgoogle.com/projects/7490169641002141903",
+  "designSystem": "assets/b136a6eaf9d145d7b2949dbaed251989",
+  "deviceType": "MOBILE",
+  "screens": [
+    {
+      "id": "4d192bb8660342a885f69a3080bd8273",
+      "name": "projects/7490169641002141903/screens/4d192bb8660342a885f69a3080bd8273",
+      "title": "CampusFlow - Roommate Expense Splitter",
+      "screenshotUrl": "https://lh3.googleusercontent.com/aida/AEtjO1VvrraFlt71BatYJjeRGvkvcW_pHKDX-92pnA06SgBh84ura_VU9B-AOPwdc_YYizNTr8_6IAOYL9CA6hAK9DRoZ9LfZ6icUmMBrNuclJN0TxCHDm1ExH0e_UGHEQPhfn6Z16G90ccfyZY-ImTOQsriYpjwv52XrTQdSDD3-3JdaXgu5KVaGKn69ZUFkkVFTR-jJ5WgYVDP8SG5d5y_o2HyKGnLGfdoGzf1vUDjIOmpGWaXlvs-ydfPX3U",
+      "htmlDownloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzljNjAzMTYyNzlkZDRmMThiZDg0YzM4Nzg1NDZmNDBmEgsSBxC68azg5xUYAZIBIwoKcHJvamVjdF9pZBIVQhM3NDkwMTY5NjQxMDAyMTQxOTAz&filename=&opi=96797242"
+    },
+    {
+      "id": "4fe3a63f0be0422a8b9ad0920f5f840c",
+      "name": "projects/7490169641002141903/screens/4fe3a63f0be0422a8b9ad0920f5f840c",
+      "title": "CampusFlow - Add Expense & Split",
+      "screenshotUrl": "https://lh3.googleusercontent.com/aida/AEtjO1WUJvARUpsm0BM28iWPRSIBiZ0O9dWTpnJiRURNJdnRvJmGi02VAWAFOub67e49LfqKZBTpzSDojtK8epKW-S-Z2MRZ_EjCzEo_WvNt8bI5dzmtrbuzff7OjGeGMX7G6ipjAn03PD6Xu4wZyoK_xD1EvAQFwaKm-cXQ2uqZmfnFWo9OIV-c7_ijCrFXXMpmAHzc4T_w8Rxk1BbVM9liDYXF3Gts8PAQ9xwumy775-4tMM7ZZT2gUAt5W50",
+      "htmlDownloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2QyYThjNWNmYzllZDQ4ZDI5MjU3Njk4ZjZiZTQwMjY5EgsSBxC68azg5xUYAZIBIwoKcHJvamVjdF9pZBIVQhM3NDkwMTY5NjQxMDAyMTQxOTAz&filename=&opi=96797242"
+    },
+    {
+      "id": "be672bd924b44c44b009825e54f9caa1",
+      "name": "projects/7490169641002141903/screens/be672bd924b44c44b009825e54f9caa1",
+      "title": "CampusFlow - Resident Authentication & Access",
+      "screenshotUrl": "https://lh3.googleusercontent.com/aida/AEtjO1XEFfY-bRLCajVz6Wyg0P5v5IOsAG7UIQeYjdgJBdJhfHRbwju74CHbKgL-WIjC_MmRj0R48xA5qdU34qoP7u8XZXRgv_rKtA19pHUlvlLzKHU4YnjUHxaSVAaiVOIE76dV96SEgrj99kmOMPUOUe8I2FT_eaxJZ--X4faCene4w-auJotXQtQcJU96lvSammWxWmDyrXjMic9WB_B9LFGJkkPVNGbOVEyescCNXEWGrJZMMSPi3hrYXuQ",
+      "htmlDownloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2YwMTI4ZmU4M2QwOTRjZjFhYmUwMDhlMTE4YTU3Y2ZlEgsSBxC68azg5xUYAZIBIwoKcHJvamVjdF9pZBIVQhM3NDkwMTY5NjQxMDAyMTQxOTAz&filename=&opi=96797242"
+    },
+    {
+      "id": "5246a26fb2574ff4ab8203d8ce723563",
+      "name": "projects/7490169641002141903/screens/5246a26fb2574ff4ab8203d8ce723563",
+      "title": "CampusFlow - WhatsApp Nudge Studio",
+      "screenshotUrl": "https://lh3.googleusercontent.com/aida/AEtjO1VrKJLWsbMXxRsVeppRrWnONB3Ks1fa4PXFuX4a2qTGRbs6a3uf6JVVVllIF3CQxFVj3J5bh3JksPuXsEoqY7EeREprh3H_90HgDgRaOYZVfXXegZvz7mgt55KihEN_HqNx1oWUeOvz-4z2DM5R2Qohg260r4Vu3DQZyRVvpUM45LVcOQIJFngA7v-m98WQErl6tmRHAdoUoW2-MWASMz5rLjrRM2gU1tbM54OmhciMuq6ovCgdGO7aiqo",
+      "htmlDownloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2Q5NWFjZmZiNTljMDRlMjE4Zjg0NmNhYWQ0OWRkMzIxEgsSBxC68azg5xUYAZIBIwoKcHJvamVjdF9pZBIVQhM3NDkwMTY5NjQxMDAyMTQxOTAz&filename=&opi=96797242"
+    }
+  ]
+}
