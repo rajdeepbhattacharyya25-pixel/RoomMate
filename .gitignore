@@ -21,6 +21,12 @@ dist-ssr
 # Scratch and internal verification scripts containing credentials
 scratch/
 .agents/scratch/
+.agents/skills/animation-libraries/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
 
 # Android build outputs & local config
 android/.gradle/
