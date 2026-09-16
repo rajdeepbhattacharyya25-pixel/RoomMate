@@ -5,15 +5,53 @@ import {
   Room,
   RoomMember,
   RoomInvitation,
+  RoomJoinRequest,
+  JoinPolicy,
+  InvitePolicy,
   PersonalExpense,
   SharedExpense,
   ExpenseSplit,
   SettlementPayment,
   AuditLog,
+  InAppNotification,
+  BugReport,
+  BugStatus,
+  FeatureSuggestion,
+  FeatureSuggestionStatus,
+  ContactRequest,
+  PlatformAnnouncement,
+  PlatformSettings,
+  SystemIncident,
+  UserRole,
 } from '../../types';
+import {
+  SuperAdminSecuritySettings,
+  SuperAdminDevice,
+  SecurityAuditRecord,
+  StepUpRiskLevel,
+} from '../auth/superAdminSecurityService';
 import { calculateSplits, round2 } from '../ledger/engine';
+const PRIMARY_STORAGE_KEY = 'roommate_saas_db_v1';
+const LEGACY_STORAGE_KEY = 'campusflow_saas_db_v3';
 
-const STORAGE_KEY = 'campusflow_saas_db_v2';
+export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
+  appName: 'RoomMate',
+  supportEmail: 'admin@roommate.app',
+  supportPhone: '+91 98765 43210',
+  googleAuthEnabled: true,
+  emailVerificationRequired: true,
+  sessionTimeoutMinutes: 1440,
+  maxRoomMembers: 12,
+  defaultJoinPolicy: 'APPROVAL_REQUIRED',
+  defaultInvitePolicy: 'ALL_MEMBERS',
+  qrExpirationHours: 72,
+  maxExpenseAmount: 200000,
+  defaultSplitMethod: 'EQUAL',
+  currencyCode: 'INR',
+  globalNotificationsEnabled: true,
+  maintenanceMode: false,
+  maintenanceMessage: 'Platform is undergoing routine maintenance.',
+};
 
 export interface DatabaseState {
   users: User[];
@@ -22,419 +60,368 @@ export interface DatabaseState {
   rooms: Room[];
   roomMembers: RoomMember[];
   roomInvitations: RoomInvitation[];
+  roomJoinRequests: RoomJoinRequest[];
   personalExpenses: PersonalExpense[];
   sharedExpenses: SharedExpense[];
   expenseSplits: ExpenseSplit[];
   settlementPayments: SettlementPayment[];
   auditLogs: AuditLog[];
+  notifications: InAppNotification[];
+  bugReports: BugReport[];
+  featureSuggestions: FeatureSuggestion[];
+  contactRequests: ContactRequest[];
+  announcements: PlatformAnnouncement[];
+  settings: PlatformSettings;
+  systemIncidents: SystemIncident[];
+  superAdminSecuritySettings?: Record<string, SuperAdminSecuritySettings>;
+  superAdminRecoveryCodes?: Array<{ userId: string; codeHash: string; isConsumed: boolean; consumedAt?: string }>;
+  superAdminTrustedDevices?: SuperAdminDevice[];
+  securityAuditLogs?: SecurityAuditRecord[];
 }
 
 export const INITIAL_DATA: DatabaseState = {
+  users: [],
+  subscriptions: [],
+  subscriptionEvents: [],
+  rooms: [],
+  roomMembers: [],
+  roomInvitations: [],
+  roomJoinRequests: [],
+  personalExpenses: [],
+  sharedExpenses: [],
+  expenseSplits: [],
+  settlementPayments: [],
+  auditLogs: [],
+  notifications: [],
+  bugReports: [],
+  featureSuggestions: [],
+  contactRequests: [],
+  announcements: [],
+  settings: DEFAULT_PLATFORM_SETTINGS,
+  systemIncidents: [],
+  superAdminSecuritySettings: {},
+  superAdminRecoveryCodes: [],
+  superAdminTrustedDevices: [],
+  securityAuditLogs: [],
+};
+
+
+export const DEFAULT_STAGING_SEEDS: DatabaseState = {
   users: [
     {
-      id: 'usr-admin-1',
-      email: 'admin@campusflow.io',
+      id: 'usr-superadmin-master',
+      name: 'Superadmin',
+      email: 'admin@roommate.app',
       phone: '+91 99999 00000',
-      name: 'Super Admin',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       role: 'SUPER_ADMIN',
       isSuspended: false,
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
     },
     {
       id: 'usr-rajdeep-1',
-      email: 'rajdeep@campus.edu',
-      phone: '+91 98765 43210',
       name: 'Rajdeep',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+      email: 'rajdeep@roommate.app',
+      phone: '+91 98765 43210',
       role: 'STUDENT',
       isSuspended: false,
-      createdAt: '2026-01-02T10:00:00Z',
-      updatedAt: '2026-01-02T10:00:00Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
     },
     {
       id: 'usr-sneha-2',
-      email: 'sneha@campus.edu',
-      phone: '+91 98765 43211',
       name: 'Sneha',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+      email: 'sneha@roommate.app',
+      phone: '+91 98765 12345',
       role: 'STUDENT',
       isSuspended: false,
-      createdAt: '2026-01-02T11:00:00Z',
-      updatedAt: '2026-01-02T11:00:00Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
     },
     {
-      id: 'usr-aryan-3',
-      email: 'aryan@campus.edu',
-      phone: '+91 98765 43212',
-      name: 'Aryan',
-      avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80',
+      id: 'usr-amit-3',
+      name: 'Amit',
+      email: 'amit@roommate.app',
+      phone: '+91 98765 67890',
       role: 'STUDENT',
       isSuspended: false,
-      createdAt: '2026-01-02T12:00:00Z',
-      updatedAt: '2026-01-02T12:00:00Z',
-    },
-    {
-      id: 'usr-pooja-4',
-      email: 'pooja@campus.edu',
-      phone: '+91 98765 43213',
-      name: 'Pooja',
-      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80',
-      role: 'STUDENT',
-      isSuspended: false,
-      createdAt: '2026-01-03T09:00:00Z',
-      updatedAt: '2026-01-03T09:00:00Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
     },
   ],
-
-  subscriptions: [
-    {
-      id: 'sub-rajdeep',
-      userId: 'usr-rajdeep-1',
-      planCode: 'PRO',
-      planName: 'Campus Pro',
-      priceInr: 49,
-      status: 'ACTIVE',
-      razorpayCustomerId: 'cust_rzp_001',
-      razorpaySubscriptionId: 'sub_rzp_001',
-      currentPeriodStart: '2026-09-01T00:00:00Z',
-      currentPeriodEnd: '2026-10-01T00:00:00Z',
-      cancelAtPeriodEnd: false,
-      createdAt: '2026-09-01T00:00:00Z',
-      updatedAt: '2026-09-01T00:00:00Z',
-    },
-    {
-      id: 'sub-sneha',
-      userId: 'usr-sneha-2',
-      planCode: 'PRO',
-      planName: 'Campus Pro',
-      priceInr: 49,
-      status: 'ACTIVE',
-      razorpayCustomerId: 'cust_rzp_002',
-      razorpaySubscriptionId: 'sub_rzp_002',
-      currentPeriodStart: '2026-09-01T00:00:00Z',
-      currentPeriodEnd: '2026-10-01T00:00:00Z',
-      cancelAtPeriodEnd: false,
-      createdAt: '2026-09-01T00:00:00Z',
-      updatedAt: '2026-09-01T00:00:00Z',
-    },
-    {
-      id: 'sub-aryan',
-      userId: 'usr-aryan-3',
-      planCode: 'FREE',
-      planName: 'Starter Free',
-      priceInr: 0,
-      status: 'TRIAL',
-      currentPeriodStart: '2026-09-01T00:00:00Z',
-      currentPeriodEnd: '2026-10-01T00:00:00Z',
-      cancelAtPeriodEnd: false,
-      createdAt: '2026-09-01T00:00:00Z',
-      updatedAt: '2026-09-01T00:00:00Z',
-    },
-    {
-      id: 'sub-pooja',
-      userId: 'usr-pooja-4',
-      planCode: 'PRO',
-      planName: 'Campus Pro',
-      priceInr: 49,
-      status: 'GRACE_PERIOD',
-      gracePeriodUntil: '2026-09-12T00:00:00Z',
-      currentPeriodStart: '2026-08-01T00:00:00Z',
-      currentPeriodEnd: '2026-09-01T00:00:00Z',
-      cancelAtPeriodEnd: false,
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-09-02T00:00:00Z',
-    },
-  ],
-
-  subscriptionEvents: [
-    {
-      id: 'evt-001',
-      userId: 'usr-rajdeep-1',
-      razorpayEventId: 'evt_rzp_init_001',
-      eventType: 'subscription.charged',
-      payload: { amount: 4900, status: 'paid', cycle: 'monthly' },
-      processedAt: '2026-09-01T00:00:05Z',
-    },
-  ],
-
+  subscriptions: [],
+  subscriptionEvents: [],
   rooms: [
     {
       id: 'room-flat-302',
-      name: 'Flat 302 - Emerald PG',
-      description: '4-sharing 2BHK flat near North Campus',
+      name: 'Flat 302',
+      description: 'RoomMate Student Ledger - Flat 302',
       createdBy: 'usr-rajdeep-1',
+      adminUserId: 'usr-rajdeep-1',
+      joinPolicy: 'APPROVAL_REQUIRED',
+      invitePolicy: 'ALL_MEMBERS',
       isArchived: false,
-      createdAt: '2026-01-02T10:00:00Z',
-      updatedAt: '2026-01-02T10:00:00Z',
-    },
-    {
-      id: 'room-hostel-14',
-      name: 'Hostel Block B - Room 14',
-      description: 'Engineering Hostel 2-bed room',
-      createdBy: 'usr-aryan-3',
-      isArchived: false,
-      createdAt: '2026-01-10T10:00:00Z',
-      updatedAt: '2026-01-10T10:00:00Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
     },
   ],
-
-  roomInvitations: [
-    {
-      id: 'inv-302',
-      roomId: 'room-flat-302',
-      inviteCode: 'FLAT302',
-      createdBy: 'usr-rajdeep-1',
-      expiresAt: '2026-12-31T23:59:59Z',
-      isRevoked: false,
-      createdAt: '2026-01-02T10:00:00Z',
-    },
-  ],
-
   roomMembers: [
     {
-      id: 'rm-1',
+      id: 'rm-rajdeep-1',
       roomId: 'room-flat-302',
       userId: 'usr-rajdeep-1',
       role: 'ROOM_ADMIN',
       status: 'ACTIVE',
-      joinedAt: '2026-01-02T10:00:00Z',
+      joinedAt: '2026-09-01T00:00:00.000Z',
     },
     {
-      id: 'rm-2',
+      id: 'rm-sneha-2',
       roomId: 'room-flat-302',
       userId: 'usr-sneha-2',
       role: 'MEMBER',
       status: 'ACTIVE',
-      joinedAt: '2026-01-02T11:00:00Z',
+      joinedAt: '2026-09-01T00:00:00.000Z',
     },
     {
-      id: 'rm-3',
+      id: 'rm-amit-3',
       roomId: 'room-flat-302',
-      userId: 'usr-aryan-3',
+      userId: 'usr-amit-3',
       role: 'MEMBER',
       status: 'ACTIVE',
-      joinedAt: '2026-01-02T12:00:00Z',
-    },
-    {
-      id: 'rm-4',
-      roomId: 'room-flat-302',
-      userId: 'usr-pooja-4',
-      role: 'MEMBER',
-      status: 'ACTIVE',
-      joinedAt: '2026-01-03T09:00:00Z',
-    },
-    {
-      id: 'rm-5',
-      roomId: 'room-hostel-14',
-      userId: 'usr-aryan-3',
-      role: 'ROOM_ADMIN',
-      status: 'ACTIVE',
-      joinedAt: '2026-01-10T10:00:00Z',
+      joinedAt: '2026-09-01T00:00:00.000Z',
     },
   ],
-
-  // 100% PRIVATE PERSONAL EXPENSES FOR RAJDEEP
-  personalExpenses: [
+  roomInvitations: [
     {
-      id: 'pe-rajdeep-1',
-      userId: 'usr-rajdeep-1',
-      title: 'Food outside / Cafe',
-      amount: 1240,
-      category: 'Food',
-      notes: 'Treat with classmates at cafe',
-      expenseDate: '2026-09-02',
-      createdAt: '2026-09-02T14:30:00Z',
-      updatedAt: '2026-09-02T14:30:00Z',
-    },
-    {
-      id: 'pe-rajdeep-2',
-      userId: 'usr-rajdeep-1',
-      title: 'College Hoodie & Shoes',
-      amount: 850,
-      category: 'Shopping',
-      notes: 'Winter sale purchase',
-      expenseDate: '2026-09-04',
-      createdAt: '2026-09-04T18:15:00Z',
-      updatedAt: '2026-09-04T18:15:00Z',
-    },
-    {
-      id: 'pe-rajdeep-3',
-      userId: 'usr-rajdeep-1',
-      title: 'Metro Smart Card Recharge',
-      amount: 600,
-      category: 'Travel',
-      notes: 'Monthly commute',
-      expenseDate: '2026-09-05',
-      createdAt: '2026-09-05T09:00:00Z',
-      updatedAt: '2026-09-05T09:00:00Z',
-    },
-    {
-      id: 'pe-rajdeep-4',
-      userId: 'usr-rajdeep-1',
-      title: 'Spotify & Netflix Student Plan',
-      amount: 300,
-      category: 'Entertainment',
-      notes: 'Personal entertainment subscriptions',
-      expenseDate: '2026-09-06',
-      createdAt: '2026-09-06T12:00:00Z',
-      updatedAt: '2026-09-06T12:00:00Z',
-    },
-    // August 2026 Historical Expenses
-    {
-      id: 'pe-rajdeep-aug-1',
-      userId: 'usr-rajdeep-1',
-      title: 'Semester Textbooks & Lab Kits',
-      amount: 2400,
-      category: 'Academics',
-      notes: 'Third semester engineering textbooks',
-      expenseDate: '2026-08-12',
-      createdAt: '2026-08-12T11:00:00Z',
-      updatedAt: '2026-08-12T11:00:00Z',
-    },
-    {
-      id: 'pe-rajdeep-aug-2',
-      userId: 'usr-rajdeep-1',
-      title: 'Room Shifting Cab & Porter',
-      amount: 1150,
-      category: 'Travel',
-      notes: 'Luggage transfer from hostel to Flat 302',
-      expenseDate: '2026-08-20',
-      createdAt: '2026-08-20T16:30:00Z',
-      updatedAt: '2026-08-20T16:30:00Z',
-    },
-    {
-      id: 'pe-rajdeep-aug-3',
-      userId: 'usr-rajdeep-1',
-      title: 'Welcome Dinner with Seniors',
-      amount: 1800,
-      category: 'Food',
-      notes: 'College society orientation dinner',
-      expenseDate: '2026-08-27',
-      createdAt: '2026-08-27T21:00:00Z',
-      updatedAt: '2026-08-27T21:00:00Z',
-    },
-    // July 2026 Historical Expenses
-    {
-      id: 'pe-rajdeep-jul-1',
-      userId: 'usr-rajdeep-1',
-      title: 'Admission Stationery & ID Card',
-      amount: 3200,
-      category: 'Academics',
-      notes: 'College registration & stationery fees',
-      expenseDate: '2026-07-14',
-      createdAt: '2026-07-14T10:00:00Z',
-      updatedAt: '2026-07-14T10:00:00Z',
-    },
-    {
-      id: 'pe-rajdeep-jul-2',
-      userId: 'usr-rajdeep-1',
-      title: 'Campus Food Court Recharge',
-      amount: 1500,
-      category: 'Food',
-      notes: 'Preloaded canteen smartcard',
-      expenseDate: '2026-07-22',
-      createdAt: '2026-07-22T13:45:00Z',
-      updatedAt: '2026-07-22T13:45:00Z',
-    },
-  ],
-
-  // SHARED EXPENSES IN FLAT 302
-  sharedExpenses: [
-    {
-      id: 'se-elec-01',
+      id: 'inv-flat-302',
       roomId: 'room-flat-302',
+      token: 'rm_inv_flat302_token_7Hk92LmX',
+      inviteCode: 'FLAT02',
       createdBy: 'usr-rajdeep-1',
-      paidBy: 'usr-rajdeep-1', // Rajdeep paid ₹1,200 out of pocket
-      title: 'Electricity Bill - August',
-      totalAmount: 1200,
-      category: 'Electricity',
-      splitMethod: 'EQUAL',
-      notes: 'BSES Power Discom bill',
-      expenseDate: '2026-09-01',
-      isDeleted: false,
-      createdAt: '2026-09-01T10:00:00Z',
-      updatedAt: '2026-09-01T10:00:00Z',
-    },
-    {
-      id: 'se-groc-02',
-      roomId: 'room-flat-302',
-      createdBy: 'usr-sneha-2',
-      paidBy: 'usr-sneha-2', // Sneha paid ₹800
-      title: 'Common Groceries & Spices',
-      totalAmount: 800,
-      category: 'Groceries',
-      splitMethod: 'EQUAL',
-      notes: 'Blinkit order: Rice, Oil, Onions, Milk',
-      expenseDate: '2026-09-03',
-      isDeleted: false,
-      createdAt: '2026-09-03T11:00:00Z',
-      updatedAt: '2026-09-03T11:00:00Z',
-    },
-    {
-      id: 'se-wifi-03',
-      roomId: 'room-flat-302',
-      createdBy: 'usr-rajdeep-1',
-      paidBy: 'usr-rajdeep-1', // Rajdeep paid ₹600
-      title: 'High-Speed Wi-Fi (Airtel Fiber)',
-      totalAmount: 600,
-      category: 'Wi-Fi',
-      splitMethod: 'EQUAL',
-      notes: 'Monthly 200Mbps broadband plan',
-      expenseDate: '2026-09-05',
-      isDeleted: false,
-      createdAt: '2026-09-05T08:00:00Z',
-      updatedAt: '2026-09-05T08:00:00Z',
+      expiresAt: '2030-01-01T00:00:00.000Z',
+      isRevoked: false,
+      createdAt: '2026-09-01T00:00:00.000Z',
     },
   ],
-
-  // POINT-IN-TIME FROZEN SPLITS
-  expenseSplits: [
-    // Splits for Electricity ₹1,200 (4 members -> ₹300 each)
-    { id: 'es-1', sharedExpenseId: 'se-elec-01', userId: 'usr-rajdeep-1', shareAmount: 300, createdAt: '2026-09-01T10:00:00Z' },
-    { id: 'es-2', sharedExpenseId: 'se-elec-01', userId: 'usr-sneha-2', shareAmount: 300, createdAt: '2026-09-01T10:00:00Z' },
-    { id: 'es-3', sharedExpenseId: 'se-elec-01', userId: 'usr-aryan-3', shareAmount: 300, createdAt: '2026-09-01T10:00:00Z' },
-    { id: 'es-4', sharedExpenseId: 'se-elec-01', userId: 'usr-pooja-4', shareAmount: 300, createdAt: '2026-09-01T10:00:00Z' },
-
-    // Splits for Groceries ₹800 (4 members -> ₹200 each)
-    { id: 'es-5', sharedExpenseId: 'se-groc-02', userId: 'usr-rajdeep-1', shareAmount: 200, createdAt: '2026-09-03T11:00:00Z' },
-    { id: 'es-6', sharedExpenseId: 'se-groc-02', userId: 'usr-sneha-2', shareAmount: 200, createdAt: '2026-09-03T11:00:00Z' },
-    { id: 'es-7', sharedExpenseId: 'se-groc-02', userId: 'usr-aryan-3', shareAmount: 200, createdAt: '2026-09-03T11:00:00Z' },
-    { id: 'es-8', sharedExpenseId: 'se-groc-02', userId: 'usr-pooja-4', shareAmount: 200, createdAt: '2026-09-03T11:00:00Z' },
-
-    // Splits for Wi-Fi ₹600 (4 members -> ₹150 each)
-    { id: 'es-9', sharedExpenseId: 'se-wifi-03', userId: 'usr-rajdeep-1', shareAmount: 150, createdAt: '2026-09-05T08:00:00Z' },
-    { id: 'es-10', sharedExpenseId: 'se-wifi-03', userId: 'usr-sneha-2', shareAmount: 150, createdAt: '2026-09-05T08:00:00Z' },
-    { id: 'es-11', sharedExpenseId: 'se-wifi-03', userId: 'usr-aryan-3', shareAmount: 150, createdAt: '2026-09-05T08:00:00Z' },
-    { id: 'es-12', sharedExpenseId: 'se-wifi-03', userId: 'usr-pooja-4', shareAmount: 150, createdAt: '2026-09-05T08:00:00Z' },
-  ],
-
-  // SETTLEMENT PAYMENTS (Partial payment record: Sneha paid ₹200 to Rajdeep via UPI)
-  settlementPayments: [
+  roomJoinRequests: [],
+  personalExpenses: [],
+  sharedExpenses: [],
+  expenseSplits: [],
+  settlementPayments: [],
+  auditLogs: [],
+  notifications: [
     {
-      id: 'sp-1',
-      roomId: 'room-flat-302',
-      payerId: 'usr-sneha-2',
-      payeeId: 'usr-rajdeep-1',
-      amount: 200,
-      paymentMethod: 'UPI',
-      transactionRef: 'UPI-REF-992144',
-      notes: 'Partial payment for electricity bill via Google Pay',
-      paymentDate: '2026-09-04',
-      createdAt: '2026-09-04T16:00:00Z',
-    },
-  ],
-
-  auditLogs: [
-    {
-      id: 'log-1',
+      id: 'notif-seed-1',
       userId: 'usr-rajdeep-1',
-      action: 'ROOM_CREATED',
-      resourceType: 'ROOM',
-      resourceId: 'room-flat-302',
-      metadata: { name: 'Flat 302 - Emerald PG' },
-      createdAt: '2026-01-02T10:00:00Z',
+      roomId: 'room-flat-302',
+      type: 'PAYMENT_REQUIRED',
+      title: 'Payment Due',
+      message: 'You owe Sneha ₹250 for the electricity bill.',
+      priority: 'HIGH',
+      isRead: false,
+      createdAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      actionType: 'PAY_NOW',
+      actionTarget: 'room-flat-302',
+      metadata: { amount: 250, payeeName: 'Sneha', roomName: 'Flat 302' },
+      eventId: 'seed_notif_1',
+    },
+    {
+      id: 'notif-seed-2',
+      userId: 'usr-rajdeep-1',
+      roomId: 'room-flat-302',
+      type: 'EXPENSE_ADDED',
+      title: 'New Shared Expense',
+      message: 'Electricity bill of ₹1,200 was added to Flat 302. Your share: ₹400.',
+      priority: 'MEDIUM',
+      isRead: false,
+      createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      actionType: 'VIEW_EXPENSE',
+      actionTarget: 'room-flat-302',
+      metadata: { amount: 1200, payerName: 'Sneha', roomName: 'Flat 302' },
+      eventId: 'seed_notif_2',
+    },
+    {
+      id: 'notif-seed-3',
+      userId: 'usr-rajdeep-1',
+      roomId: 'room-flat-302',
+      type: 'EXPENSE_SETTLED',
+      title: 'Expense Settled',
+      message: 'Your ₹300 grocery balance with Amit has been settled.',
+      priority: 'LOW',
+      isRead: true,
+      readAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      actionType: 'VIEW_DETAILS',
+      actionTarget: 'room-flat-302',
+      metadata: { amount: 300, payeeName: 'Amit', roomName: 'Flat 302' },
+      eventId: 'seed_notif_3',
+    },
+  ],
+  bugReports: [
+    {
+      id: 'bug-1024',
+      userId: 'usr-rajdeep-1',
+      userName: 'Rajdeep',
+      userEmail: 'rajdeep@roommate.app',
+      userRole: 'STUDENT',
+      category: 'EXPENSE_SPLIT',
+      severity: 'HIGH',
+      status: 'OPEN',
+      description: "Shared electricity bill for ₹1,200 added 10 minutes ago isn't reflecting on flatmate Sneha's balance breakdown.",
+      diagnostics: {
+        route: '/rooms/room-flat-302',
+        appVersion: '1.0.3',
+        platform: 'Android 14',
+        networkOnline: true,
+        viewport: { width: 390, height: 844, pixelRatio: 3 },
+        userAgent: 'RoomMate-Mobile-Native/1.0.3',
+        roomId: 'room-flat-302',
+        roomName: 'Flat 302',
+        timestamp: '2026-09-14T21:24:00.000Z',
+      },
+      createdAt: '2026-09-14T21:24:00.000Z',
+      updatedAt: '2026-09-14T21:24:00.000Z',
+    },
+    {
+      id: 'bug-1025',
+      userId: 'usr-sneha-2',
+      userName: 'Sneha',
+      userEmail: 'sneha@roommate.app',
+      userRole: 'STUDENT',
+      category: 'PAYMENT_UPI',
+      severity: 'MEDIUM',
+      status: 'INVESTIGATING',
+      description: 'GPay intent timeout when attempting instant settlement of ₹250.',
+      diagnostics: {
+        route: '/settle/upi',
+        appVersion: '1.0.3',
+        platform: 'Android 14 (Pixel 8)',
+        networkOnline: true,
+        viewport: { width: 412, height: 915, pixelRatio: 2.6 },
+        userAgent: 'RoomMate-Mobile-Native/1.0.3',
+        timestamp: '2026-09-14T19:15:00.000Z',
+      },
+      createdAt: '2026-09-14T19:15:00.000Z',
+      updatedAt: '2026-09-14T20:00:00.000Z',
+    },
+    {
+      id: 'bug-1026',
+      userId: 'usr-amit-3',
+      userName: 'Amit',
+      userEmail: 'amit@roommate.app',
+      userRole: 'STUDENT',
+      category: 'ROOM_MANAGEMENT',
+      severity: 'LOW',
+      status: 'RESOLVED',
+      description: 'Room invitation 6-character code showed as expired after regenerating once.',
+      diagnostics: {
+        route: '/rooms/settings',
+        appVersion: '1.0.2',
+        platform: 'iOS 17.5',
+        networkOnline: true,
+        viewport: { width: 390, height: 844, pixelRatio: 3 },
+        userAgent: 'RoomMate-Mobile-Native/1.0.2',
+        timestamp: '2026-09-13T14:30:00.000Z',
+      },
+      adminNotes: 'Resolved: regenerated token rotation fixed in v1.0.3 release.',
+      resolvedAt: '2026-09-14T10:00:00.000Z',
+      createdAt: '2026-09-13T14:30:00.000Z',
+      updatedAt: '2026-09-14T10:00:00.000Z',
+    },
+  ],
+  featureSuggestions: [
+    {
+      id: 'feat-218',
+      userId: 'usr-sneha-2',
+      userName: 'Sneha',
+      userEmail: 'sneha@roommate.app',
+      title: 'Add recurring monthly rent expenses',
+      description: 'Allow setting a recurring monthly shared rent bill on the 1st of every month that automatically notifies flatmates.',
+      category: 'Expenses',
+      status: 'REVIEWING',
+      votesCount: 24,
+      adminNotes: 'High user demand across student hostels. Scheduled for Q4 sprint.',
+      createdAt: '2026-09-14T18:00:00.000Z',
+      updatedAt: '2026-09-14T18:30:00.000Z',
+    },
+    {
+      id: 'feat-219',
+      userId: 'usr-rajdeep-1',
+      userName: 'Rajdeep',
+      userEmail: 'rajdeep@roommate.app',
+      title: 'WhatsApp PDF statement export with digital settlement receipt',
+      description: 'Generate a signed single-page PDF containing all month-end room balances and push directly to roommate WhatsApp group.',
+      category: 'Export',
+      status: 'PLANNED',
+      votesCount: 42,
+      createdAt: '2026-09-13T11:00:00.000Z',
+      updatedAt: '2026-09-14T09:00:00.000Z',
+    },
+    {
+      id: 'feat-220',
+      userId: 'usr-amit-3',
+      userName: 'Amit',
+      userEmail: 'amit@roommate.app',
+      title: 'Split by custom percentages alongside exact amounts',
+      description: 'Support percentage-based division (e.g. 40%-30%-30%) for room grocery bulk buys.',
+      category: 'Splits',
+      status: 'IN_DEVELOPMENT',
+      votesCount: 18,
+      createdAt: '2026-09-12T16:00:00.000Z',
+      updatedAt: '2026-09-14T15:00:00.000Z',
+    },
+  ],
+  contactRequests: [
+    {
+      id: 'req-301',
+      userId: 'usr-rajdeep-1',
+      userName: 'Warden Sharma',
+      userEmail: 'sharma.warden@campus.edu',
+      phone: '+91 98111 22334',
+      subject: 'Hostel Block B 40-Room Pilot Onboarding',
+      message: 'We want to onboard entire Block B (160 residents) into RoomMate for electricity and mess billing. Need superadmin assistance for bulk hostel creation.',
+      status: 'NEW',
+      createdAt: '2026-09-14T16:45:00.000Z',
+    },
+  ],
+  announcements: [
+    {
+      id: 'ann-1',
+      title: 'Scheduled System Maintenance Notice',
+      message: 'RoomMate core databases will undergo routine optimization on 18 Sept between 03:00 AM - 03:30 AM IST. Offline mode will remain active on mobile apps.',
+      audience: 'EVERYONE',
+      priority: 'IMPORTANT',
+      deliveryChannels: ['IN_APP', 'PUSH'],
+      recipientsCount: 12482,
+      status: 'DELIVERED',
+      sentAt: '2026-09-14T12:00:00.000Z',
+      createdBy: 'usr-superadmin-master',
+    },
+    {
+      id: 'ann-2',
+      title: 'New Instant UPI Split & Verification Engine is Live',
+      message: 'Residents can now verify settlements directly with UPI transaction reference numbers and celebrate zero-debt status with one-tap confetti!',
+      audience: 'EVERYONE',
+      priority: 'NORMAL',
+      deliveryChannels: ['IN_APP'],
+      recipientsCount: 12482,
+      status: 'DELIVERED',
+      sentAt: '2026-09-12T09:00:00.000Z',
+      createdBy: 'usr-superadmin-master',
+    },
+  ],
+  settings: DEFAULT_PLATFORM_SETTINGS,
+  systemIncidents: [
+    {
+      id: 'inc-1',
+      service: 'Database',
+      error: 'Query latency spike during month-end bulk ledger reconciliation',
+      severity: 'LOW',
+      status: 'RESOLVED',
+      occurrences: 3,
+      details: 'PostgreSQL connection pool automatically scaled. Max latency capped at 120ms.',
+      createdAt: '2026-09-13T23:45:00.000Z',
+      resolvedAt: '2026-09-14T00:15:00.000Z',
     },
   ],
 };
@@ -447,30 +434,188 @@ class MockDatabase {
   }
 
   private load(): DatabaseState {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return JSON.parse(JSON.stringify(DEFAULT_STAGING_SEEDS));
+    }
+    // Purge legacy mock data caches
+    try {
+      localStorage.removeItem('campusflow_saas_db_v2');
+      localStorage.removeItem('campusflow_saas_db_v1');
+    } catch {
+      // ignore
+    }
+    let raw = localStorage.getItem(PRIMARY_STORAGE_KEY);
     if (!raw) {
-      this.save(INITIAL_DATA);
-      return INITIAL_DATA;
+      // Check legacy CampusFlow v3 storage key for seamless migration
+      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyRaw) {
+        raw = legacyRaw;
+        try {
+          localStorage.setItem(PRIMARY_STORAGE_KEY, legacyRaw);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (!raw) {
+      this.save(DEFAULT_STAGING_SEEDS);
+      return DEFAULT_STAGING_SEEDS;
     }
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.users || parsed.users.length === 0) {
+        this.save(DEFAULT_STAGING_SEEDS);
+        return DEFAULT_STAGING_SEEDS;
+      }
+      if (!parsed.roomJoinRequests) {
+        parsed.roomJoinRequests = [];
+      }
+      if (!parsed.notifications || !Array.isArray(parsed.notifications)) {
+        parsed.notifications = [...DEFAULT_STAGING_SEEDS.notifications];
+      }
+      if (!parsed.bugReports || !Array.isArray(parsed.bugReports)) {
+        parsed.bugReports = [...DEFAULT_STAGING_SEEDS.bugReports];
+      }
+      if (!parsed.featureSuggestions || !Array.isArray(parsed.featureSuggestions)) {
+        parsed.featureSuggestions = [...DEFAULT_STAGING_SEEDS.featureSuggestions];
+      }
+      if (!parsed.contactRequests || !Array.isArray(parsed.contactRequests)) {
+        parsed.contactRequests = [...DEFAULT_STAGING_SEEDS.contactRequests];
+      }
+      if (!parsed.announcements || !Array.isArray(parsed.announcements)) {
+        parsed.announcements = [...DEFAULT_STAGING_SEEDS.announcements];
+      }
+      if (!parsed.settings) {
+        parsed.settings = { ...DEFAULT_PLATFORM_SETTINGS };
+      }
+      if (!parsed.systemIncidents || !Array.isArray(parsed.systemIncidents)) {
+        parsed.systemIncidents = [...DEFAULT_STAGING_SEEDS.systemIncidents];
+      }
+
+      // Guarantee SuperAdmin master user exists
+      if (Array.isArray(parsed.users)) {
+        const hasAdmin = parsed.users.some((u: User) => u.role === 'SUPER_ADMIN');
+        if (!hasAdmin) {
+          const masterAdmin = DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN')!;
+          parsed.users.unshift(masterAdmin);
+        }
+      }
+
+      // Migrate existing rooms and invites to ensure tokens and policies exist
+      if (Array.isArray(parsed.rooms)) {
+        parsed.rooms.forEach((r: Room) => {
+          if (!r.joinPolicy) r.joinPolicy = 'APPROVAL_REQUIRED';
+          if (!r.invitePolicy) r.invitePolicy = 'ALL_MEMBERS';
+          if (!r.adminUserId && Array.isArray(parsed.roomMembers)) {
+            const adminMem = parsed.roomMembers.find(
+              (m: RoomMember) => m.roomId === r.id && m.role === 'ROOM_ADMIN' && m.status === 'ACTIVE'
+            );
+            if (adminMem) r.adminUserId = adminMem.userId;
+          }
+        });
+      }
+      if (Array.isArray(parsed.roomInvitations)) {
+        parsed.roomInvitations.forEach((inv: RoomInvitation) => {
+          if (!inv.token) {
+            inv.token = 'rm_inv_' + Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
+          }
+        });
+      }
+      return parsed;
     } catch {
-      this.save(INITIAL_DATA);
-      return INITIAL_DATA;
+      this.save(DEFAULT_STAGING_SEEDS);
+      return DEFAULT_STAGING_SEEDS;
     }
   }
 
   private save(state: DatabaseState): void {
     this.state = state;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(PRIMARY_STORAGE_KEY, JSON.stringify(state));
+      } catch (err) {
+        console.error('Failed to save to localStorage', err);
+      }
+    }
+  }
+
+  public saveState(state: DatabaseState): void {
+    this.save(state);
+  }
+
+  public restorePersonalExpenses(userId: string, expenses: PersonalExpense[]): number {
+    const existingIds = new Set(this.state.personalExpenses.map((e) => e.id));
+    let added = 0;
+    for (const exp of expenses) {
+      if (!existingIds.has(exp.id)) {
+        this.state.personalExpenses.unshift({
+          ...exp,
+          userId,
+          createdAt: exp.createdAt || new Date().toISOString(),
+          updatedAt: exp.updatedAt || new Date().toISOString(),
+        });
+        existingIds.add(exp.id);
+        added++;
+      }
+    }
+    this.save(this.state);
+    return added;
   }
 
   public resetToSeedData(): void {
-    this.save(JSON.parse(JSON.stringify(INITIAL_DATA)));
+    this.save(JSON.parse(JSON.stringify(DEFAULT_STAGING_SEEDS)));
   }
 
   public resetToDefault(): void {
-    this.save(INITIAL_DATA);
+    this.save(JSON.parse(JSON.stringify(INITIAL_DATA)));
+  }
+
+  public clearAllData(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+    }
+    this.save(JSON.parse(JSON.stringify(INITIAL_DATA)));
+  }
+
+  public upsertUser(user: User): User {
+    const idx = this.state.users.findIndex(
+      (u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+    );
+    if (idx >= 0) {
+      this.state.users[idx] = {
+        ...this.state.users[idx],
+        ...user,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      this.state.users.push({
+        ...user,
+        createdAt: user.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      // Also ensure a default active subscription exists
+      if (!this.state.subscriptions.some((s) => s.userId === user.id)) {
+        this.state.subscriptions.push({
+          id: 'sub-' + Math.random().toString(36).substring(2, 9),
+          userId: user.id,
+          planCode: 'FREE',
+          planName: 'Starter Free',
+          priceInr: 0,
+          status: 'ACTIVE',
+          currentPeriodStart: new Date().toISOString(),
+          currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          cancelAtPeriodEnd: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+    this.save(this.state);
+    return user;
   }
 
   public getState(): DatabaseState {
@@ -593,6 +738,7 @@ class MockDatabase {
   public recordSettlementPayment(
     requesterUserId: string,
     data: {
+      id?: string;
       roomId: string;
       payerId: string;
       payeeId: string;
@@ -602,16 +748,30 @@ class MockDatabase {
       notes?: string;
     }
   ): SettlementPayment {
-    // Verify room membership
-    const isMember = this.state.roomMembers.some(
-      (rm) => rm.roomId === data.roomId && rm.userId === requesterUserId && rm.status === 'ACTIVE'
+    // Idempotency check: if settlement with this ID already exists, return it
+    if (data.id) {
+      const existing = this.state.settlementPayments.find((s) => s.id === data.id);
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Verify room membership / affiliation
+    const member = this.state.roomMembers.find(
+      (rm) => rm.roomId === data.roomId && rm.userId === requesterUserId
     );
-    if (!isMember) {
-      throw new Error('ACCESS_DENIED: Cannot record settlement in unjoined room');
+    if (!member) {
+      throw new Error('ACCESS_DENIED: User has no affiliation with this room');
+    }
+
+    // Active members can record; former members can only record if they are a party
+    const isParty = data.payerId === requesterUserId || data.payeeId === requesterUserId;
+    if (member.status !== 'ACTIVE' && !isParty) {
+      throw new Error('ACCESS_DENIED: Inactive members can only record settlements where they are a party');
     }
 
     const newPayment: SettlementPayment = {
-      id: 'sp-' + Math.random().toString(36).substr(2, 9),
+      id: data.id || 'sp-' + Math.random().toString(36).substr(2, 9),
       roomId: data.roomId,
       payerId: data.payerId,
       payeeId: data.payeeId,
@@ -628,12 +788,92 @@ class MockDatabase {
     return newPayment;
   }
 
+  public leaveRoom(
+    requesterUserId: string,
+    roomId: string
+  ): { success: boolean; newAdminId?: string; isArchived: boolean } {
+    const member = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === requesterUserId && rm.status === 'ACTIVE'
+    );
+    if (!member) {
+      throw new Error(`NOT_AN_ACTIVE_MEMBER: User ${requesterUserId} is not an active member of room ${roomId}`);
+    }
+
+    let newAdminId: string | undefined;
+    let isArchived = false;
+
+    if (member.role === 'ROOM_ADMIN') {
+      // Find oldest remaining active member by joinedAt
+      const otherActiveMembers = this.state.roomMembers
+        .filter((rm) => rm.roomId === roomId && rm.status === 'ACTIVE' && rm.userId !== requesterUserId)
+        .sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
+
+      if (otherActiveMembers.length > 0) {
+        otherActiveMembers[0].role = 'ROOM_ADMIN';
+        newAdminId = otherActiveMembers[0].userId;
+      } else {
+        // Last member leaving: archive room, but keep all ledger records intact
+        const room = this.state.rooms.find((r) => r.id === roomId);
+        if (room) {
+          room.isArchived = true;
+          room.updatedAt = new Date().toISOString();
+        }
+        isArchived = true;
+      }
+    }
+
+    member.role = 'MEMBER';
+    member.status = 'LEFT';
+    member.leftAt = new Date().toISOString();
+
+    this.save(this.state);
+    return { success: true, newAdminId, isArchived };
+  }
+
+  public removeMember(
+    adminUserId: string,
+    roomId: string,
+    targetUserId: string
+  ): { success: boolean } {
+    const admin = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === adminUserId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!admin) {
+      throw new Error('UNAUTHORIZED: Only an active room admin can remove members');
+    }
+
+    if (adminUserId === targetUserId) {
+      throw new Error('CANNOT_REMOVE_SELF: Room admin cannot remove themselves, use leave flow instead');
+    }
+
+    const target = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === targetUserId
+    );
+    if (!target || target.status !== 'ACTIVE') {
+      throw new Error('TARGET_NOT_ACTIVE: Target member is not an active member of this room');
+    }
+
+    if (target.role === 'ROOM_ADMIN') {
+      throw new Error('ADMIN_CANNOT_BE_REMOVED: Room admins cannot be removed');
+    }
+
+    target.status = 'REMOVED';
+    target.leftAt = new Date().toISOString();
+
+    this.save(this.state);
+    return { success: true };
+  }
+
   public joinRoomWithCode(userId: string, inviteCode: string): Room {
     const inv = this.state.roomInvitations.find(
-      (i) => i.inviteCode.toUpperCase() === inviteCode.trim().toUpperCase() && !i.isRevoked
+      (i) => (i.inviteCode.toUpperCase() === inviteCode.trim().toUpperCase() || i.token === inviteCode.trim()) && !i.isRevoked
     );
     if (!inv) {
       throw new Error('Invalid or expired room invite code');
+    }
+
+    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) {
+      throw new Error('This room invitation has expired');
     }
 
     const room = this.state.rooms.find((r) => r.id === inv.roomId);
@@ -673,6 +913,9 @@ class MockDatabase {
       name,
       description,
       createdBy: userId,
+      adminUserId: userId,
+      joinPolicy: 'APPROVAL_REQUIRED',
+      invitePolicy: 'ALL_MEMBERS',
       isArchived: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -689,11 +932,13 @@ class MockDatabase {
       joinedAt: new Date().toISOString(),
     });
 
-    // Generate 6-character alphanumeric invite code
+    // Generate 6-character alphanumeric invite code + 24-char secure token
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const token = 'rm_inv_' + Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
     this.state.roomInvitations.push({
       id: 'inv-' + Math.random().toString(36).substr(2, 9),
       roomId,
+      token,
       inviteCode: code,
       createdBy: userId,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -703,6 +948,367 @@ class MockDatabase {
 
     this.save(this.state);
     return newRoom;
+  }
+
+  /**
+   * Resolve an invitation token or code to sanitized room preview without exposing ledger data
+   */
+  public resolveInvite(tokenOrCode: string): {
+    room: { id: string; name: string; description?: string; joinPolicy: JoinPolicy; invitePolicy: InvitePolicy };
+    memberCount: number;
+    adminName: string;
+    invite: RoomInvitation;
+  } {
+    const clean = tokenOrCode.trim();
+    const inv = this.state.roomInvitations.find((i) =>
+      (!i.isRevoked && (i.token === clean || i.inviteCode.toUpperCase() === clean.toUpperCase()))
+    );
+
+    if (!inv) {
+      throw new Error('INVITE_UNAVAILABLE: This room invitation is no longer valid or does not exist.');
+    }
+
+    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) {
+      throw new Error('INVITE_EXPIRED: This room invitation has expired.');
+    }
+
+    const room = this.state.rooms.find((r) => r.id === inv.roomId);
+    if (!room || room.isArchived) {
+      throw new Error('ROOM_NOT_FOUND: The room associated with this invitation is no longer active.');
+    }
+
+    const activeMembers = this.state.roomMembers.filter((m) => m.roomId === room.id && m.status === 'ACTIVE');
+    const adminMember = activeMembers.find((m) => m.role === 'ROOM_ADMIN') || activeMembers[0];
+    const adminUser = adminMember ? this.state.users.find((u) => u.id === adminMember.userId) : null;
+
+    return {
+      room: {
+        id: room.id,
+        name: room.name,
+        description: room.description,
+        joinPolicy: room.joinPolicy || 'APPROVAL_REQUIRED',
+        invitePolicy: room.invitePolicy || 'ALL_MEMBERS',
+      },
+      memberCount: activeMembers.length,
+      adminName: adminUser ? adminUser.name : 'Admin',
+      invite: inv,
+    };
+  }
+
+  /**
+   * Request to join room (handles Instant Join vs Approval Required)
+   */
+  public requestJoinRoom(
+    userId: string,
+    tokenOrCode: string
+  ): {
+    status: 'JOINED' | 'PENDING' | 'ALREADY_MEMBER';
+    room: Room;
+    message?: string;
+    requestId?: string;
+  } {
+    const { room: resolvedRoom, invite: _invite } = this.resolveInvite(tokenOrCode);
+    const room = this.state.rooms.find((r) => r.id === resolvedRoom.id)!;
+
+    // Check if already an active member
+    const existing = this.state.roomMembers.find((rm) => rm.roomId === room.id && rm.userId === userId);
+    if (existing && existing.status === 'ACTIVE') {
+      return { status: 'ALREADY_MEMBER', room, message: "You're already a member of this room." };
+    }
+
+    const policy = room.joinPolicy || 'APPROVAL_REQUIRED';
+
+    if (policy === 'INSTANT') {
+      if (existing) {
+        existing.status = 'ACTIVE';
+        existing.joinedAt = new Date().toISOString();
+        existing.leftAt = undefined;
+      } else {
+        this.state.roomMembers.push({
+          id: 'rm-' + Math.random().toString(36).substr(2, 9),
+          roomId: room.id,
+          userId,
+          role: 'MEMBER',
+          status: 'ACTIVE',
+          joinedAt: new Date().toISOString(),
+        });
+      }
+      this.save(this.state);
+      return { status: 'JOINED', room, message: `Welcome to ${room.name}!` };
+    }
+
+    // Approval required mode: Check if already pending
+    const existingRequest = this.state.roomJoinRequests.find(
+      (req) => req.roomId === room.id && req.userId === userId && req.status === 'PENDING'
+    );
+    if (existingRequest) {
+      return {
+        status: 'PENDING',
+        room,
+        message: `Your request to join ${room.name} is waiting for admin approval.`,
+        requestId: existingRequest.id,
+      };
+    }
+
+    // Create pending join request
+    const newReq: RoomJoinRequest = {
+      id: 'req-' + Math.random().toString(36).substr(2, 9),
+      roomId: room.id,
+      userId,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+    this.state.roomJoinRequests.unshift(newReq);
+    this.save(this.state);
+
+    return {
+      status: 'PENDING',
+      room,
+      message: `Join request sent to the room admin of ${room.name}.`,
+      requestId: newReq.id,
+    };
+  }
+
+  /**
+   * Get pending join requests for a room (Admin only)
+   */
+  public getRoomJoinRequests(requesterAdminId: string, roomId: string): Array<RoomJoinRequest & { user: User }> {
+    const admin = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === requesterAdminId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!admin) {
+      throw new Error('UNAUTHORIZED: Only room admins can view join requests');
+    }
+
+    return this.state.roomJoinRequests
+      .filter((req) => req.roomId === roomId && req.status === 'PENDING')
+      .map((req) => {
+        const user = this.state.users.find((u) => u.id === req.userId);
+        return {
+          ...req,
+          user: user || {
+            id: req.userId,
+            name: 'New Roommate',
+            email: 'user@roommate.app',
+            role: 'STUDENT' as const,
+            isSuspended: false,
+            createdAt: req.createdAt,
+            updatedAt: req.createdAt,
+          },
+        };
+      });
+  }
+
+  /**
+   * Admin approve join request
+   */
+  public approveJoinRequest(adminUserId: string, requestId: string): { success: boolean; room: Room; request: RoomJoinRequest } {
+    const req = this.state.roomJoinRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'PENDING') {
+      throw new Error('REQUEST_NOT_FOUND: Join request not found or already processed');
+    }
+
+    const admin = this.state.roomMembers.find(
+      (rm) => rm.roomId === req.roomId && rm.userId === adminUserId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!admin) {
+      throw new Error('UNAUTHORIZED: Only room admins can approve join requests');
+    }
+
+    req.status = 'APPROVED';
+    req.updatedAt = new Date().toISOString();
+
+    const existingMember = this.state.roomMembers.find(
+      (rm) => rm.roomId === req.roomId && rm.userId === req.userId
+    );
+
+    if (existingMember) {
+      existingMember.status = 'ACTIVE';
+      existingMember.joinedAt = new Date().toISOString();
+      existingMember.leftAt = undefined;
+    } else {
+      this.state.roomMembers.push({
+        id: 'rm-' + Math.random().toString(36).substr(2, 9),
+        roomId: req.roomId,
+        userId: req.userId,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: new Date().toISOString(),
+      });
+    }
+
+    const room = this.state.rooms.find((r) => r.id === req.roomId)!;
+    this.save(this.state);
+    return { success: true, room, request: req };
+  }
+
+  /**
+   * Admin decline join request
+   */
+  public declineJoinRequest(adminUserId: string, requestId: string): { success: boolean } {
+    const req = this.state.roomJoinRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'PENDING') {
+      throw new Error('REQUEST_NOT_FOUND: Join request not found or already processed');
+    }
+
+    const admin = this.state.roomMembers.find(
+      (rm) => rm.roomId === req.roomId && rm.userId === adminUserId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!admin) {
+      throw new Error('UNAUTHORIZED: Only room admins can decline join requests');
+    }
+
+    req.status = 'DECLINED';
+    req.updatedAt = new Date().toISOString();
+    this.save(this.state);
+    return { success: true };
+  }
+
+  /**
+   * Check status of a join request
+   */
+  public checkJoinRequestStatus(requestId: string): {
+    status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'NOT_FOUND';
+    room?: Room;
+    adminName?: string;
+  } {
+    const req = this.state.roomJoinRequests.find((r) => r.id === requestId);
+    if (!req) {
+      return { status: 'NOT_FOUND' };
+    }
+
+    const room = this.state.rooms.find((r) => r.id === req.roomId);
+    const adminMember = this.state.roomMembers.find(
+      (m) => m.roomId === req.roomId && m.role === 'ROOM_ADMIN' && m.status === 'ACTIVE'
+    ) || this.state.roomMembers.find((m) => m.roomId === req.roomId && m.status === 'ACTIVE');
+    const adminUser = adminMember ? this.state.users.find((u) => u.id === adminMember.userId) : null;
+
+    return {
+      status: req.status,
+      room,
+      adminName: adminUser ? adminUser.name : 'Admin',
+    };
+  }
+
+  /**
+   * Transfer room ownership to another active member
+   */
+  public transferOwnership(
+    currentAdminId: string,
+    roomId: string,
+    newAdminId: string
+  ): { success: boolean; room: Room } {
+    const currentAdmin = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === currentAdminId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!currentAdmin) {
+      throw new Error('UNAUTHORIZED: Only the current room admin can transfer ownership');
+    }
+
+    if (currentAdminId === newAdminId) {
+      throw new Error('CANNOT_TRANSFER_TO_SELF: You are already the room admin');
+    }
+
+    const newAdmin = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === newAdminId && rm.status === 'ACTIVE'
+    );
+    if (!newAdmin) {
+      throw new Error('TARGET_NOT_ACTIVE: Target member must be an active roommate');
+    }
+
+    // Atomic role swap
+    currentAdmin.role = 'MEMBER';
+    newAdmin.role = 'ROOM_ADMIN';
+
+    const room = this.state.rooms.find((r) => r.id === roomId);
+    if (room) {
+      room.adminUserId = newAdminId;
+      room.updatedAt = new Date().toISOString();
+    }
+
+    this.save(this.state);
+    return { success: true, room: room! };
+  }
+
+  /**
+   * Regenerate invite token and code for a room (Admin or authorized member)
+   */
+  public regenerateInvite(
+    requesterUserId: string,
+    roomId: string,
+    expirationHours?: number
+  ): RoomInvitation {
+    const member = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === requesterUserId && rm.status === 'ACTIVE'
+    );
+    if (!member) {
+      throw new Error('ACCESS_DENIED: User is not an active member of this room');
+    }
+
+    const room = this.state.rooms.find((r) => r.id === roomId);
+    if (!room) {
+      throw new Error('Room not found');
+    }
+
+    const invitePolicy = room.invitePolicy || 'ALL_MEMBERS';
+    if (invitePolicy === 'ADMIN_ONLY' && member.role !== 'ROOM_ADMIN') {
+      throw new Error('UNAUTHORIZED: Only room admins can regenerate invites under the current room policy');
+    }
+
+    // Revoke all existing invites for this room
+    this.state.roomInvitations
+      .filter((inv) => inv.roomId === roomId && !inv.isRevoked)
+      .forEach((inv) => {
+        inv.isRevoked = true;
+      });
+
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newToken = 'rm_inv_' + Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
+    const expiresAt =
+      expirationHours && expirationHours > 0
+        ? new Date(Date.now() + expirationHours * 60 * 60 * 1000).toISOString()
+        : undefined;
+
+    const newInv: RoomInvitation = {
+      id: 'inv-' + Math.random().toString(36).substr(2, 9),
+      roomId,
+      token: newToken,
+      inviteCode: newCode,
+      createdBy: requesterUserId,
+      expiresAt,
+      isRevoked: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.state.roomInvitations.push(newInv);
+    this.save(this.state);
+    return newInv;
+  }
+
+  /**
+   * Update Room Policies (join policy & invite policy)
+   */
+  public updateRoomPolicies(
+    adminUserId: string,
+    roomId: string,
+    policies: { joinPolicy?: JoinPolicy; invitePolicy?: InvitePolicy }
+  ): Room {
+    const admin = this.state.roomMembers.find(
+      (rm) => rm.roomId === roomId && rm.userId === adminUserId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+    );
+    if (!admin) {
+      throw new Error('UNAUTHORIZED: Only the room admin can configure room policies');
+    }
+
+    const room = this.state.rooms.find((r) => r.id === roomId);
+    if (!room) throw new Error('Room not found');
+
+    if (policies.joinPolicy) room.joinPolicy = policies.joinPolicy;
+    if (policies.invitePolicy) room.invitePolicy = policies.invitePolicy;
+    room.updatedAt = new Date().toISOString();
+
+    this.save(this.state);
+    return room;
   }
 
   /**
@@ -751,12 +1357,354 @@ class MockDatabase {
   }
 
   /**
+   * Core Security Assertion: Enforces role, session, and step-up freshness
+   */
+  public assertSuperAdminAccess(callerId: string, riskLevel: StepUpRiskLevel = 1, deviceId?: string): User {
+    if (!callerId) {
+      throw new Error('UNAUTHORIZED: Valid authentication session required');
+    }
+
+    const admin = this.state.users.find((u) => u.id === callerId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('FORBIDDEN: Caller lacks SUPER_ADMIN platform authorization');
+    }
+
+    if (admin.isSuspended) {
+      throw new Error('FORBIDDEN: This administrator account is suspended');
+    }
+
+    if (!this.state.superAdminSecuritySettings) {
+      this.state.superAdminSecuritySettings = {};
+    }
+
+    const settings = this.state.superAdminSecuritySettings[callerId] || {
+      userId: callerId,
+      totpEnrolled: true,
+      backupTotpEnrolled: false,
+      biometricEnabled: false,
+      recoveryCodesConfigured: true,
+      recoveryCodesRemaining: 8,
+      mfaRequired: true,
+      failedMfaAttempts: 0,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (settings.lockedUntil && new Date(settings.lockedUntil).getTime() > Date.now()) {
+      throw new Error('ACCOUNT_LOCKED: Security lockout active due to repeated authentication failures');
+    }
+
+    // Device Revocation Check
+    if (deviceId && this.state.superAdminTrustedDevices) {
+      const dev = this.state.superAdminTrustedDevices.find(
+        (d) => d.userId === callerId && d.deviceId === deviceId
+      );
+      if (dev && (!dev.isTrusted || dev.revokedAt)) {
+        throw new Error('DEVICE_REVOKED: This device session has been revoked by an administrator.');
+      }
+    }
+
+    // Authentication Assurance Level (AAL) Check for Risk Level >= 2
+    if (riskLevel >= 2 && settings.currentAal === 'aal1') {
+      throw new Error('MFA_REQUIRED: Operation requires AAL2 authentication assurance');
+    }
+
+    // Step-Up Verification Freshness Gate
+    if (riskLevel === 2) {
+      const isFresh =
+        settings.lastStepUpAt &&
+        Date.now() - new Date(settings.lastStepUpAt).getTime() <= 10 * 60 * 1000 &&
+        (settings.lastStepUpLevel || 2) >= 2;
+      if (!isFresh) {
+        throw new Error('STEP_UP_REQUIRED: Fresh identity re-authentication required for sensitive operations (valid 10 mins)');
+      }
+    }
+
+    if (riskLevel === 3) {
+      const isFresh =
+        settings.lastStepUpAt &&
+        Date.now() - new Date(settings.lastStepUpAt).getTime() <= 60 * 1000 &&
+        (settings.lastStepUpLevel || 1) >= 3;
+      if (!isFresh) {
+        throw new Error('STEP_UP_REQUIRED: Critical action requires immediate Level 3 re-authentication (single-use, valid 60s)');
+      }
+
+      // Atomically consume Level 3 step-up
+      settings.lastStepUpLevel = 1;
+      settings.lastStepUpAt = undefined;
+      this.save(this.state);
+    }
+
+    return admin;
+  }
+
+  /**
+   * Role Escalation Prevention: Strictly prevents unauthorized users from changing roles
+   */
+  public updateUserRole(callerId: string, targetUserId: string, newRole: UserRole, deviceId?: string): boolean {
+    this.assertSuperAdminAccess(callerId, 2, deviceId);
+
+    if (callerId === targetUserId && newRole !== 'SUPER_ADMIN') {
+      throw new Error('INVALID_ACTION: SuperAdmin cannot demote their own account');
+    }
+
+    const target = this.state.users.find((u) => u.id === targetUserId);
+    if (!target) return false;
+
+    target.role = newRole;
+    target.updatedAt = new Date().toISOString();
+
+    this.logSecurityEvent(
+      callerId,
+      'ROLE_MODIFIED',
+      'SUCCESS',
+      'USER',
+      targetUserId,
+      { targetEmail: target.email, newRole }
+    );
+
+    this.save(this.state);
+    return true;
+  }
+
+  public getSuperAdminSecuritySettings(userId: string): SuperAdminSecuritySettings {
+    if (!this.state.superAdminSecuritySettings) {
+      this.state.superAdminSecuritySettings = {};
+    }
+    if (!this.state.superAdminSecuritySettings[userId]) {
+      this.state.superAdminSecuritySettings[userId] = {
+        userId,
+        totpEnrolled: false,
+        backupTotpEnrolled: false,
+        biometricEnabled: false,
+        recoveryCodesConfigured: false,
+        recoveryCodesRemaining: 0,
+        mfaRequired: true,
+        failedMfaAttempts: 0,
+        updatedAt: new Date().toISOString(),
+      };
+      this.save(this.state);
+    }
+    return this.state.superAdminSecuritySettings[userId];
+  }
+
+  public updateSuperAdminSecuritySettings(
+    userId: string,
+    updates: Partial<SuperAdminSecuritySettings>
+  ): SuperAdminSecuritySettings {
+    const current = this.getSuperAdminSecuritySettings(userId);
+    const updated = {
+      ...current,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.superAdminSecuritySettings![userId] = updated;
+    this.save(this.state);
+    return updated;
+  }
+
+  public getSuperAdminTrustedDevices(userId: string): SuperAdminDevice[] {
+    if (!this.state.superAdminTrustedDevices) {
+      this.state.superAdminTrustedDevices = [];
+    }
+    return this.state.superAdminTrustedDevices.filter((d) => d.userId === userId);
+  }
+
+  public registerSuperAdminDevice(
+    userId: string,
+    device: { deviceId: string; deviceName: string; platform: string; browser: string; ipAddress?: string }
+  ): SuperAdminDevice {
+    if (!this.state.superAdminTrustedDevices) {
+      this.state.superAdminTrustedDevices = [];
+    }
+    const existing = this.state.superAdminTrustedDevices.find(
+      (d) => d.userId === userId && d.deviceId === device.deviceId
+    );
+    if (existing) {
+      existing.lastActiveAt = new Date().toISOString();
+      existing.isTrusted = true;
+      existing.revokedAt = undefined;
+      this.save(this.state);
+      return existing;
+    }
+
+    const newDev: SuperAdminDevice = {
+      id: 'dev-' + Math.random().toString(36).substr(2, 9),
+      userId,
+      deviceId: device.deviceId,
+      deviceName: device.deviceName,
+      platform: device.platform,
+      browser: device.browser,
+      ipAddress: device.ipAddress || '127.0.0.1',
+      isTrusted: true,
+      lastActiveAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    this.state.superAdminTrustedDevices.push(newDev);
+    this.save(this.state);
+    return newDev;
+  }
+
+  public revokeSuperAdminDevice(userId: string, deviceId: string, callerDeviceId?: string): boolean {
+    this.assertSuperAdminAccess(userId, 2, callerDeviceId);
+
+    if (!this.state.superAdminTrustedDevices) return false;
+    const found = this.state.superAdminTrustedDevices.find(
+      (d) => d.userId === userId && d.deviceId === deviceId
+    );
+    if (found) {
+      found.isTrusted = false;
+      found.revokedAt = new Date().toISOString();
+      this.logSecurityEvent(userId, 'DEVICE_REVOKED', 'SUCCESS', 'DEVICE', deviceId);
+      this.save(this.state);
+      return true;
+    }
+    return false;
+  }
+
+  public revokeAllOtherDevices(userId: string, currentDeviceId: string): number {
+    this.assertSuperAdminAccess(userId, 3, currentDeviceId);
+
+    if (!this.state.superAdminTrustedDevices) return 0;
+    let count = 0;
+    for (const dev of this.state.superAdminTrustedDevices) {
+      if (dev.userId === userId && dev.deviceId !== currentDeviceId && dev.isTrusted) {
+        dev.isTrusted = false;
+        dev.revokedAt = new Date().toISOString();
+        count++;
+      }
+    }
+    this.logSecurityEvent(userId, 'ALL_OTHER_SESSIONS_REVOKED', 'SUCCESS', 'SECURITY', userId, { revokedCount: count });
+    this.save(this.state);
+    return count;
+  }
+
+  public storeRecoveryCodes(userId: string, codeHashes: string[], deviceId?: string): number {
+    this.assertSuperAdminAccess(userId, 3, deviceId);
+
+    if (codeHashes.length !== 8) {
+      throw new Error('INVALID_ARGUMENT: Canonical recovery code count must be exactly 8');
+    }
+
+    if (!this.state.superAdminRecoveryCodes) {
+      this.state.superAdminRecoveryCodes = [];
+    }
+    // Invalidate previous unused codes
+    for (const c of this.state.superAdminRecoveryCodes) {
+      if (c.userId === userId && !c.isConsumed) {
+        c.isConsumed = true;
+        c.consumedAt = new Date().toISOString();
+      }
+    }
+
+    for (const h of codeHashes) {
+      this.state.superAdminRecoveryCodes.push({
+        userId,
+        codeHash: h,
+        isConsumed: false,
+      });
+    }
+
+    this.updateSuperAdminSecuritySettings(userId, {
+      recoveryCodesConfigured: true,
+      recoveryCodesRemaining: codeHashes.length,
+    });
+
+    this.logSecurityEvent(userId, 'RECOVERY_CODES_REGENERATED', 'SUCCESS', 'SECURITY', userId, { count: codeHashes.length });
+    this.save(this.state);
+    return codeHashes.length;
+  }
+
+  public verifyRecoveryCode(
+    userId: string,
+    codeHash: string,
+    riskLevel: StepUpRiskLevel = 2,
+    deviceId?: string
+  ): { success: boolean; remainingCodes?: number; error?: string } {
+    this.assertSuperAdminAccess(userId, 1, deviceId);
+
+    if (!this.state.superAdminRecoveryCodes) {
+      return { success: false, error: 'Invalid authentication code.' };
+    }
+
+    const matched = this.state.superAdminRecoveryCodes.find(
+      (c) => c.userId === userId && c.codeHash === codeHash && !c.isConsumed
+    );
+
+    if (!matched) {
+      this.logSecurityEvent(userId, 'RECOVERY_CODE_FAILED', 'FAILURE', 'SECURITY', userId);
+      return { success: false, error: 'Invalid authentication code.' };
+    }
+
+    matched.isConsumed = true;
+    matched.consumedAt = new Date().toISOString();
+
+    const remaining = this.state.superAdminRecoveryCodes.filter(
+      (c) => c.userId === userId && !c.isConsumed
+    ).length;
+
+    this.updateSuperAdminSecuritySettings(userId, {
+      recoveryCodesRemaining: remaining,
+      lastStepUpAt: new Date().toISOString(),
+      lastStepUpLevel: riskLevel,
+    });
+
+    this.logSecurityEvent(userId, 'RECOVERY_CODE_CONSUMED', 'SUCCESS', 'SECURITY', userId, { remaining, riskLevel });
+    this.save(this.state);
+    return { success: true, remainingCodes: remaining };
+  }
+
+  public insertSecurityAuditLogDirectly(): never {
+    throw new Error('SECURITY_VIOLATION: Security audit logs cannot be inserted directly by clients.');
+  }
+
+  public updateSecurityAuditLog(): never {
+    throw new Error('SECURITY_VIOLATION: Security audit logs are immutable and cannot be updated.');
+  }
+
+  public deleteSecurityAuditLog(): never {
+    throw new Error('SECURITY_VIOLATION: Security audit logs are immutable and cannot be deleted.');
+  }
+
+  public logSecurityEvent(
+    actorId: string,
+    eventType: string,
+    result: 'SUCCESS' | 'FAILURE' | 'BLOCKED',
+    targetEntity?: string,
+    targetId?: string,
+    metadata?: Record<string, unknown>
+  ): SecurityAuditRecord {
+    if (!this.state.securityAuditLogs) {
+      this.state.securityAuditLogs = [];
+    }
+
+    const rec: SecurityAuditRecord = {
+      id: 'sec-' + Math.random().toString(36).substr(2, 9),
+      actorId,
+      eventType,
+      result,
+      targetEntity,
+      targetEntityId: targetId,
+      metadata: metadata || {},
+      createdAt: new Date().toISOString(),
+    };
+
+    this.state.securityAuditLogs.unshift(rec);
+    this.save(this.state);
+    return rec;
+  }
+
+  public getSecurityAuditLogs(): SecurityAuditRecord[] {
+    return this.state.securityAuditLogs || [];
+  }
+
+  /**
    * Super Admin Account Control
    */
-  public superAdminToggleUserSuspension(superAdminId: string, targetUserId: string, suspend: boolean): boolean {
-    const admin = this.state.users.find((u) => u.id === superAdminId);
-    if (!admin || admin.role !== 'SUPER_ADMIN') {
-      throw new Error('ACCESS_DENIED: Super Admin privileges required');
+  public superAdminToggleUserSuspension(superAdminId: string, targetUserId: string, suspend: boolean, deviceId?: string): boolean {
+    this.assertSuperAdminAccess(superAdminId, 2, deviceId);
+
+    if (superAdminId === targetUserId && suspend) {
+      throw new Error('INVALID_ACTION: SuperAdmin cannot suspend their own account');
     }
 
     const target = this.state.users.find((u) => u.id === targetUserId);
@@ -782,11 +1730,8 @@ class MockDatabase {
   /**
    * Super Admin Room Freeze / Unfreeze
    */
-  public superAdminToggleRoomFreeze(superAdminId: string, roomId: string, freeze: boolean): boolean {
-    const admin = this.state.users.find((u) => u.id === superAdminId);
-    if (!admin || admin.role !== 'SUPER_ADMIN') {
-      throw new Error('ACCESS_DENIED: Super Admin privileges required');
-    }
+  public superAdminToggleRoomFreeze(superAdminId: string, roomId: string, freeze: boolean, deviceId?: string): boolean {
+    this.assertSuperAdminAccess(superAdminId, 2, deviceId);
 
     const room = this.state.rooms.find((r) => r.id === roomId);
     if (!room) return false;
@@ -811,11 +1756,8 @@ class MockDatabase {
   /**
    * Super Admin Room Archive / Restore
    */
-  public superAdminArchiveRoom(superAdminId: string, roomId: string, archive: boolean): boolean {
-    const admin = this.state.users.find((u) => u.id === superAdminId);
-    if (!admin || admin.role !== 'SUPER_ADMIN') {
-      throw new Error('ACCESS_DENIED: Super Admin privileges required');
-    }
+  public superAdminArchiveRoom(superAdminId: string, roomId: string, archive: boolean, deviceId?: string): boolean {
+    this.assertSuperAdminAccess(superAdminId, 2, deviceId);
 
     const room = this.state.rooms.find((r) => r.id === roomId);
     if (!room) return false;
@@ -840,11 +1782,8 @@ class MockDatabase {
   /**
    * Super Admin Invalidate and Reset Room Invite Code
    */
-  public superAdminResetInviteCode(superAdminId: string, roomId: string): string {
-    const admin = this.state.users.find((u) => u.id === superAdminId);
-    if (!admin || admin.role !== 'SUPER_ADMIN') {
-      throw new Error('ACCESS_DENIED: Super Admin privileges required');
-    }
+  public superAdminResetInviteCode(superAdminId: string, roomId: string, deviceId?: string): string {
+    this.assertSuperAdminAccess(superAdminId, 2, deviceId);
 
     const room = this.state.rooms.find((r) => r.id === roomId);
     if (!room) throw new Error('Room not found');
@@ -857,10 +1796,12 @@ class MockDatabase {
       });
 
     const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const newInv = {
+    const token = 'tok_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const newInv: RoomInvitation = {
       id: 'inv-' + Math.random().toString(36).substr(2, 9),
       roomId,
       inviteCode: newCode,
+      token,
       createdBy: superAdminId,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       isRevoked: false,
@@ -934,6 +1875,334 @@ class MockDatabase {
     this.save(this.state);
     return true;
   }
+
+  // --- IN-APP NOTIFICATIONS ---
+  public getNotifications(userId: string): InAppNotification[] {
+    return (this.state.notifications || [])
+      .filter((n) => n.userId === userId && !n.isDeleted);
+  }
+
+  public createNotification(data: Omit<InAppNotification, 'id' | 'createdAt'>): InAppNotification {
+    if (!this.state.notifications) {
+      this.state.notifications = [];
+    }
+
+    // Deduplication check
+    if (data.eventId) {
+      const existing = this.state.notifications.find(
+        (n) => n.userId === data.userId && n.eventId === data.eventId
+      );
+      if (existing) {
+        return existing;
+      }
+    }
+
+    const newNotif: InAppNotification = {
+      ...data,
+      id: 'notif-' + Math.random().toString(36).substring(2, 11),
+      createdAt: new Date().toISOString(),
+      isDeleted: false,
+    };
+
+    this.state.notifications.unshift(newNotif);
+    this.save(this.state);
+    return newNotif;
+  }
+
+  public markNotificationRead(notificationId: string): void {
+    const notif = (this.state.notifications || []).find((n) => n.id === notificationId);
+    if (notif && !notif.isRead) {
+      notif.isRead = true;
+      notif.readAt = new Date().toISOString();
+      this.save(this.state);
+    }
+  }
+
+  public toggleNotificationRead(notificationId: string): void {
+    const notif = (this.state.notifications || []).find((n) => n.id === notificationId);
+    if (notif) {
+      notif.isRead = !notif.isRead;
+      notif.readAt = notif.isRead ? new Date().toISOString() : undefined;
+      this.save(this.state);
+    }
+  }
+
+  public markAllNotificationsRead(userId: string): void {
+    let changed = false;
+    (this.state.notifications || []).forEach((n) => {
+      if (n.userId === userId && !n.isRead) {
+        n.isRead = true;
+        n.readAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) {
+      this.save(this.state);
+    }
+  }
+
+  public deleteNotification(notificationId: string): void {
+    const notif = (this.state.notifications || []).find((n) => n.id === notificationId);
+    if (notif) {
+      notif.isDeleted = true;
+      this.save(this.state);
+    }
+  }
+
+  public clearReadNotifications(userId: string): void {
+    let changed = false;
+    (this.state.notifications || []).forEach((n) => {
+      if (n.userId === userId && n.isRead && !n.isDeleted) {
+        n.isDeleted = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      this.save(this.state);
+    }
+  }
+
+  // --- SUPERADMIN OPERATIONS ENGINE ---
+
+  public getPlatformSettings(): PlatformSettings {
+    return this.state.settings || DEFAULT_PLATFORM_SETTINGS;
+  }
+
+  public updatePlatformSettings(superAdminId: string, updates: Partial<PlatformSettings>): PlatformSettings {
+    this.assertSuperAdminAccess(superAdminId, 2);
+
+    this.state.settings = {
+      ...(this.state.settings || DEFAULT_PLATFORM_SETTINGS),
+      ...updates,
+    };
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'PLATFORM_SETTINGS_UPDATED',
+      resourceType: 'SETTINGS',
+      metadata: { changedKeys: Object.keys(updates) },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return this.state.settings;
+  }
+
+  public getBugReports(): BugReport[] {
+    return this.state.bugReports || [];
+  }
+
+  public updateBugReportStatus(superAdminId: string, bugId: string, status: BugStatus, adminNotes?: string): BugReport | null {
+    const admin = this.state.users.find((u) => u.id === superAdminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('ACCESS_DENIED: Super Admin privileges required');
+    }
+
+    const bug = (this.state.bugReports || []).find((b) => b.id === bugId);
+    if (!bug) return null;
+
+    bug.status = status;
+    if (adminNotes !== undefined) bug.adminNotes = adminNotes;
+    if (status === 'RESOLVED') bug.resolvedAt = new Date().toISOString();
+    bug.updatedAt = new Date().toISOString();
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'BUG_REPORT_STATUS_CHANGED',
+      resourceType: 'SUPPORT_TICKET',
+      resourceId: bugId,
+      metadata: { newStatus: status, bugTitle: bug.description.substring(0, 40) },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return bug;
+  }
+
+  public getFeatureSuggestions(): FeatureSuggestion[] {
+    return this.state.featureSuggestions || [];
+  }
+
+  public updateFeatureSuggestionStatus(superAdminId: string, featureId: string, status: FeatureSuggestionStatus, adminNotes?: string): FeatureSuggestion | null {
+    const admin = this.state.users.find((u) => u.id === superAdminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('ACCESS_DENIED: Super Admin privileges required');
+    }
+
+    const feat = (this.state.featureSuggestions || []).find((f) => f.id === featureId);
+    if (!feat) return null;
+
+    feat.status = status;
+    if (adminNotes !== undefined) feat.adminNotes = adminNotes;
+    feat.updatedAt = new Date().toISOString();
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'FEATURE_SUGGESTION_STATUS_CHANGED',
+      resourceType: 'FEATURE_SUGGESTION',
+      resourceId: featureId,
+      metadata: { newStatus: status, featureTitle: feat.title },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return feat;
+  }
+
+  public getAnnouncements(): PlatformAnnouncement[] {
+    return this.state.announcements || [];
+  }
+
+  public createAnnouncement(superAdminId: string, data: Omit<PlatformAnnouncement, 'id' | 'sentAt' | 'createdBy'>): PlatformAnnouncement {
+    const admin = this.state.users.find((u) => u.id === superAdminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('ACCESS_DENIED: Super Admin privileges required');
+    }
+
+    const newAnn: PlatformAnnouncement = {
+      ...data,
+      id: 'ann-' + Math.random().toString(36).substr(2, 9),
+      sentAt: new Date().toISOString(),
+      createdBy: superAdminId,
+    };
+
+    if (!this.state.announcements) this.state.announcements = [];
+    this.state.announcements.unshift(newAnn);
+
+    // If in-app delivery, dispatch notifications to users
+    if (data.deliveryChannels.includes('IN_APP')) {
+      const targetUsers = data.audience === 'EVERYONE'
+        ? this.state.users.filter((u) => u.role === 'STUDENT')
+        : data.audience === 'SELECTED_USERS' && data.targetUserIds
+        ? this.state.users.filter((u) => data.targetUserIds!.includes(u.id))
+        : [];
+
+      for (const student of targetUsers) {
+        this.createNotification({
+          userId: student.id,
+          type: 'SYSTEM_INFO',
+          title: data.title,
+          message: data.message,
+          priority: data.priority === 'CRITICAL' ? 'HIGH' : data.priority === 'IMPORTANT' ? 'MEDIUM' : 'LOW',
+          isRead: false,
+          actionType: 'NONE',
+        });
+      }
+    }
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'ANNOUNCEMENT_PUBLISHED',
+      resourceType: 'ANNOUNCEMENT',
+      resourceId: newAnn.id,
+      metadata: { title: newAnn.title, audience: newAnn.audience, priority: newAnn.priority },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return newAnn;
+  }
+
+  public logAdminAudit(superAdminId: string, action: string, resourceType: string, resourceId?: string, metadata?: Record<string, unknown>): AuditLog {
+    const log: AuditLog = {
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action,
+      resourceType,
+      resourceId,
+      metadata,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.state.auditLogs.unshift(log);
+    this.save(this.state);
+    return log;
+  }
+
+  public deleteUserAccount(userId: string): void {
+    // 1. Remove user's personal expenses
+    this.state.personalExpenses = (this.state.personalExpenses || []).filter((e) => e.userId !== userId);
+
+    // 2. Remove in-app notifications
+    this.state.notifications = (this.state.notifications || []).filter((n) => n.userId !== userId);
+
+    // 3. Remove join requests & invitations created by user
+    this.state.roomJoinRequests = (this.state.roomJoinRequests || []).filter((r) => r.userId !== userId);
+    this.state.roomInvitations = (this.state.roomInvitations || []).filter((inv) => inv.createdBy !== userId);
+
+    // 4. Handle room ownership and memberships
+    const userMemberships = (this.state.roomMembers || []).filter((rm) => rm.userId === userId);
+    for (const membership of userMemberships) {
+      const remainingActiveMembers = (this.state.roomMembers || [])
+        .filter((rm) => rm.roomId === membership.roomId && rm.userId !== userId && rm.status === 'ACTIVE')
+        .sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
+
+      if (remainingActiveMembers.length === 0) {
+        // Sole member in room: delete the room and its expenses/splits/settlements
+        this.state.rooms = this.state.rooms.filter((r) => r.id !== membership.roomId);
+        this.state.sharedExpenses = this.state.sharedExpenses.filter((e) => e.roomId !== membership.roomId);
+        this.state.settlementPayments = this.state.settlementPayments.filter((s) => s.roomId !== membership.roomId);
+      } else {
+        // Transfer room admin if this user was admin
+        const room = this.state.rooms.find((r) => r.id === membership.roomId);
+        if (room && (room.createdBy === userId || room.adminUserId === userId || membership.role === 'ROOM_ADMIN')) {
+          const nextAdmin = remainingActiveMembers[0];
+          nextAdmin.role = 'ROOM_ADMIN';
+          room.adminUserId = nextAdmin.userId;
+          room.createdBy = nextAdmin.userId;
+        }
+      }
+    }
+
+    // Remove user from roomMembers
+    this.state.roomMembers = (this.state.roomMembers || []).filter((rm) => rm.userId !== userId);
+
+    // 5. Nullify or sanitize shared expenses & settlement payments
+    this.state.sharedExpenses = (this.state.sharedExpenses || []).map((exp) => {
+      const isPayer = exp.paidBy === userId;
+      const isCreator = exp.createdBy === userId;
+      if (!isPayer && !isCreator) return exp;
+      return {
+        ...exp,
+        paidBy: isPayer ? '' : exp.paidBy,
+        createdBy: isCreator ? '' : exp.createdBy,
+      };
+    });
+
+    this.state.expenseSplits = (this.state.expenseSplits || []).filter((sp) => sp.userId !== userId);
+
+    this.state.settlementPayments = (this.state.settlementPayments || []).map((set) => {
+      const isPayer = set.payerId === userId;
+      const isPayee = set.payeeId === userId;
+      if (!isPayer && !isPayee) return set;
+      return {
+        ...set,
+        payerId: isPayer ? '' : set.payerId,
+        payeeId: isPayee ? '' : set.payeeId,
+      };
+    });
+
+    // 6. Subscriptions
+    this.state.subscriptions = (this.state.subscriptions || []).filter((s) => s.userId !== userId);
+
+    // 7. Remove user from users list
+    this.state.users = this.state.users.filter((u) => u.id !== userId);
+
+    // 8. Audit logs: decouple user ID
+    this.state.auditLogs = (this.state.auditLogs || []).map((log) => {
+      if (log.userId === userId) {
+        return { ...log, userId: undefined };
+      }
+      return log;
+    });
+
+    this.save(this.state);
+  }
 }
 
 export const db = new MockDatabase();
+

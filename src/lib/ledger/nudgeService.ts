@@ -60,7 +60,7 @@ export function formatNudgeMessage(options: NudgeOptions, upiLink: string): stri
         `👉 *1-Tap Pay via GPay / PhonePe / Paytm:*`,
         upiLink,
         '',
-        `_Tracked securely on CampusFlow_`,
+        `_Tracked securely on RoomMate_`,
       ]
         .filter(Boolean)
         .join('\n');
@@ -75,7 +75,7 @@ export function formatNudgeMessage(options: NudgeOptions, upiLink: string): stri
         `👉 *Tap to pay in 1-click:*`,
         upiLink,
         '',
-        `_Recorded by ${creditorName} on CampusFlow_`,
+        `_Recorded by ${creditorName} on RoomMate_`,
       ]
         .filter(Boolean)
         .join('\n');

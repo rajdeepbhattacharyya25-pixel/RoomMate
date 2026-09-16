@@ -298,3 +298,84 @@ export function calculateUnifiedDashboard(
     activeRoomsCount: activeRoomIds.length,
   };
 }
+
+export interface MemberObligationsSummary {
+  debtsOwed: { toUserId: string; toUserName: string; amount: number }[];
+  creditsOwed: { fromUserId: string; fromUserName: string; amount: number }[];
+  totalOwed: number;
+  totalCredit: number;
+  hasUnresolvedObligations: boolean;
+}
+
+/**
+ * Calculates authoritative unresolved pairwise financial obligations for a specific member in a room.
+ * Separates debts owed to others from credits owed by others to prevent false clean exits on net zero.
+ */
+export function getOutstandingObligationsForMember(
+  userId: string,
+  pairwiseDebts: PairwiseDebt[]
+): MemberObligationsSummary {
+  const debtsOwed: { toUserId: string; toUserName: string; amount: number }[] = [];
+  const creditsOwed: { fromUserId: string; fromUserName: string; amount: number }[] = [];
+
+  for (const debt of pairwiseDebts) {
+    const absAmount = Math.abs(debt.netAmount);
+    if (absAmount < 0.01) continue;
+
+    // In calculateRoomPairwiseDebts:
+    // netAmount > 0 means userB owes userA
+    // netAmount < 0 means userA owes userB
+    if (debt.userAId === userId) {
+      if (debt.netAmount > 0) {
+        // userB owes userA (me) -> Credit
+        creditsOwed.push({
+          fromUserId: debt.userBId,
+          fromUserName: debt.userBName,
+          amount: absAmount,
+        });
+      } else {
+        // userA (me) owes userB -> Debt
+        debtsOwed.push({
+          toUserId: debt.userBId,
+          toUserName: debt.userBName,
+          amount: absAmount,
+        });
+      }
+    } else if (debt.userBId === userId) {
+      if (debt.netAmount > 0) {
+        // userB (me) owes userA -> Debt
+        debtsOwed.push({
+          toUserId: debt.userAId,
+          toUserName: debt.userAName,
+          amount: absAmount,
+        });
+      } else {
+        // userA owes userB (me) -> Credit
+        creditsOwed.push({
+          fromUserId: debt.userAId,
+          fromUserName: debt.userAName,
+          amount: absAmount,
+        });
+      }
+    }
+  }
+
+  const totalOwed = round2(debtsOwed.reduce((sum, d) => sum + d.amount, 0));
+  const totalCredit = round2(creditsOwed.reduce((sum, c) => sum + c.amount, 0));
+  const hasUnresolvedObligations = debtsOwed.length > 0 || creditsOwed.length > 0;
+
+  return {
+    debtsOwed,
+    creditsOwed,
+    totalOwed,
+    totalCredit,
+    hasUnresolvedObligations,
+  };
+}
+
+/**
+ * Clean Exit Gate: A member can only exit cleanly if they have zero unresolved debts and zero unresolved credits.
+ */
+export function canCleanExit(obligations: MemberObligationsSummary): boolean {
+  return !obligations.hasUnresolvedObligations;
+}

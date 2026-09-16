@@ -31,6 +31,7 @@ export class SupabaseService {
       avatarUrl: p.avatar_url || undefined,
       role: p.role,
       isSuspended: p.is_suspended,
+      onboardingCompleted: p.onboarding_completed ?? Boolean(p.phone && p.name),
       createdAt: p.created_at,
       updatedAt: p.updated_at,
     }));
@@ -409,8 +410,9 @@ export class SupabaseService {
         id: inv.id,
         room_id: inv.roomId,
         invite_code: inv.inviteCode,
+        token: inv.token || ('tok_' + inv.id),
         created_by: inv.createdBy,
-        expires_at: inv.expiresAt,
+        expires_at: inv.expiresAt || null,
         is_revoked: inv.isRevoked,
       }));
       await supabase.from('room_invitations').upsert(invRows, { onConflict: 'id' });
