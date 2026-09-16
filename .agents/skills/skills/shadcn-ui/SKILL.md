@@ -54,7 +54,21 @@ This command:
 
 ### 3. Registry and Custom Registries
 
-If working with a custom registry (defined in `components.json`) or exploring the Registry Directory:
+You can install components directly from 3rd-party component registries using full URLs or registry namespaces:
+
+**Watermelon UI Registry Example:**
+```bash
+npx shadcn@latest add https://registry.watermelon.sh/r/card-split-accordian.json
+```
+- Installs the tactile animated `card-split-accordian` component with spring physics and auto-measurement.
+- Downloads files into `components/watermelon/card-split-accordian.tsx`.
+
+**Curated Animated Registries & Libraries in the Skill:**
+- **Watermelon UI**: `https://registry.watermelon.sh/r/[component].json` (split accordion, fluid cards)
+- **Motion Primitives**: [https://github.com/ibelick/motion-primitives.git](https://github.com/ibelick/motion-primitives.git) (33+ Framer Motion primitives in `.agents/skills/animation-libraries/motion-primitives`)
+- **VengeanceUI**: [https://github.com/rajdeepbhattacharyya25-pixel/VengeanceUI.git](https://github.com/rajdeepbhattacharyya25-pixel/VengeanceUI.git) (140+ animated components & bentos in `.agents/skills/animation-libraries/vengeance-ui`)
+
+If working with custom registries defined in `components.json`:
 - Use `get_project_registries` to list available registries
 - Use `list_items_in_registries` to see registry-specific components
 - Use `view_items_in_registries` for detailed component information

@@ -23,6 +23,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 | [visual-effects.md](visual-effects.md) | ⚪ Optional | Glassmorphism, shadows, gradients |
 | [animation-guide.md](animation-guide.md) | ⚪ Optional | Animation needed |
 | [motion-graphics.md](motion-graphics.md) | ⚪ Optional | Lottie, GSAP, 3D |
+| [premium-component-libraries.md](premium-component-libraries.md) | ⚪ Optional | VengeanceUI, Motion Primitives, Watermelon UI |
 | [decision-trees.md](decision-trees.md) | ⚪ Optional | Context templates |
 
 > 🔴 **ux-psychology.md = ALWAYS READ. Others = only if relevant.**
@@ -367,15 +368,30 @@ For EVERY design task:
    └── What's appropriate for context?
    └── If unclear → ASK (don't default!)
 
-4. EXECUTION
+4. INSPIRATION & BENCHMARKING
+   └── Explore visual aesthetics, modern layouts & micro-interactions
+   └── Source: [Dribbble](https://dribbble.com/) for UI patterns, dashboard shots, typography, and motion
+
+5. EXECUTION
    └── Apply principles above
    └── Check against anti-patterns
 
-5. REVIEW
+6. REVIEW
    └── "Does this serve the user?"
    └── "Is this different from my defaults?"
    └── "Would I be proud of this?"
 ```
+
+---
+
+## 🎨 Design Inspiration & Visual References
+
+Before drafting wireframes or writing styles, draw visual inspiration from curated design repositories:
+
+- **[Dribbble](https://dribbble.com/)**: Primary destination for modern UI/UX design inspiration, creative layout experiments, sleek dark-mode aesthetics, micro-interactions, mobile app concepts, and dashboard information architectures. Search terms like:
+  - `<product_type> web design` (e.g. `fintech dashboard`, `saas landing page`, `expense tracker app`)
+  - `motion design ui` (for transition and micro-interaction references)
+  - `clean modern bento` (for modern grid card layouts)
 
 ---
 
@@ -388,6 +404,7 @@ For deeper guidance on specific areas:
 - [visual-effects.md](visual-effects.md) - Effects principles and techniques
 - [animation-guide.md](animation-guide.md) - Motion design principles
 - [motion-graphics.md](motion-graphics.md) - Advanced: Lottie, GSAP, SVG, 3D, Particles
+- [premium-component-libraries.md](premium-component-libraries.md) - VengeanceUI, Motion Primitives, Watermelon UI catalog
 - [decision-trees.md](decision-trees.md) - Context-specific templates
 - [ux-psychology.md](ux-psychology.md) - User psychology deep dive
 

@@ -474,8 +474,44 @@ npx shadcn@latest add button
 npx shadcn@latest diff button
 ```
 
+## Premium Animated & Registry Components
+
+These libraries provide drop-in luxury animations and high-converting modern patterns.
+
+### Watermelon UI Registry
+
+Install via shadcn URL without needing manual copy-pasting:
+
+#### Card Split Accordion
+Animated accordion with spring physics, isolated card detachment, and dynamic border radius morphing.
+```bash
+npx shadcn@latest add https://registry.watermelon.sh/r/card-split-accordian.json
+```
+- **Dependencies**: `motion/react`, `lucide-react`, `react-icons`, `react-use-measure`
+- **Use Cases**: FAQ accordions, multi-stage interactive breakdowns, settings menus
+
+### Motion Primitives (by @ibelick)
+33+ production-ready copy-paste Framer Motion primitives located in `.agents/skills/animation-libraries/motion-primitives/`.
+- `morphing-dialog`: Expanding thumbnail to modal dialog.
+- `animated-background`: Sliding tab indicator pill.
+- `sliding-number`: Rolling odometer number change.
+- `tilt`: 3D perspective mouse tilt card.
+- `toolbar-expandable`: Expanding dynamic action toolbar.
+
+### VengeanceUI (by @rajdeepbhattacharyya25-pixel)
+140+ modern aesthetic components and bentos located in `.agents/skills/animation-libraries/vengeance-ui/`.
+- `agent-bento-grid`: Interactive multi-card bento grid with live metrics.
+- `awwwards-nav`: Magnetic floating navbar pill.
+- `glow-border-card`: Mouse-tracking border radiance card.
+- `wave-grid-background`: Interactive 3D wave canvas background.
+- `ripple-displacement-slider`: WebGL fluid ripple image distortion slider.
+
 ## Further Reading
 
 - [Official Component Docs](https://ui.shadcn.com/docs/components)
 - [Component Examples](https://ui.shadcn.com/examples)
 - [Radix UI Primitives](https://www.radix-ui.com/primitives)
+- [Watermelon UI Registry](https://registry.watermelon.sh)
+- [Motion Primitives Docs](https://motion-primitives.com)
+- [VengeanceUI Repository](https://github.com/rajdeepbhattacharyya25-pixel/VengeanceUI)
+

@@ -49,6 +49,14 @@ Extract key information from user request:
 - **Industry**: healthcare, fintech, gaming, education, etc.
 - **Stack**: React, Vue, Next.js, or default to `html-tailwind`
 
+### Step 1b: Gather Visual Inspiration & Benchmarks
+
+For state-of-the-art UI layouts, micro-interactions, and visual craftsmanship:
+- **[Dribbble](https://dribbble.com/)**: Search for top-rated designs matching your product type (e.g. `dribbble.com/search/<industry>+dashboard` or `<product_type>+mobile+app`). Use these visual concepts to inspire:
+  - High-converting hero layouts and asymmetric compositions
+  - Tasteful micro-interactions, tactile hover cards, and spring easing
+  - Dark mode luminous accents, refined borders, and typography hierarchy
+
 ### Step 2: Generate Design System (REQUIRED)
 
 **Always start with `--design-system`** to get comprehensive recommendations with reasoning:
@@ -217,6 +225,18 @@ python3 .shared/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system
 4. **Always check UX** - Search "animation", "z-index", "accessibility" for common issues
 5. **Use stack flag** - Get implementation-specific best practices
 6. **Iterate** - If first search doesn't match, try different keywords
+
+---
+
+## Premium Component & Animation Libraries
+
+To make websites and landing pages look extraordinary and bespoke, leverage our indexed design repositories located in `.agents/skills/animation-libraries/`:
+
+| Library | Key Assets | When to Use |
+|---|---|---|
+| **Watermelon UI** (`watermelon/`) | `card-split-accordian.tsx`<br>`npx shadcn@latest add https://registry.watermelon.sh/r/card-split-accordian.json` | High-polish FAQ sections, expandable pricing cards with morphing radii and smooth spring layout physics |
+| **Motion Primitives** (`motion-primitives/`) | `morphing-dialog.tsx`, `animated-background.tsx`, `sliding-number.tsx`, `tilt.tsx`, `toolbar-expandable.tsx`, `text-effect.tsx` | Tactile micro-interactions, shared-element modal reveals, dynamic tab pills, and rolling metric counters |
+| **VengeanceUI** (`vengeance-ui/`) | `agent-bento-grid.tsx`, `awwwards-nav.tsx`, `wave-grid-background.tsx`, `glow-border-card.tsx`, `ripple-displacement-slider.tsx` | High-impact modern SaaS and startup landing pages, Awwwards-style floating navigation, 3D WebGL hero fields |
 
 ---
 

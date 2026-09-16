@@ -38,6 +38,13 @@ android/.navigation/
 android/.cxx/
 android/.externalNativeBuild/
 
+# Compiled binaries, AAB bundles, and local APK builds
+*.apk
+*.aab
+
+# Supabase CLI temporary directory
+supabase/.temp/
+
 # Editor & OS files
 .vscode/*
 !.vscode/extensions.json
@@ -49,3 +56,4 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+

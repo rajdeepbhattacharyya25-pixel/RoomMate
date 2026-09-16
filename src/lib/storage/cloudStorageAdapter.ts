@@ -969,6 +969,46 @@ export interface RedeemOAuthResult {
   error?: string;
 }
 
+export interface ParsedOAuthTokens {
+  accessToken?: string;
+  refreshToken?: string;
+  code?: string;
+}
+
+/**
+ * Pure parser that extracts accessToken, refreshToken, or auth code
+ * from an OAuth redirect URL, hash, or query string.
+ */
+export function parseOAuthTokensFromUrl(rawInput: string): ParsedOAuthTokens {
+  if (!rawInput || typeof rawInput !== 'string') {
+    return {};
+  }
+
+  let searchStr = '';
+  let hashStr = '';
+
+  if (rawInput.includes('#')) {
+    const parts = rawInput.split('#');
+    hashStr = parts[1] || '';
+    searchStr = parts[0].includes('?') ? parts[0].split('?')[1] : '';
+  } else if (rawInput.includes('?')) {
+    searchStr = rawInput.split('?')[1] || '';
+  } else {
+    if (rawInput.includes('access_token=') || rawInput.includes('code=')) {
+      hashStr = rawInput;
+    }
+  }
+
+  const hashParams = new URLSearchParams(hashStr);
+  const searchParams = new URLSearchParams(searchStr);
+
+  const accessToken = hashParams.get('access_token') || searchParams.get('access_token') || undefined;
+  const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token') || undefined;
+  const code = searchParams.get('code') || hashParams.get('code') || undefined;
+
+  return { accessToken, refreshToken, code };
+}
+
 /**
  * Parses and redeems an OAuth redirect URL, hash fragment, or query string
  * (e.g. https://localhost/#access_token=... or roommate://auth-callback#access_token=... or raw tokens)
@@ -980,26 +1020,7 @@ export async function redeemOAuthUrlOrHash(rawInput: string): Promise<RedeemOAut
   }
 
   try {
-    let searchStr = '';
-    let hashStr = '';
-
-    if (rawInput.includes('#')) {
-      const parts = rawInput.split('#');
-      hashStr = parts[1] || '';
-      searchStr = parts[0].includes('?') ? parts[0].split('?')[1] : '';
-    } else if (rawInput.includes('?')) {
-      searchStr = rawInput.split('?')[1] || '';
-    } else {
-      if (rawInput.includes('access_token=') || rawInput.includes('code=')) {
-        hashStr = rawInput;
-      }
-    }
-
-    const hashParams = new URLSearchParams(hashStr);
-    const searchParams = new URLSearchParams(searchStr);
-
-    const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+    const { accessToken, refreshToken, code } = parseOAuthTokensFromUrl(rawInput);
 
     if (accessToken && refreshToken) {
       const { error } = await supabase.auth.setSession({

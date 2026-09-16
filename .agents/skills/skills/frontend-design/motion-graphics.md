@@ -264,14 +264,20 @@ What animation do you need?
 ├── Logo/icon animation?
 │   └── SVG animation (stroke or morph)
 │
-├── Interactive 3D effect?
-│   └── CSS 3D Transforms (simple) or Three.js (complex)
+├── Interactive 3D effect / WebGL distortion?
+│   └── VengeanceUI (ripple-displacement-slider, wave-grid, books-showcase)
+│
+├── Fluid micro-interactions & morphing surfaces?
+│   └── Motion Primitives (morphing-dialog, animated-background, sliding-number)
+│
+├── Tactile split card accordion / FAQ?
+│   └── Watermelon UI (card-split-accordian: npx shadcn add https://registry.watermelon.sh/r/card-split-accordian.json)
 │
 ├── Atmospheric background?
-│   └── tsParticles or Canvas
+│   └── VengeanceUI (wave-grid, aurora-hero) or tsParticles/Canvas
 │
 └── Simple entrance/hover?
-    └── CSS @keyframes or Framer Motion
+    └── CSS @keyframes or Motion/Framer Motion
 ```
 
 ---
@@ -291,15 +297,20 @@ What animation do you need?
 
 ## 10. Quick Reference
 
-| Effect | Tool | Performance |
-|--------|------|-------------|
+| Effect | Tool / Source | Performance |
+|--------|---------------|-------------|
 | Loading spinner | CSS/Lottie | Light |
-| Staggered reveal | GSAP/Framer | Medium |
+| Staggered reveal | Motion Primitives (`text-effect.tsx`) / GSAP | Light-Medium |
 | SVG path draw | CSS stroke | Light |
-| 3D card flip | CSS transforms | Light |
-| Particle background | tsParticles | Heavy |
-| Scroll parallax | GSAP ScrollTrigger | Medium |
-| Shape morphing | GSAP MorphSVG | Medium |
+| 3D card flip / tilt | Motion Primitives (`tilt.tsx`) / CSS | Light |
+| Split Accordion (spring radii) | Watermelon UI (`card-split-accordian.tsx`) | Light |
+| Morphing Dialog / Popover | Motion Primitives (`morphing-dialog.tsx`) | Medium |
+| Sliding tab / filter background | Motion Primitives (`animated-background.tsx`) | Light |
+| Odometer digit counter | Motion Primitives (`sliding-number.tsx`) | Light |
+| Fluid 3D Wave Background | VengeanceUI (`wave-grid-background.tsx`) | Medium |
+| Awwwards floating nav pill | VengeanceUI (`awwwards-nav.tsx`) | Light |
+| High-density Bento Grid | VengeanceUI (`agent-bento-grid.tsx`) | Light-Medium |
+| WebGL Ripple Distortion Slider| VengeanceUI (`ripple-displacement-slider.tsx`)| Medium |
 
 ---
 
