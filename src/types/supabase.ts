@@ -9,6 +9,51 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      app_versions: {
+        Row: {
+          id: string;
+          app_name: string;
+          version: string;
+          channel: 'staging' | 'production';
+          bundle_url: string;
+          checksum: string;
+          changelog: string | null;
+          min_native_version: string;
+          is_active: boolean;
+          build_time: string | null;
+          created_at: string;
+          published_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          app_name?: string;
+          version: string;
+          channel: 'staging' | 'production';
+          bundle_url: string;
+          checksum: string;
+          changelog?: string | null;
+          min_native_version?: string;
+          is_active?: boolean;
+          build_time?: string | null;
+          created_at?: string;
+          published_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          app_name?: string;
+          version?: string;
+          channel?: 'staging' | 'production';
+          bundle_url?: string;
+          checksum?: string;
+          changelog?: string | null;
+          min_native_version?: string;
+          is_active?: boolean;
+          build_time?: string | null;
+          created_at?: string;
+          published_at?: string | null;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
@@ -16,8 +61,12 @@ export type Database = {
           phone: string | null;
           name: string;
           avatar_url: string | null;
+          upi_qr_url: string | null;
+          upi_id: string | null;
+          fcm_token: string | null;
           role: 'SUPER_ADMIN' | 'STUDENT';
           is_suspended: boolean;
+          onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -27,8 +76,12 @@ export type Database = {
           phone?: string | null;
           name: string;
           avatar_url?: string | null;
+          upi_qr_url?: string | null;
+          upi_id?: string | null;
+          fcm_token?: string | null;
           role?: 'SUPER_ADMIN' | 'STUDENT';
           is_suspended?: boolean;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -38,8 +91,12 @@ export type Database = {
           phone?: string | null;
           name?: string;
           avatar_url?: string | null;
+          upi_qr_url?: string | null;
+          upi_id?: string | null;
+          fcm_token?: string | null;
           role?: 'SUPER_ADMIN' | 'STUDENT';
           is_suspended?: boolean;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -129,6 +186,9 @@ export type Database = {
           name: string;
           description: string | null;
           created_by: string;
+          admin_user_id: string | null;
+          join_policy: 'APPROVAL_REQUIRED' | 'INSTANT';
+          invite_policy: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived: boolean;
           created_at: string;
           updated_at: string;
@@ -138,6 +198,9 @@ export type Database = {
           name: string;
           description?: string | null;
           created_by: string;
+          admin_user_id?: string | null;
+          join_policy?: 'APPROVAL_REQUIRED' | 'INSTANT';
+          invite_policy?: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -147,6 +210,9 @@ export type Database = {
           name?: string;
           description?: string | null;
           created_by?: string;
+          admin_user_id?: string | null;
+          join_policy?: 'APPROVAL_REQUIRED' | 'INSTANT';
+          invite_policy?: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -188,8 +254,9 @@ export type Database = {
           id: string;
           room_id: string;
           invite_code: string;
+          token: string;
           created_by: string;
-          expires_at: string;
+          expires_at: string | null;
           is_revoked: boolean;
           created_at: string;
         };
@@ -197,8 +264,9 @@ export type Database = {
           id?: string;
           room_id: string;
           invite_code: string;
+          token?: string;
           created_by: string;
-          expires_at: string;
+          expires_at?: string | null;
           is_revoked?: boolean;
           created_at?: string;
         };
@@ -206,10 +274,38 @@ export type Database = {
           id?: string;
           room_id?: string;
           invite_code?: string;
+          token?: string;
           created_by?: string;
-          expires_at?: string;
+          expires_at?: string | null;
           is_revoked?: boolean;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      room_join_requests: {
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          status: 'PENDING' | 'APPROVED' | 'DECLINED';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          status?: 'PENDING' | 'APPROVED' | 'DECLINED';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          user_id?: string;
+          status?: 'PENDING' | 'APPROVED' | 'DECLINED';
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -393,6 +489,114 @@ export type Database = {
         };
         Relationships: [];
       };
+      in_app_notifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          room_id: string | null;
+          type: string;
+          title: string;
+          message: string;
+          priority: 'HIGH' | 'MEDIUM' | 'LOW';
+          is_read: boolean;
+          read_at: string | null;
+          created_at: string;
+          action_type: string | null;
+          action_target: string | null;
+          metadata: Json;
+          event_id: string | null;
+          is_deleted: boolean;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          room_id?: string | null;
+          type: string;
+          title: string;
+          message: string;
+          priority: 'HIGH' | 'MEDIUM' | 'LOW';
+          is_read?: boolean;
+          read_at?: string | null;
+          created_at?: string;
+          action_type?: string | null;
+          action_target?: string | null;
+          metadata?: Json;
+          event_id?: string | null;
+          is_deleted?: boolean;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          room_id?: string | null;
+          type?: string;
+          title?: string;
+          message?: string;
+          priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+          is_read?: boolean;
+          read_at?: string | null;
+          created_at?: string;
+          action_type?: string | null;
+          action_target?: string | null;
+          metadata?: Json;
+          event_id?: string | null;
+          is_deleted?: boolean;
+        };
+        Relationships: [];
+      };
+      bug_reports: {
+        Row: {
+          id: string;
+          user_id: string;
+          user_name: string;
+          user_email: string;
+          user_role: string;
+          category: string;
+          severity: string;
+          status: string;
+          description: string;
+          screenshot_url: string | null;
+          diagnostics: Json;
+          admin_notes: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          user_name: string;
+          user_email: string;
+          user_role?: string;
+          category: string;
+          severity: string;
+          status?: string;
+          description: string;
+          screenshot_url?: string | null;
+          diagnostics?: Json;
+          admin_notes?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          user_name?: string;
+          user_email?: string;
+          user_role?: string;
+          category?: string;
+          severity?: string;
+          status?: string;
+          description?: string;
+          screenshot_url?: string | null;
+          diagnostics?: Json;
+          admin_notes?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -432,6 +636,61 @@ export type Database = {
           settlements_received: number;
           net_balance: number;
         }[];
+      };
+      leave_room: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: {
+          success: boolean;
+          new_admin_id: string | null;
+          is_archived: boolean;
+        };
+      };
+      remove_room_member: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+        };
+        Returns: {
+          success: boolean;
+        };
+      };
+      transfer_room_ownership: {
+        Args: {
+          p_room_id: string;
+          p_new_admin_id: string;
+        };
+        Returns: {
+          success: boolean;
+          old_admin_id: string;
+          new_admin_id: string;
+        };
+      };
+      regenerate_room_invite: {
+        Args: {
+          p_room_id: string;
+          p_expiration_hours?: number;
+        };
+        Returns: {
+          id: string;
+          room_id: string;
+          invite_code: string;
+          token: string;
+          created_by: string;
+          expires_at: string | null;
+          is_revoked: boolean;
+          created_at: string;
+        };
+      };
+      delete_user_account: {
+        Args: Record<string, never>;
+        Returns: {
+          success: boolean;
+          deleted_user_id: string;
+          deleted_rooms?: number;
+          reassigned_rooms?: number;
+        };
       };
     };
     Enums: {
