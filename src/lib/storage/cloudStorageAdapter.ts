@@ -1034,7 +1034,6 @@ export async function redeemOAuthUrlOrHash(rawInput: string): Promise<RedeemOAut
       return { success: true, accessToken, refreshToken };
     }
 
-    const code = searchParams.get('code') || hashParams.get('code');
     if (code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
