@@ -131,7 +131,7 @@ export function formatWhatsAppSettlementReceipt(data: SettlementReceiptData): st
     });
 
   return [
-    `*CampusFlow Settlement Receipt* 🧾✨`,
+    `*RoomMate Settlement Receipt* 🧾✨`,
     `━━━━━━━━━━━━━━━━━━━━━`,
     `✅ *Payment Recorded & Cleared*`,
     `💰 *Amount:* ₹${data.amount.toFixed(2)}`,
@@ -187,7 +187,7 @@ export function renderSettlementVoucherCanvas(data: SettlementReceiptData): stri
   ctx.fillStyle = '#94A3B8';
   ctx.font = '600 18px Inter, system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('CAMPUSFLOW • VERIFIED SETTLEMENT VOUCHER', width / 2, 85);
+  ctx.fillText('ROOMMATE • VERIFIED SETTLEMENT VOUCHER', width / 2, 85);
 
   // Checkmark Badge Circle
   ctx.beginPath();
@@ -263,7 +263,7 @@ export function renderSettlementVoucherCanvas(data: SettlementReceiptData): stri
   // Footer
   ctx.fillStyle = '#475569';
   ctx.font = '500 13px Inter, system-ui, sans-serif';
-  ctx.fillText('Generated on CampusFlow Mobile • Student Expense & Ledger System', width / 2, 935);
+  ctx.fillText('Generated on RoomMate Mobile • Student Expense & Ledger System', width / 2, 935);
 
   return canvas.toDataURL('image/png');
 }
@@ -276,9 +276,79 @@ export function downloadSettlementVoucherImage(data: SettlementReceiptData): voi
   if (!dataUrl) return;
 
   const link = document.createElement('a');
-  link.download = `CampusFlow_Settlement_${data.payeeName.replace(/\s+/g, '_')}_₹${data.amount.toFixed(0)}.png`;
+  link.download = `RoomMate_Settlement_${data.payeeName.replace(/\s+/g, '_')}_₹${data.amount.toFixed(0)}.png`;
   link.href = dataUrl;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+export interface ParsedUpiData {
+  vpa: string;
+  name: string;
+  amount?: number;
+  note?: string;
+  ref?: string;
+  raw: string;
+}
+
+/**
+ * Parses raw QR string or UPI intent URI (upi://pay?pa=... or merchant@bank) into structured parameters.
+ */
+export function parseUpiQrString(rawInput: string): ParsedUpiData | null {
+  if (!rawInput) return null;
+  const input = rawInput.trim();
+
+  // 1. Standard NPCI UPI URI scheme: upi://pay?pa=...
+  if (input.toLowerCase().startsWith('upi://pay')) {
+    try {
+      const url = new URL(input.replace(/^[uU][pP][iI]:\/\/[pP][aA][yY]\??/, 'https://dummy.local/?'));
+      const pa = url.searchParams.get('pa') || '';
+      const pn = url.searchParams.get('pn') || '';
+      const am = url.searchParams.get('am') ? parseFloat(url.searchParams.get('am')!) : undefined;
+      const tn = url.searchParams.get('tn') || '';
+      const tr = url.searchParams.get('tr') || '';
+
+      if (pa) {
+        return {
+          vpa: pa,
+          name: pn || pa.split('@')[0] || 'Merchant',
+          amount: am && !isNaN(am) ? am : undefined,
+          note: tn ? decodeURIComponent(tn).replace(/_/g, ' ') : undefined,
+          ref: tr || undefined,
+          raw: input,
+        };
+      }
+    } catch {
+      // Manual regex fallback
+      const paMatch = input.match(/[?&]pa=([^&]+)/i);
+      if (paMatch) {
+        const pnMatch = input.match(/[?&]pn=([^&]+)/i);
+        const amMatch = input.match(/[?&]am=([^&]+)/i);
+        const tnMatch = input.match(/[?&]tn=([^&]+)/i);
+        const trMatch = input.match(/[?&]tr=([^&]+)/i);
+        const vpa = decodeURIComponent(paMatch[1]);
+        return {
+          vpa,
+          name: pnMatch ? decodeURIComponent(pnMatch[1]) : vpa.split('@')[0],
+          amount: amMatch ? parseFloat(amMatch[1]) : undefined,
+          note: tnMatch ? decodeURIComponent(tnMatch[1]).replace(/_/g, ' ') : undefined,
+          ref: trMatch ? decodeURIComponent(trMatch[1]) : undefined,
+          raw: input,
+        };
+      }
+    }
+  }
+
+  // 2. Direct VPA (e.g. resident@okaxis, 9876543210@paytm)
+  const vpaRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+  if (vpaRegex.test(input)) {
+    return {
+      vpa: input,
+      name: input.split('@')[0],
+      raw: input,
+    };
+  }
+
+  return null;
 }

@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'io.campusflow.app',
-  appName: 'CampusFlow',
+  appName: 'RoomMate',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -29,6 +29,10 @@ const config: CapacitorConfig = {
     },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
+    },
+    CapacitorUpdater: {
+      autoUpdate: false,
+      resetWhenUpdate: false,
     },
   },
 };

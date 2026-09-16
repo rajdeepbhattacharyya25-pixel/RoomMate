@@ -1,10 +1,12 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications, PushNotificationSchema } from '@capacitor/push-notifications';
+import { playNotificationSound, playSuccessSound } from './notificationSound';
 
-export const EXPENSES_CHANNEL_ID = 'campusflow_expenses_channel';
-export const SETTLEMENTS_CHANNEL_ID = 'campusflow_settlements_channel';
-export const NUDGES_CHANNEL_ID = 'campusflow_nudges_channel';
+export const EXPENSES_CHANNEL_ID = 'roommate_expenses_channel';
+export const SETTLEMENTS_CHANNEL_ID = 'roommate_settlements_channel';
+export const NUDGES_CHANNEL_ID = 'roommate_nudges_channel';
+export const REQUESTS_CHANNEL_ID = 'roommate_requests_channel';
 
 let isChannelsInitialized = false;
 
@@ -23,7 +25,7 @@ export async function initNativeNotifications(): Promise<void> {
         description: 'Instant alerts when a roommate records a new shared bill or split',
         importance: 4, // High
         visibility: 1, // Public
-        sound: 'beep.wav',
+        sound: 'notification.mp3',
         vibration: true,
         lights: true,
         lightColor: '#6366F1',
@@ -35,7 +37,7 @@ export async function initNativeNotifications(): Promise<void> {
         description: 'Confirmations when a roommate settles debt via UPI or cash',
         importance: 4,
         visibility: 1,
-        sound: 'beep.wav',
+        sound: 'notification.mp3',
         vibration: true,
         lights: true,
         lightColor: '#10B981',
@@ -83,7 +85,11 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       const pushStatus = await PushNotifications.requestPermissions();
 
       if (pushStatus.receive === 'granted') {
-        await PushNotifications.register();
+        try {
+          await PushNotifications.register();
+        } catch (e) {
+          console.warn('[Push] Safe register catch in requestNotificationPermissions:', e);
+        }
       }
 
       return localStatus.display === 'granted';
@@ -119,6 +125,9 @@ export async function sendLocalExpenseNotification(data: {
   const notifBody = `${data.paidByName} added ₹${data.totalAmount.toFixed(2)}${
     data.roomName ? ` in ${data.roomName}` : ''
   }. Check your share.`;
+
+  // Play in-app notification chime
+  playNotificationSound();
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -165,6 +174,9 @@ export async function sendLocalSettlementNotification(data: {
 }): Promise<void> {
   const notifTitle = `Settlement Recorded: ₹${data.amount.toFixed(2)}`;
   const notifBody = `${data.payerName} paid ${data.payeeName} via ${data.paymentMethod}. All balances updated.`;
+
+  // Play success chime for settlements
+  playSuccessSound();
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -228,6 +240,95 @@ export async function sendLocalNudgeNotification(data: {
       return;
     } catch (err) {
       console.warn('Failed to schedule native nudge notification:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(notifTitle, {
+        body: notifBody,
+        icon: '/icons/icon-192.png',
+      });
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+/**
+ * Dispatches an instant native local notification when a new join request arrives.
+ */
+export async function sendLocalJoinRequestNotification(data: {
+  requesterName: string;
+  requesterEmail: string;
+  roomName: string;
+}): Promise<void> {
+  const notifTitle = `🔔 Join Request: ${data.roomName}`;
+  const notifBody = `${data.requesterName} (${data.requesterEmail}) wants to join ${data.roomName}. Tap to review.`;
+  playNotificationSound();
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await initNativeNotifications();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: Math.floor(Date.now() % 100000),
+            title: notifTitle,
+            body: notifBody,
+            channelId: REQUESTS_CHANNEL_ID,
+            smallIcon: 'ic_stat_icon_config_sample',
+            extra: { type: 'join_request', roomName: data.roomName },
+          },
+        ],
+      });
+      return;
+    } catch (err) {
+      console.warn('Failed to schedule native join request notification:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(notifTitle, {
+        body: notifBody,
+        icon: '/icons/icon-192.png',
+      });
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+/**
+ * Dispatches an instant notification to the user when their join request is approved.
+ */
+export async function sendLocalJoinApprovalNotification(data: {
+  roomName: string;
+  adminName: string;
+}): Promise<void> {
+  const notifTitle = `🎉 You're in! Welcome to ${data.roomName}`;
+  const notifBody = `${data.adminName} approved your request. Tap to enter your shared room ledger.`;
+  playSuccessSound();
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await initNativeNotifications();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: Math.floor(Date.now() % 100000),
+            title: notifTitle,
+            body: notifBody,
+            channelId: REQUESTS_CHANNEL_ID,
+            smallIcon: 'ic_stat_icon_config_sample',
+            extra: { type: 'join_approval', roomName: data.roomName },
+          },
+        ],
+      });
+      return;
+    } catch (err) {
+      console.warn('Failed to schedule native join approval notification:', err);
     }
   }
 

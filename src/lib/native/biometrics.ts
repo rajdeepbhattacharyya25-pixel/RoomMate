@@ -9,7 +9,8 @@ export interface NativeBiometricStatus {
   detail: string;
 }
 
-const BIOMETRIC_DEVICE_KEY = 'campusflow_biometric_device_enrolled';
+const PRIMARY_BIOMETRIC_DEVICE_KEY = 'roommate_biometric_device_enrolled';
+const BIOMETRIC_DEVICE_KEY = PRIMARY_BIOMETRIC_DEVICE_KEY;
 
 /**
  * Checks native device hardware biometric capabilities (Face ID, Touch ID, Android Biometrics, WebAuthn).
@@ -96,7 +97,7 @@ export async function checkNativeBiometrics(): Promise<NativeBiometricStatus> {
  * Triggers native Face ID / Android BiometricPrompt or WebAuthn challenge.
  */
 export async function authenticateResidentBiometrics(
-  reason: string = 'Scan Face ID or Fingerprint to unlock CampusFlow resident vault'
+  reason: string = 'Scan Face ID or Fingerprint to unlock RoomMate resident vault'
 ): Promise<boolean> {
   const isNative = Capacitor.isNativePlatform();
 
@@ -145,9 +146,8 @@ export async function authenticateResidentBiometrics(
     }
   }
 
-  // Tactile simulation fallback for preview environments
-  await new Promise((resolve) => setTimeout(resolve, 650));
-  await hapticSuccess();
-  localStorage.setItem(BIOMETRIC_DEVICE_KEY, 'true');
-  return true;
+  // If native or WebAuthn platform authentication is unavailable or failed, return false.
+  // Never simulate biometric approval in a production zero-trust architecture.
+  await hapticWarning();
+  return false;
 }

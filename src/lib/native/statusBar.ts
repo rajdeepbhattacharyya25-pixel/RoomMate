@@ -6,9 +6,11 @@ import { Keyboard } from '@capacitor/keyboard';
 /**
  * Configure edge-to-edge status bar styling on mobile devices.
  */
-export async function setAppStatusBarStyle(style: 'LIGHT' | 'DARK' = 'DARK', backgroundColor: string = '#0a0e17'): Promise<void> {
+export async function setAppStatusBarStyle(style: 'LIGHT' | 'DARK' = 'LIGHT', backgroundColor: string = '#F9F9FF'): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
+      // Style.Light sets dark icons/text (for light backgrounds)
+      // Style.Dark sets light/white icons/text (for dark backgrounds)
       await StatusBar.setStyle({
         style: style === 'DARK' ? Style.Dark : Style.Light,
       });

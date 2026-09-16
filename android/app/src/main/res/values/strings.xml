@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">CampusFlow</string>
-    <string name="title_activity_main">CampusFlow</string>
+    <string name="app_name">RoomMate</string>
+    <string name="title_activity_main">RoomMate</string>
     <string name="package_name">io.campusflow.app</string>
     <string name="custom_url_scheme">io.campusflow.app</string>
 </resources>
