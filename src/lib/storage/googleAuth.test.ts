@@ -3,6 +3,7 @@ import {
   signInWithGoogleOAuth,
   syncOAuthSessionToProfile,
   redeemOAuthUrlOrHash,
+  parseOAuthTokensFromUrl,
 } from './cloudStorageAdapter';
 import { db } from './mockStorage';
 
@@ -108,24 +109,31 @@ describe('Google OAuth & Session Synchronization Test Suite', () => {
     expect(syncResult.user.email).toBe('akash.patel@gmail.com');
   });
 
-  describe('redeemOAuthUrlOrHash URL & Hash Parser', () => {
-    it('returns error on empty or invalid input', async () => {
+  describe('OAuth Redirect URL & Hash Parser', () => {
+    it('returns error on empty or invalid input in redeemOAuthUrlOrHash', async () => {
       const res = await redeemOAuthUrlOrHash('');
       expect(res.success).toBe(false);
       expect(res.error).toBeDefined();
     });
 
-    it('parses access_token and refresh_token from full localhost redirect URL', async () => {
+    it('extracts access_token and refresh_token from full localhost redirect URL', () => {
       const testUrl = 'https://localhost/#access_token=test_access_jwt&refresh_token=test_refresh_jwt&token_type=bearer';
-      const res = await redeemOAuthUrlOrHash(testUrl);
-      expect(res.accessToken).toBe('test_access_jwt');
-      expect(res.refreshToken).toBe('test_refresh_jwt');
+      const parsed = parseOAuthTokensFromUrl(testUrl);
+      expect(parsed.accessToken).toBe('test_access_jwt');
+      expect(parsed.refreshToken).toBe('test_refresh_jwt');
     });
 
-    it('parses authorization code from search params', async () => {
+    it('extracts authorization code from search params', () => {
       const testUrl = 'roommate://auth-callback?code=supabase-auth-code-123';
-      const res = await redeemOAuthUrlOrHash(testUrl);
-      expect(res.code).toBe('supabase-auth-code-123');
+      const parsed = parseOAuthTokensFromUrl(testUrl);
+      expect(parsed.code).toBe('supabase-auth-code-123');
+    });
+
+    it('handles raw token strings without full URL', () => {
+      const raw = 'access_token=direct_jwt&refresh_token=direct_refresh';
+      const parsed = parseOAuthTokensFromUrl(raw);
+      expect(parsed.accessToken).toBe('direct_jwt');
+      expect(parsed.refreshToken).toBe('direct_refresh');
     });
   });
 });
