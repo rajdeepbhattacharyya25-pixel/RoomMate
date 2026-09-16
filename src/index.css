@@ -4,7 +4,7 @@
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* CampusFlow Natural Light Design System */
+  /* RoomMate Natural Light Design System */
   --bg-canvas: #f9f9ff;
   --bg-surface: #ffffff;
   --bg-surface-subtle: #f3f4f6;
@@ -36,10 +36,19 @@
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
 }
 
+.pb-nav-safe {
+  padding-bottom: calc(5.5rem + max(env(safe-area-inset-bottom, 16px), 16px));
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a, input, select, textarea, [role="button"] {
+  touch-action: manipulation;
 }
 
 body {
@@ -49,6 +58,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
 
 /* Glassmorphism card utilities */
@@ -160,3 +170,233 @@ button {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+
+/* --- Notification Center Micro-Animations --- */
+@keyframes bellShake {
+  0% { transform: rotate(0deg); }
+  20% { transform: rotate(-8deg); }
+  40% { transform: rotate(8deg); }
+  60% { transform: rotate(-5deg); }
+  80% { transform: rotate(5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes bellUrgentShake {
+  0% { transform: rotate(0deg) scale(1); }
+  20% { transform: rotate(-12deg) scale(1.08); }
+  40% { transform: rotate(12deg) scale(1.08); }
+  60% { transform: rotate(-8deg) scale(1.04); }
+  80% { transform: rotate(8deg) scale(1.02); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+@keyframes badgeScalePop {
+  0% { transform: scale(0.75); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes urgentBadgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+}
+
+.animate-bell-shake {
+  animation: bellShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.animate-bell-urgent {
+  animation: bellUrgentShake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.animate-badge-pop {
+  animation: badgeScalePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.animate-urgent-pulse {
+  animation: urgentBadgePulse 2s infinite;
+}
+
+/* Reduced Motion Preference Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .animate-bell-shake,
+  .animate-bell-urgent,
+  .animate-badge-pop,
+  .animate-urgent-pulse,
+  .animate-pulse-glow,
+  .animate-fade-up,
+  .animate-slide-left,
+  .animate-slide-right,
+  .animate-scale-pop,
+  .animate-float-slow,
+  .animate-float-reverse,
+  .animate-shimmer,
+  .reveal-init {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Modern Nordic FinTech Landing Page Polish */
+.font-tabular {
+  font-feature-settings: 'tnum' on, 'cv05' on;
+  font-variant-numeric: tabular-nums;
+}
+
+.shadow-fin-sm {
+  box-shadow: 0 1px 2px rgba(16, 32, 30, 0.04);
+}
+
+.shadow-fin-card {
+  box-shadow: 0 4px 20px -2px rgba(12, 107, 112, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.shadow-fin-card-hover {
+  box-shadow: 0 12px 30px -4px rgba(12, 107, 112, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-fin-float {
+  box-shadow: 0 24px 48px -12px rgba(7, 84, 90, 0.16), 0 8px 24px -4px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-fin-glow {
+  box-shadow: 0 0 50px -10px rgba(12, 107, 112, 0.15);
+}
+
+/* --- High-Performance GPU Motion Keyframes --- */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translate3d(-24px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes scalePop {
+  0% {
+    opacity: 0;
+    transform: scale3d(0.92, 0.92, 1);
+  }
+  70% {
+    opacity: 1;
+    transform: scale3d(1.03, 1.03, 1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@keyframes floatReverse {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulseGlowTeal {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(12, 107, 112, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(12, 107, 112, 0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-left {
+  animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-right {
+  animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-scale-pop {
+  animation: scalePop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 7s ease-in-out infinite;
+}
+
+.animate-pulse-teal {
+  animation: pulseGlowTeal 2.5s infinite;
+}
+
+/* Scroll reveal trigger utility */
+.reveal-init {
+  opacity: 0;
+  transform: translate3d(0, 20px, 0);
+  transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-visible {
+  opacity: 1 !important;
+  transform: translate3d(0, 0, 0) !important;
+}
+
+/* Stagger delay helpers */
+.delay-75 { animation-delay: 75ms; }
+.delay-150 { animation-delay: 150ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+

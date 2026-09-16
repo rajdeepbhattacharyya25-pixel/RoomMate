@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, 
   Room, 
@@ -8,7 +8,9 @@ import {
   RoomMember,
   SharedExpense,
   ExpenseSplit,
-  SettlementPayment
+  SettlementPayment,
+  BugReport,
+  BugStatus
 } from '../types';
 import { 
   Shield, 
@@ -18,23 +20,26 @@ import {
   RefreshCw, 
   Snowflake, 
   Archive, 
-  Eye, 
   Layers, 
   ChevronRight, 
   X, 
   Activity, 
-  LogOut,
-  Smartphone,
-  Cloud,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
-  Key,
-  ShieldCheck,
-  TrendingUp,
+  LogOut, 
+  Smartphone, 
+  Cloud, 
+  CheckCircle2, 
+  ShieldCheck, 
+  TrendingUp, 
   Receipt,
-  Filter
+  Bug,
+  AlertTriangle,
+  Mail,
 } from 'lucide-react';
+import {
+  fetchBugReportsCloud,
+  updateBugReportStatusCloud,
+  subscribeToBugReportsRealtime
+} from '../lib/storage/cloudStorageAdapter';
 
 interface SuperAdminPortalProps {
   currentUser: User;
@@ -77,11 +82,44 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   onSwitchToMobile,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'rooms' | 'users' | 'subscriptions' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'rooms' | 'users' | 'subscriptions' | 'audit' | 'bugs'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [roomFilter, setRoomFilter] = useState<'all' | 'active' | 'frozen' | 'archived'>('all');
   const [inspectedRoom, setInspectedRoom] = useState<Room | null>(null);
   const [resetCodeNotice, setResetCodeNotice] = useState<string | null>(null);
+
+  // Bug Reports & Feedback State
+  const [bugReports, setBugReports] = useState<BugReport[]>([]);
+  const [bugFilterStatus, setBugFilterStatus] = useState<'all' | 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'CLOSED'>('all');
+  const [bugFilterSeverity, setBugFilterSeverity] = useState<'all' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('all');
+  const [bugSearch, setBugSearch] = useState('');
+  const [selectedBug, setSelectedBug] = useState<BugReport | null>(null);
+  const [adminNotesDraft, setAdminNotesDraft] = useState('');
+  const [isUpdatingBug, setIsUpdatingBug] = useState(false);
+
+  useEffect(() => {
+    fetchBugReportsCloud().then((reports) => {
+      setBugReports(reports);
+    });
+
+    const sub = subscribeToBugReportsRealtime((incoming) => {
+      setBugReports((prev) => {
+        const exists = prev.findIndex((b) => b.id === incoming.id);
+        if (exists !== -1) {
+          const copy = [...prev];
+          copy[exists] = incoming;
+          return copy;
+        }
+        return [incoming, ...prev];
+      });
+    });
+
+    return () => {
+      sub.unsubscribe();
+    };
+  }, []);
+
+  const openBugsCount = bugReports.filter((b) => b.status === 'OPEN' || b.status === 'INVESTIGATING').length;
 
   // Platform Metrics
   const totalStudents = allUsers.filter((u) => u.role === 'STUDENT').length;
@@ -141,7 +179,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base tracking-tight text-slate-900">CampusFlow</span>
+                <span className="font-bold text-base tracking-tight text-slate-900">RoomMate</span>
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                   Operations Console
                 </span>
@@ -267,6 +305,23 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Audit Trail</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('bugs')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === 'bugs'
+                  ? 'bg-white text-indigo-600 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Bug className="w-3.5 h-3.5" />
+              <span>Bug Reports</span>
+              {openBugsCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-none">
+                  {openBugsCount}
+                </span>
+              )}
             </button>
           </nav>
 
@@ -887,7 +942,422 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
             </div>
           </div>
         )}
+
+        {/* TAB 6: BUG REPORTS & FEEDBACK TRIAGE DESK */}
+        {activeTab === 'bugs' && (
+          <div className="space-y-6">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-1 shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider">Total Reports</span>
+                  <Bug className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900 font-mono">{bugReports.length}</div>
+                <p className="text-[10px] text-slate-400">All-time resident submissions</p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-1 shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider">Open / Triage</span>
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                </div>
+                <div className="text-2xl font-black text-amber-600 font-mono">
+                  {bugReports.filter((b) => b.status === 'OPEN').length}
+                </div>
+                <p className="text-[10px] text-slate-400">Awaiting engineering review</p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-1 shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider">High / Critical</span>
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                </div>
+                <div className="text-2xl font-black text-rose-600 font-mono">
+                  {bugReports.filter((b) => b.severity === 'HIGH' || b.severity === 'CRITICAL').length}
+                </div>
+                <p className="text-[10px] text-slate-400">High disruption items</p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-1 shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider">Resolved</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div className="text-2xl font-black text-emerald-600 font-mono">
+                  {bugReports.filter((b) => b.status === 'RESOLVED' || b.status === 'CLOSED').length}
+                </div>
+                <p className="text-[10px] text-slate-400">Completed & closed</p>
+              </div>
+            </div>
+
+            {/* Main Triage Table Card */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-5">
+              {/* Header & Filters */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Bug className="w-5 h-5 text-indigo-600" />
+                    <span>Resident Bug Reports & Telemetry Feed</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Live stream of reports captured via shake gesture or help center across mobile APK and web.
+                  </p>
+                </div>
+
+                {/* Filter Controls */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={bugSearch}
+                      onChange={(e) => setBugSearch(e.target.value)}
+                      placeholder="Search reports or resident..."
+                      className="text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500 w-48 transition-all"
+                    />
+                  </div>
+
+                  {/* Status Filter */}
+                  <select
+                    value={bugFilterStatus}
+                    onChange={(e) => setBugFilterStatus(e.target.value as any)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="OPEN">Open Only</option>
+                    <option value="INVESTIGATING">Investigating</option>
+                    <option value="RESOLVED">Resolved</option>
+                    <option value="CLOSED">Closed</option>
+                  </select>
+
+                  {/* Severity Filter */}
+                  <select
+                    value={bugFilterSeverity}
+                    onChange={(e) => setBugFilterSeverity(e.target.value as any)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="all">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-3 px-4">Ticket & Time</th>
+                      <th className="py-3 px-4">Resident</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">Severity</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Description</th>
+                      <th className="py-3 px-4">Telemetry</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {bugReports
+                      .filter((b) => {
+                        if (bugFilterStatus !== 'all' && b.status !== bugFilterStatus) return false;
+                        if (bugFilterSeverity !== 'all' && b.severity !== bugFilterSeverity) return false;
+                        if (bugSearch.trim()) {
+                          const q = bugSearch.toLowerCase();
+                          return (
+                            b.userName.toLowerCase().includes(q) ||
+                            b.userEmail.toLowerCase().includes(q) ||
+                            b.description.toLowerCase().includes(q) ||
+                            b.id.toLowerCase().includes(q) ||
+                            b.category.toLowerCase().includes(q)
+                          );
+                        }
+                        return true;
+                      })
+                      .map((bug) => {
+                        return (
+                          <tr key={bug.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 font-mono text-[11px]">
+                              <div className="font-bold text-slate-900">{bug.id.slice(0, 10)}...</div>
+                              <div className="text-slate-400 text-[10px]">
+                                {new Date(bug.createdAt).toLocaleDateString()} {new Date(bug.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{bug.userName}</div>
+                              <div className="text-[11px] text-slate-400 font-mono truncate max-w-[140px]">{bug.userEmail}</div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-slate-800 text-[11px] px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">
+                                {bug.category.replace('_', ' ')}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  bug.severity === 'CRITICAL'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : bug.severity === 'HIGH'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : bug.severity === 'MEDIUM'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {bug.severity}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                  bug.status === 'RESOLVED' || bug.status === 'CLOSED'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : bug.status === 'INVESTIGATING'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {bug.status}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 text-slate-600 max-w-xs truncate">
+                              {bug.description}
+                            </td>
+
+                            <td className="py-3 px-4 text-[10px] font-mono text-slate-500">
+                              <div>{bug.diagnostics?.route || 'Unknown route'}</div>
+                              <div className="text-slate-400">{bug.diagnostics?.platform || 'Mobile'}</div>
+                            </td>
+
+                            <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                              <button
+                                onClick={() => {
+                                  setSelectedBug(bug);
+                                  setAdminNotesDraft(bug.adminNotes || '');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold text-xs transition-colors"
+                              >
+                                Inspect & Triage
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  window.open(
+                                    `mailto:${bug.userEmail}?subject=${encodeURIComponent(
+                                      `[RoomMate Support] Regarding Bug Report #${bug.id}`
+                                    )}&body=${encodeURIComponent(
+                                      `Hi ${bug.userName},\n\nRegarding your report: "${bug.description}"\n\n`
+                                    )}`,
+                                    '_blank'
+                                  );
+                                }}
+                                className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors inline-block"
+                                title="Reply to resident via email"
+                              >
+                                <Mail className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {bugReports.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                          <CheckCircle2 className="w-6 h-6 mx-auto mb-1 text-emerald-500" />
+                          No bug reports received yet. System running smoothly!
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* 4. MODAL: INSPECT BUG REPORT & TRIAGE */}
+      {selectedBug && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                  <Bug className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono text-indigo-600 uppercase font-bold tracking-wider">
+                    Ticket #{selectedBug.id}
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {selectedBug.category.replace('_', ' ')} • {selectedBug.severity} Priority
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedBug(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5 text-xs text-slate-700">
+              {/* Resident Chip & Meta */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Resident</span>
+                  <span className="font-bold text-slate-900">{selectedBug.userName}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Email</span>
+                  <span className="font-mono text-slate-700 truncate block">{selectedBug.userEmail}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Status</span>
+                  <span className="font-semibold text-indigo-700">{selectedBug.status}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Reported</span>
+                  <span>{new Date(selectedBug.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Resident Description</h4>
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 leading-relaxed whitespace-pre-wrap">
+                  {selectedBug.description}
+                </div>
+              </div>
+
+              {/* Screenshot (if attached) */}
+              {selectedBug.screenshotUrl && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Attached Screenshot</h4>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 inline-block">
+                    <img
+                      src={selectedBug.screenshotUrl}
+                      alt="Bug attachment"
+                      className="max-h-56 rounded-lg object-contain border border-slate-200"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Diagnostics Box */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Diagnostics Telemetry</h4>
+                <div className="p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] space-y-1 overflow-x-auto">
+                  <div><span className="text-slate-400">Route / Screen:</span> {selectedBug.diagnostics?.route}</div>
+                  <div><span className="text-slate-400">App Build:</span> {selectedBug.diagnostics?.appVersion}</div>
+                  <div><span className="text-slate-400">Platform:</span> {selectedBug.diagnostics?.platform}</div>
+                  <div><span className="text-slate-400">Network:</span> {selectedBug.diagnostics?.networkOnline ? 'Online' : 'Offline'}</div>
+                  {selectedBug.diagnostics?.roomName && (
+                    <div><span className="text-slate-400">Room:</span> {selectedBug.diagnostics.roomName} ({selectedBug.diagnostics.roomId})</div>
+                  )}
+                  {selectedBug.diagnostics?.viewport && (
+                    <div>
+                      <span className="text-slate-400">Viewport:</span> {selectedBug.diagnostics.viewport.width}x{selectedBug.diagnostics.viewport.height} @ {selectedBug.diagnostics.viewport.pixelRatio}x
+                    </div>
+                  )}
+                  {selectedBug.diagnostics?.recentLogs && selectedBug.diagnostics.recentLogs.length > 0 && (
+                    <div className="pt-1 border-t border-slate-800">
+                      <span className="text-amber-400">Captured Console Logs:</span>
+                      <div className="text-[10px] text-slate-300 pl-2">
+                        {selectedBug.diagnostics.recentLogs.map((log, i) => (
+                          <div key={i}>{log}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Admin Notes */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">SuperAdmin Notes</h4>
+                <textarea
+                  rows={2}
+                  value={adminNotesDraft}
+                  onChange={(e) => setAdminNotesDraft(e.target.value)}
+                  placeholder="Add internal resolution notes, root cause, or dev ticket references..."
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-600">Update Status:</span>
+                {(['OPEN', 'INVESTIGATING', 'RESOLVED', 'CLOSED'] as BugStatus[]).map((st) => (
+                  <button
+                    key={st}
+                    disabled={isUpdatingBug}
+                    onClick={async () => {
+                      setIsUpdatingBug(true);
+                      await updateBugReportStatusCloud(selectedBug.id, st, adminNotesDraft);
+                      setSelectedBug({ ...selectedBug, status: st, adminNotes: adminNotesDraft });
+                      setBugReports((prev) =>
+                        prev.map((b) => (b.id === selectedBug.id ? { ...b, status: st, adminNotes: adminNotesDraft } : b))
+                      );
+                      setIsUpdatingBug(false);
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                      selectedBug.status === st
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(
+                      `mailto:${selectedBug.userEmail}?subject=${encodeURIComponent(
+                        `[RoomMate Support] Ticket #${selectedBug.id} Update`
+                      )}&body=${encodeURIComponent(
+                        `Hi ${selectedBug.userName},\n\nWe looked into your reported issue (${selectedBug.category}):\n"${selectedBug.description}"\n\n`
+                      )}`,
+                      '_blank'
+                    );
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Reply via Email</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedBug(null)}
+                  className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. MODAL: INSPECT ROOM LEDGER (Clean Natural Developer Modal) */}
       {inspectedRoom && (

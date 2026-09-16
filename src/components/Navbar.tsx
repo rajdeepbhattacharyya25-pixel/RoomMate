@@ -21,9 +21,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchUser,
   activeTab,
   onSelectTab,
-  activeRoom,
-  rooms,
-  onSelectRoom,
+  activeRoom: _activeRoom,
+  rooms: _rooms,
+  onSelectRoom: _onSelectRoom,
   onOpenSecurityAudit,
   onOpenSupabaseSync,
 }) => {
@@ -39,13 +39,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-indigo-200 to-emerald-400 bg-clip-text text-transparent">
-                  CampusFlow
+                  RoomMate
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   SaaS Core
                 </span>
               </div>
-              <p className="text-xs text-[var(--text-subtle)]">Student Financial Ledger & Privacy Vault</p>
+              <p className="text-xs text-[var(--text-subtle)]">Live Together. Spend Smarter.</p>
             </div>
           </div>
 

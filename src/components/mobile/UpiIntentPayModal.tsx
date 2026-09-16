@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { User, PaymentMethod } from '../../types';
 import {
   launchUpiIntent,
@@ -8,8 +8,9 @@ import {
   UpiAppTarget,
 } from '../../lib/payments/upiIntentService';
 import { hapticSelection, hapticImpact, hapticSuccess } from '../../lib/native/haptics';
+import { UpiQrScannerModal } from './UpiQrScannerModal';
+import { MobileBottomSheet } from './MobileBottomSheet';
 import {
-  X,
   QrCode,
   Copy,
   Check,
@@ -19,6 +20,9 @@ import {
   Sparkles,
   ArrowRight,
   UserCheck,
+  Camera,
+  Image as ImageIcon,
+  FileCheck2,
 } from 'lucide-react';
 
 interface UpiIntentPayModalProps {
@@ -36,6 +40,7 @@ interface UpiIntentPayModalProps {
     appUsed: string;
     transactionRef: string;
     notes?: string;
+    receiptImageUrl?: string;
   }) => void;
 }
 
@@ -63,8 +68,13 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   const [appLaunched, setAppLaunched] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [customPayeeVpa, setCustomPayeeVpa] = useState<string | null>(null);
+  const [customPayeeName, setCustomPayeeName] = useState<string | null>(null);
   const [userUtr, setUserUtr] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
   const [generatedRef] = useState(() => generateSettlementToken());
+  const proofFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Active payee user object
   const activePayee = useMemo(() => {
@@ -73,23 +83,27 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
 
   // Determine Payee's VPA / UPI ID
   const payeeUpiId = useMemo(() => {
+    if (customPayeeVpa) return customPayeeVpa;
+    if (activePayee?.upiId) return activePayee.upiId;
     if (activePayee?.email) {
       return `${activePayee.name.toLowerCase().replace(/\s+/g, '')}@okaxis`;
     }
     return 'roommate@upi';
-  }, [activePayee]);
+  }, [customPayeeVpa, activePayee]);
+
+  const payeeDisplayName = customPayeeName || activePayee?.name || 'Roommate';
 
   const numAmount = Number(payAmount) || 0;
 
   const upiOptions = useMemo(() => {
     return {
       pa: payeeUpiId,
-      pn: activePayee?.name || 'Roommate',
+      pn: payeeDisplayName,
       am: numAmount,
       tn: `${roomName.replace(/\s+/g, '_')}_Settlement`,
       tr: generatedRef,
     };
-  }, [payeeUpiId, activePayee, numAmount, roomName, generatedRef]);
+  }, [payeeUpiId, payeeDisplayName, numAmount, roomName, generatedRef]);
 
   const qrCodeUrl = useMemo(() => {
     return generateUpiQrCodeUrl(upiOptions, 260);
@@ -131,6 +145,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
       appUsed: appNameMap[selectedApp] || 'UPI',
       transactionRef: userUtr.trim() || generatedRef,
       notes: `Settled via ${appNameMap[selectedApp]} for ${roomName}`,
+      receiptImageUrl: proofImage || undefined,
     });
   };
 
@@ -139,29 +154,51 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   const isMobile = isMobileDevice();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-[395px] bg-white border-t border-slate-200 rounded-t-3xl p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom-5">
-        {/* iOS Grab Bar */}
-        <div className="w-10 h-1 rounded-full bg-slate-300 mx-auto mb-1" />
+    <MobileBottomSheet
+      isOpen={isOpen && Boolean(activePayee)}
+      onClose={onClose}
+      title="1-Tap UPI Settlement"
+      subtitle={`From ${currentUser.name} to ${payeeDisplayName}`}
+      icon={<Smartphone className="w-4.5 h-4.5" />}
+      maxHeight="92vh"
+      headerRight={
+        <button
+          type="button"
+          onClick={() => {
+            hapticSelection();
+            setShowScannerModal(true);
+          }}
+          className="px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          <span>Scan QR</span>
+        </button>
+      }
+    >
+      <div className="space-y-4 pb-4">
 
-        {/* Modal Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <Smartphone className="w-5 h-5" />
+        {/* Custom Payee Notification Badge if Scanned from QR */}
+        {customPayeeVpa && (
+          <div className="p-2.5 rounded-xl bg-indigo-50/90 border border-indigo-200 text-xs flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center space-x-2 truncate">
+              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+              <div className="truncate">
+                <div className="font-bold text-slate-900 truncate">{customPayeeName || 'Scanned Payee'}</div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">{customPayeeVpa}</div>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">1-Tap UPI Settlement</h2>
-              <p className="text-[11px] text-slate-500">From {currentUser.name} to {activePayee.name}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCustomPayeeVpa(null);
+                setCustomPayeeName(null);
+              }}
+              className="text-[10px] text-indigo-700 font-bold shrink-0 ml-2 hover:underline"
+            >
+              Reset
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        )}
 
         {/* Payee Selection Switcher (if multiple flatmates) */}
         {availablePayees.length > 1 && (
@@ -231,6 +268,8 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             <input
               type="number"
               step="any"
+              inputMode="decimal"
+              pattern="[0-9]*[.]?[0-9]*"
               value={payAmount}
               onChange={(e) => setPayAmount(e.target.value)}
               placeholder="0"
@@ -247,7 +286,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   hapticSelection();
                   setPayAmount(initialAmount.toFixed(0));
                 }}
-                className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold whitespace-nowrap active:scale-95 transition-transform"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
               >
                 Full Due (₹{initialAmount.toFixed(0)})
               </button>
@@ -259,7 +298,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   hapticSelection();
                   setPayAmount((initialAmount / 2).toFixed(0));
                 }}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold whitespace-nowrap active:scale-95 transition-transform"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
               >
                 50% (₹{(initialAmount / 2).toFixed(0)})
               </button>
@@ -270,7 +309,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 hapticSelection();
                 setPayAmount(String(Math.ceil(numAmount / 50) * 50 || 100));
               }}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold whitespace-nowrap active:scale-95 transition-transform"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
             >
               Round Up
             </button>
@@ -401,13 +440,15 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             <div className="mt-3 p-4 bg-slate-900 rounded-2xl text-center space-y-3 animate-in fade-in zoom-in-95">
               <div className="inline-block p-3 bg-white rounded-xl shadow-lg">
                 <img
-                  src={qrCodeUrl}
+                  src={activePayee.upiQrUrl || qrCodeUrl}
                   alt="UPI QR Code"
-                  className="w-44 h-44 mx-auto rounded-lg object-contain"
+                  className="w-44 h-44 mx-auto rounded-lg object-contain bg-white"
                 />
               </div>
               <p className="text-[11px] text-slate-300">
-                Scan with GPay, PhonePe, or Paytm on any phone to pay ₹{numAmount.toFixed(2)} to {activePayee.name}
+                {activePayee.upiQrUrl
+                  ? `Scan ${activePayee.name}'s verified UPI QR code on any phone`
+                  : `Scan with GPay, PhonePe, or Paytm on any phone to pay ₹${numAmount.toFixed(2)} to ${activePayee.name}`}
               </p>
             </div>
           )}
@@ -439,8 +480,66 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             value={userUtr}
             onChange={(e) => setUserUtr(e.target.value)}
             placeholder="e.g. 12-digit UPI UTR / Ref ID"
-            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs font-mono text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
           />
+        </div>
+
+        {/* Optional Payment Screenshot Proof Upload */}
+        <div className="space-y-1.5 pt-1">
+          <input
+            type="file"
+            ref={proofFileInputRef}
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  setProofImage(ev.target?.result as string);
+                };
+                reader.readAsDataURL(file);
+              }
+            }}
+            className="hidden"
+          />
+
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+              <FileCheck2 className="w-3 h-3 text-indigo-600" />
+              <span>Payment Screenshot / Receipt (Optional)</span>
+            </label>
+            {proofImage && (
+              <button
+                type="button"
+                onClick={() => setProofImage(null)}
+                className="text-[10px] text-rose-500 hover:underline font-semibold"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+
+          {proofImage ? (
+            <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center space-x-3">
+              <img src={proofImage} alt="Payment Proof" className="w-12 h-12 object-cover rounded-lg shadow-2xs" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">Screenshot Attached</p>
+                <p className="text-[10px] text-emerald-600 font-medium">Ready to record with settlement</p>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => proofFileInputRef.current?.click()}
+              className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/30 text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-98"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Upload Payment Screenshot</span>
+            </button>
+          )}
         </div>
 
         {/* Confirm Payment & Generate Proof Button */}
@@ -455,7 +554,20 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             <span>I Have Paid • Generate Proof Card</span>
           </button>
         </div>
+
+        {/* QR Scanner & Hub Modal */}
+        <UpiQrScannerModal
+          isOpen={showScannerModal}
+          onClose={() => setShowScannerModal(false)}
+          onScanned={(data) => {
+            setCustomPayeeVpa(data.vpa);
+            if (data.name) setCustomPayeeName(data.name);
+            if (data.amount && data.amount > 0) {
+              setPayAmount(data.amount.toFixed(0));
+            }
+          }}
+        />
       </div>
-    </div>
+    </MobileBottomSheet>
   );
 };

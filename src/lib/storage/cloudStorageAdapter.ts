@@ -961,6 +961,79 @@ export async function signInWithGoogleOAuth(): Promise<GoogleOAuthResult> {
   }
 }
 
+export interface RedeemOAuthResult {
+  success: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  code?: string;
+  error?: string;
+}
+
+/**
+ * Parses and redeems an OAuth redirect URL, hash fragment, or query string
+ * (e.g. https://localhost/#access_token=... or roommate://auth-callback#access_token=... or raw tokens)
+ * and sets the active authenticated session in Supabase.
+ */
+export async function redeemOAuthUrlOrHash(rawInput: string): Promise<RedeemOAuthResult> {
+  if (!rawInput || typeof rawInput !== 'string') {
+    return { success: false, error: 'Empty URL or token string provided.' };
+  }
+
+  try {
+    let searchStr = '';
+    let hashStr = '';
+
+    if (rawInput.includes('#')) {
+      const parts = rawInput.split('#');
+      hashStr = parts[1] || '';
+      searchStr = parts[0].includes('?') ? parts[0].split('?')[1] : '';
+    } else if (rawInput.includes('?')) {
+      searchStr = rawInput.split('?')[1] || '';
+    } else {
+      if (rawInput.includes('access_token=') || rawInput.includes('code=')) {
+        hashStr = rawInput;
+      }
+    }
+
+    const hashParams = new URLSearchParams(hashStr);
+    const searchParams = new URLSearchParams(searchStr);
+
+    const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, accessToken, refreshToken };
+    }
+
+    const code = searchParams.get('code') || hashParams.get('code');
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, code };
+    }
+
+    return {
+      success: false,
+      error: 'Could not find access_token or authorization code in the provided text.',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to parse authorization URL.',
+    };
+  }
+}
+
 /**
  * Extracts the user's first/given name from Google/OAuth metadata.
  * Prefers given_name, then first_name, then first word of full_name / name,

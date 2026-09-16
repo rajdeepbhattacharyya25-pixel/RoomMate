@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, PersonalExpense } from '../types';
-import { Lock, Plus, Trash2, Tag, Calendar, ShieldCheck, Sparkles, Search, Filter } from 'lucide-react';
+import { Lock, Plus, Trash2, ShieldCheck, Search } from 'lucide-react';
 
 interface PersonalVaultProps {
   currentUser: User;

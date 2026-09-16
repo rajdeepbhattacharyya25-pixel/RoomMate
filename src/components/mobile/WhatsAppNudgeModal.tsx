@@ -19,7 +19,9 @@ import {
   Edit2,
   ArrowRight,
   ExternalLink,
+  MessageCircle,
 } from 'lucide-react';
+import { MobileBottomSheet } from './MobileBottomSheet';
 
 interface WhatsAppNudgeModalProps {
   isOpen: boolean;
@@ -123,37 +125,15 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center animate-in fade-in duration-200 select-none">
-      {/* iOS Bottom Sheet (Modal Sheet matching Stitch Screen 5246a26fb2574ff4ab8203d8ce723563) */}
-      <div className="w-full max-w-[395px] bg-white text-slate-900 border-t border-slate-200/80 rounded-t-[32px] shadow-2xl max-h-[94vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-5">
-        
-        {/* iOS Grab Handle */}
-        <div className="pt-3 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
-          <div className="w-10 h-1.5 rounded-full bg-slate-300" />
-        </div>
-
-        {/* Sheet Header Bar */}
-        <div className="px-4 pb-3 flex items-center justify-between border-b border-slate-100">
-          <div className="flex flex-col">
-            <div className="flex items-center space-x-2">
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">WhatsApp Nudge Studio</h2>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                Direct UPI
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium">{roomName} • Quick Collect</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close modal"
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-transform active:scale-90"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Scrollable Sheet Content */}
-        <div className="overflow-y-auto px-4 py-3 space-y-3.5 flex-1">
+    <MobileBottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      title="WhatsApp Nudge Studio"
+      subtitle={`${roomName} • Quick Collect`}
+      icon={<MessageCircle className="w-4.5 h-4.5" />}
+      maxHeight="94vh"
+    >
+      <div className="space-y-3.5 pb-4">
           
           {/* 1. Roommate Debt Banner */}
           <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 relative overflow-hidden">
@@ -223,15 +203,19 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <input
                       type="text"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={tempUpiInput}
                       onChange={(e) => setTempUpiInput(e.target.value)}
                       placeholder="username@okaxis"
-                      className="h-7 px-2 bg-slate-50 border border-indigo-400 rounded text-xs font-mono text-slate-900 focus:outline-none w-full"
+                      className="h-9 px-2.5 bg-slate-50 border border-indigo-400 rounded-lg text-base md:text-xs font-mono text-slate-900 focus:outline-none w-full transition-colors"
                       autoFocus
                     />
                     <button
                       onClick={handleSaveUpi}
-                      className="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-semibold"
+                      className="px-3 py-1.5 min-h-[36px] bg-indigo-600 text-white rounded-lg text-xs font-semibold active:scale-95 transition-transform shrink-0"
                     >
                       Save
                     </button>
@@ -280,7 +264,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                   setTone('casual');
                   hapticSelection();
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-150 ${
+                className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'casual'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-white/60'
@@ -297,7 +281,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                   setTone('direct');
                   hapticSelection();
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-150 ${
+                className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'direct'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-white/60'
@@ -314,7 +298,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                   setTone('roomie');
                   hapticSelection();
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-150 ${
+                className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'roomie'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-white/60'
@@ -438,7 +422,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           <div className="grid grid-cols-2 gap-2 pt-0.5">
             <button
               onClick={handleCopy}
-              className="h-10 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
+              className="h-11 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
               id="btn-copy"
             >
               {copied ? (
@@ -459,7 +443,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 setShowQrModal(true);
                 hapticImpact('MEDIUM');
               }}
-              className="h-10 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
+              className="h-11 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
               id="btn-show-qr"
             >
               <QrCode className="w-4 h-4 text-indigo-600" />
@@ -491,12 +475,17 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
 
       {/* In-Person UPI QR Modal */}
       {showQrModal && (
-        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="max-w-xs w-full p-5 rounded-3xl bg-white border border-slate-200 text-center space-y-4 shadow-2xl animate-in zoom-in-95">
+        <div
+          onClick={() => setShowQrModal(false)}
+          className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-xs w-full p-5 rounded-3xl bg-white border border-slate-200 text-center space-y-4 shadow-2xl animate-in zoom-in-95"
+          >
             <div className="flex items-center justify-between">
               <div className="text-left">
                 <h3 className="text-sm font-bold text-slate-900">Instant UPI Payment QR</h3>
@@ -538,6 +527,6 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </MobileBottomSheet>
   );
 };

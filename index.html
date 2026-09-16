@@ -2,19 +2,49 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'/></svg>" />
+    <!-- RoomMate Favicon — actual logo PNG -->
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- PWA Icons -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0a0e17" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="CampusFlow - The Student-First Private Expense Vault & Real-Time Synchronized Room Ledger SaaS Platform" />
-    <title>CampusFlow | Student-First Expense SaaS Platform</title>
+    <meta name="description" content="RoomMate — Live Together. Spend Smarter. The student-first shared expense tracker &amp; room ledger app." />
+    <title>RoomMate</title>
     <!-- Tailwind CSS CDN for instant, zero-latency utility compilation -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            colors: {
+              brand: {
+                DEFAULT: '#0C6B70',
+                dark: '#07545A',
+                darker: '#043438',
+                surface: '#F6F9F8',
+                card: '#FFFFFF',
+                border: '#E4EBE9',
+                mint: '#E0F2F0',
+                soft: '#EBF5F4',
+                charcoal: '#10201E',
+                slate: '#647370',
+              }
+            },
+            boxShadow: {
+              'fin-sm': '0 1px 2px rgba(16, 32, 30, 0.04)',
+              'fin-card': '0 4px 20px -2px rgba(12, 107, 112, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02)',
+              'fin-card-hover': '0 12px 30px -4px rgba(12, 107, 112, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03)',
+              'fin-float': '0 24px 48px -12px rgba(7, 84, 90, 0.16), 0 8px 24px -4px rgba(0, 0, 0, 0.04)',
+              'fin-glow': '0 0 50px -10px rgba(12, 107, 112, 0.15)'
+            },
+            letterSpacing: {
+              tighter: '-0.035em',
+              tight: '-0.02em',
+            },
             fontFamily: {
-              sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
+              sans: ['Inter', 'Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'SF Mono', 'monospace'],
             }
           }
         }

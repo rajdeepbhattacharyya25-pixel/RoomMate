@@ -1,7 +1,7 @@
 import React from 'react';
 import { User, PersonalExpense, SharedExpense, ExpenseSplit, SettlementPayment, Room } from '../types';
 import { calculateUnifiedDashboard, calculateRoomSummary } from '../lib/ledger/engine';
-import { Lock, Users, ArrowUpRight, ArrowDownLeft, Wallet, PieChart, Sparkles, Plus, CheckCircle } from 'lucide-react';
+import { Lock, Users, ArrowUpRight, ArrowDownLeft, Wallet, PieChart, CheckCircle } from 'lucide-react';
 
 interface UnifiedDashboardProps {
   currentUser: User;

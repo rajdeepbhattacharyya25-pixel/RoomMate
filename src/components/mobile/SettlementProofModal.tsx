@@ -104,8 +104,14 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-[375px] bg-slate-900 border border-white/15 rounded-3xl p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto text-white animate-in zoom-in-95">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in select-none"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[375px] bg-slate-900 border border-white/15 rounded-3xl p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto text-white animate-in zoom-in-95"
+      >
         {/* Header Bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -118,7 +124,8 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            aria-label="Close"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center active:scale-95 transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -243,7 +250,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
               type="button"
               onClick={handleDownloadCard}
               disabled={downloading}
-              className="h-10 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-[11px] flex items-center justify-center gap-1.5 border border-white/10 active:scale-97 transition-all"
+              className="h-11 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 border border-white/10 active:scale-97 transition-all"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{downloading ? 'Saving...' : 'Save PNG'}</span>
@@ -252,7 +259,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
             <button
               type="button"
               onClick={handleCopyReceiptText}
-              className="h-10 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-[11px] flex items-center justify-center gap-1.5 border border-white/10 active:scale-97 transition-all"
+              className="h-11 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 border border-white/10 active:scale-97 transition-all"
             >
               {copiedText ? (
                 <>
@@ -273,7 +280,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
             <button
               type="button"
               onClick={onDone}
-              className="w-full h-10 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
+              className="w-full h-11 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
               <span>Done • View Updated Ledger</span>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserSubscription, SubscriptionEvent } from '../types';
-import { CreditCard, CheckCircle2, ShieldAlert, Sparkles, RefreshCw, Zap, Clock, AlertTriangle } from 'lucide-react';
+import { CreditCard, CheckCircle2, Zap, AlertTriangle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface UserSubscriptionProps {
@@ -68,7 +68,7 @@ export const UserSubscriptionView: React.FC<UserSubscriptionProps> = ({
 
     setTimeout(() => {
       const randomEventId = 'evt_rzp_' + Math.random().toString(36).substr(2, 9);
-      const result = onTriggerWebhook('subscription.charged', randomEventId, {
+      onTriggerWebhook('subscription.charged', randomEventId, {
         plan: planCode,
         amount: price * 100,
         currency: 'INR',

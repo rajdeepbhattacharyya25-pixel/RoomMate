@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { runAllLedgerTests } from '../lib/ledger/engine.test';
+import { runAllLedgerTests } from '../lib/ledger/ledgerTestRunner';
 import { db } from '../lib/storage/mockStorage';
-import { ShieldCheck, ShieldAlert, CheckCircle2, XCircle, Play, Terminal, Bug } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, Play, Terminal, Bug } from 'lucide-react';
 
 interface SecurityTestModalProps {
   onClose: () => void;

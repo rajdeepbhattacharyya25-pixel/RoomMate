@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Room, SharedExpense, PersonalExpense, RoomMember, SettlementPayment, ExpenseSplit } from '../../types';
+import { User, Room, SharedExpense, PersonalExpense, RoomMember, SettlementPayment, ExpenseSplit, InAppNotification } from '../../types';
 import { calculateRoomSummary } from '../../lib/ledger/engine';
 import {
   ArrowUpRight,
@@ -11,14 +11,21 @@ import {
   ChevronRight,
   Receipt,
   Wifi,
+  WifiOff,
   ShoppingBag,
   Zap,
   Utensils,
   Home,
   CheckCircle2,
   MessageCircle,
+  UserPlus,
 } from 'lucide-react';
 import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
+import { NotificationBell } from './NotificationBell';
+import { NotificationCenterDrawer } from './NotificationCenterDrawer';
+import { getUserBudget } from '../../lib/storage/budgetService';
+import { useNetworkStatus } from '../../context/NetworkContext';
+import { hapticImpact, hapticSelection } from '../../lib/native/haptics';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -36,6 +43,14 @@ interface MobileDashboardProps {
   onOpenSettleUp: () => void;
   onNavigateToVault: () => void;
   onNavigateToRooms: () => void;
+  isRealtimeLive?: boolean;
+  onOpenSupabaseModal?: () => void;
+  notifications?: InAppNotification[];
+  onToggleNotificationRead?: (id: string, currentRead: boolean) => void;
+  onMarkAllNotificationsRead?: () => void;
+  onDeleteNotification?: (id: string) => void;
+  onClearReadNotifications?: () => void;
+  onNotificationAction?: (notification: InAppNotification) => void;
   onRecordSettlement?: (data: {
     roomId: string;
     payerId: string;
@@ -45,6 +60,7 @@ interface MobileDashboardProps {
     notes?: string;
   }) => void;
 }
+
 
 export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   currentUser,
@@ -62,8 +78,17 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   onOpenSettleUp,
   onNavigateToVault,
   onNavigateToRooms,
+  isRealtimeLive,
+  onOpenSupabaseModal,
+  notifications = [],
+  onToggleNotificationRead,
+  onMarkAllNotificationsRead,
+  onDeleteNotification,
+  onClearReadNotifications,
+  onNotificationAction,
   onRecordSettlement,
 }) => {
+  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
   const [nudgeTarget, setNudgeTarget] = useState<{
     debtor: User;
     amount: number;
@@ -156,10 +181,19 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     }
   }
 
-  const monthlyAllowance = 8000;
-  const weeklyAllowance = 2000;
+  const userBudget = getUserBudget(currentUser.id);
+  const monthlyAllowance = userBudget.monthlyAllowance || 8000;
+  const weeklyAllowance = Math.round(monthlyAllowance / 4);
   const monthlyBudgetPercentage = Math.min(100, Math.round((thisMonthPersonal / monthlyAllowance) * 100));
   const weeklyBudgetPercentage = Math.min(100, Math.round((thisWeekPersonal / weeklyAllowance) * 100));
+
+  const formatInr = (val: number) => {
+    const rounded = Math.round(val * 100) / 100;
+    return rounded.toLocaleString('en-IN', {
+      minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  };
 
   // Combined recent activities (last 5)
   const roomExpensesWithMeta = sharedExpenses
@@ -167,9 +201,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     .map((e) => {
       const payer = allUsers.find((u) => u.id === e.paidBy);
       const isPayer = e.paidBy === currentUser.id;
-      // calculate user share
+      const activeMemberCount = roomMembers.filter((m) => m.roomId === activeRoom?.id && m.status === 'ACTIVE').length || 1;
       const userSplit = expenseSplits.find((s) => s.sharedExpenseId === e.id && s.userId === currentUser.id);
-      const userShare = userSplit ? userSplit.shareAmount : e.totalAmount / 4;
+      const userShare = userSplit ? userSplit.shareAmount : e.totalAmount / activeMemberCount;
       const lentAmount = isPayer ? e.totalAmount - userShare : -userShare;
 
       return {
@@ -227,20 +261,64 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     }
   };
 
+  const displayName = currentUser.name ? currentUser.name.split(' ')[0] : 'Resident';
+
+  const { isOnline, isReconnecting, pendingSyncCount } = useNetworkStatus();
+
   return (
-    <div className="space-y-4 pb-24 px-4 pt-3 bg-[#F9F9FF] min-h-full">
-      {/* Header / Profile Row (Exact Stitch design) */}
+    <div className="space-y-4 pb-28 px-4 pt-3 bg-[#F9F9FF] min-h-full">
+      {/* Header / Profile Row */}
       <header className="pt-1 pb-1 flex flex-col space-y-2">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Hi {currentUser.name.split(' ')[0]}
+              Hi {displayName}
             </h1>
           </div>
 
-          {/* Profile Avatar Circle */}
-          <div className="w-10 h-10 rounded-full border border-slate-200 bg-white flex items-center justify-center text-indigo-700 font-bold text-sm shadow-xs overflow-hidden">
-            {currentUser.name.charAt(0).toUpperCase()}
+          <div className="flex items-center gap-2">
+            {onOpenSupabaseModal && (
+              <button
+                onClick={onOpenSupabaseModal}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-2xs active:scale-95 transition-all ${
+                  !isOnline
+                    ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+                title={!isOnline ? 'Offline Mode - Operating on Local Vault' : 'Supabase Cloud Sync'}
+              >
+                {!isOnline ? (
+                  <>
+                    <WifiOff className="w-3 h-3 text-amber-600" />
+                    <span>{pendingSyncCount > 0 ? `${pendingSyncCount} Queued` : 'Offline Vault'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isReconnecting
+                          ? 'bg-indigo-500 animate-spin'
+                          : isRealtimeLive
+                          ? 'bg-emerald-500 animate-pulse'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>{isReconnecting ? 'Syncing...' : isRealtimeLive ? 'Cloud Live' : 'Supabase'}</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* In-App Notification Bell */}
+            <NotificationBell
+              notifications={notifications}
+              onClick={() => setIsNotificationDrawerOpen(true)}
+            />
+
+            {/* Profile Avatar Circle */}
+            <div className="w-9 h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-indigo-700 font-bold text-sm shadow-xs overflow-hidden">
+              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+            </div>
           </div>
         </div>
 
@@ -251,26 +329,34 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               <select
                 value={activeRoom.id}
                 onChange={(e) => {
+                  hapticSelection();
                   const r = rooms.find((rm) => rm.id === e.target.value);
                   if (r) onSelectRoom(r);
                 }}
                 aria-label="Active Room"
                 className="appearance-none inline-flex items-center space-x-1.5 pl-3 pr-7 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
               >
-                {rooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({roomMembers.filter((m) => m.roomId === r.id).length || 4} members)
-                  </option>
-                ))}
+                {rooms
+                  .filter((r) =>
+                    roomMembers.some(
+                      (m) => m.roomId === r.id && m.userId === currentUser.id && m.status === 'ACTIVE'
+                    )
+                  )
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({roomMembers.filter((m) => m.roomId === r.id && m.status === 'ACTIVE').length} members)
+                    </option>
+                  ))}
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2.5 pointer-events-none" />
             </div>
           ) : (
             <button
               onClick={onNavigateToRooms}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 bg-white border border-slate-200 rounded-full text-xs text-slate-600"
+              className="inline-flex items-center space-x-1.5 px-3 py-1 bg-white border border-dashed border-indigo-300 text-indigo-700 rounded-full text-xs font-medium hover:bg-indigo-50 transition-colors shadow-2xs"
             >
-              <span>Select or Create Room</span>
+              <Plus className="w-3 h-3 text-indigo-600" />
+              <span>Create or Join Room</span>
             </button>
           )}
         </div>
@@ -279,7 +365,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       {/* Net Balance Hero Card (Apple Wallet / Splitwise Style) */}
       <section className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500">Overall, you are owed</span>
+          <span className="text-xs font-medium text-slate-500">
+            {netBalance >= 0 ? 'Overall, you are owed' : 'Overall, you owe'}
+          </span>
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-700">
             <CheckCircle2 className="w-4 h-4" />
           </span>
@@ -287,15 +375,23 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
 
         <div className="mt-1 flex items-baseline">
           <span className={`text-3xl font-extrabold tracking-tight tabular-nums ${isPositive ? 'text-emerald-700' : 'text-rose-600'}`}>
-            {isPositive ? `+₹${Math.abs(netBalance).toLocaleString('en-IN')}` : `-₹${Math.abs(netBalance).toLocaleString('en-IN')}`}
+            {netBalance === 0
+              ? '₹0'
+              : isPositive
+              ? `+₹${formatInr(Math.abs(netBalance))}`
+              : `-₹${formatInr(Math.abs(netBalance))}`}
           </span>
         </div>
 
         <div className="mt-1 flex items-center space-x-1.5 text-slate-500 text-[11px]">
           <span>
             {owedToMe > 0
-              ? `All settled up with 1 roommate · ${roommateBalances.filter(r => r.balance !== 0).length || 3} pending`
-              : 'You are all settled up with your roommates!'}
+              ? `${roommateBalances.filter((r) => r.balance > 0).length} roommate(s) owe you`
+              : iOwe > 0
+              ? `You owe ${roommateBalances.filter((r) => r.balance < 0).length} roommate(s)`
+              : activeRoom
+              ? 'You are all settled up with your roommates!'
+              : 'Create or join a room to start tracking splits.'}
           </span>
         </div>
 
@@ -308,7 +404,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             <div>
               <div className="text-[10px] text-slate-400">Owed to you</div>
               <div className="font-semibold text-slate-900 tabular-nums">
-                ₹{owedToMe.toLocaleString('en-IN')}
+                ₹{formatInr(owedToMe)}
               </div>
             </div>
           </div>
@@ -320,18 +416,21 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             <div>
               <div className="text-[10px] text-slate-400">You owe others</div>
               <div className="font-semibold text-slate-900 tabular-nums">
-                ₹{iOwe.toLocaleString('en-IN')}
+                ₹{formatInr(iOwe)}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Quick Action Buttons (Exact Stitch Screen Layout) */}
+      {/* Quick Action Buttons */}
       <section className="grid grid-cols-2 gap-3">
         <button
-          onClick={onOpenSplitRoom}
-          className="flex items-center justify-center space-x-2 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-semibold text-sm shadow-xs active:scale-[0.98] transition-transform"
+          onClick={() => {
+            hapticImpact('MEDIUM');
+            onOpenSplitRoom();
+          }}
+          className="flex items-center justify-center space-x-2 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-semibold text-sm shadow-xs active:scale-[0.96] transition-transform"
           type="button"
         >
           <Plus className="w-4.5 h-4.5 stroke-[2.5]" />
@@ -339,8 +438,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         </button>
 
         <button
-          onClick={onOpenSettleUp}
-          className="flex items-center justify-center space-x-2 h-12 bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 rounded-full font-semibold text-sm shadow-xs active:scale-[0.98] transition-transform"
+          onClick={() => {
+            hapticImpact('MEDIUM');
+            onOpenSettleUp();
+          }}
+          className="flex items-center justify-center space-x-2 h-12 bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 rounded-full font-semibold text-sm shadow-xs active:scale-[0.96] transition-transform"
           type="button"
         >
           <Handshake className="w-4.5 h-4.5 text-slate-600" />
@@ -348,11 +450,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         </button>
       </section>
 
-      {/* Roommates in Flat 302 Section (Stitch Inset List) */}
+      {/* Roommates in Room Section */}
       <section className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between pb-0.5">
           <h2 className="text-sm font-bold text-slate-900">
-            Roommates in {activeRoom?.name || 'Flat 302'}
+            Roommates in {activeRoom?.name || 'Your Room'}
           </h2>
           <button
             onClick={onNavigateToRooms}
@@ -392,9 +494,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                       <span className="text-xs font-semibold text-slate-900">{rm.name}</span>
                       <span className="text-[11px] font-medium">
                         {owesMe ? (
-                          <span className="text-emerald-700">owes you ₹{rm.balance.toLocaleString('en-IN')}</span>
+                          <span className="text-emerald-700">owes you ₹{formatInr(rm.balance)}</span>
                         ) : iOweHim ? (
-                          <span className="text-rose-600">you owe ₹{Math.abs(rm.balance).toLocaleString('en-IN')}</span>
+                          <span className="text-rose-600">you owe ₹{formatInr(Math.abs(rm.balance))}</span>
                         ) : (
                           <span className="text-slate-400">settled up</span>
                         )}
@@ -434,8 +536,25 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               );
             })
           ) : (
-            <div className="p-4 text-center text-xs text-slate-500">
-              No other roommates found in this room.
+            <div className="p-6 text-center flex flex-col items-center">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 shadow-2xs">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-bold text-slate-800 mb-0.5">Invite Your Roommates</p>
+              <p className="text-[11px] text-slate-500 max-w-[240px] mb-3 leading-relaxed">
+                Add roommates to {activeRoom?.name || 'this room'} to start tracking shared expenses together.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  hapticImpact('LIGHT');
+                  onNavigateToRooms();
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Invite / View Room Code</span>
+              </button>
             </div>
           )}
         </div>
@@ -467,7 +586,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               This Week
             </span>
             <span className="text-base font-bold text-slate-900 tabular-nums block mt-0.5">
-              ₹{thisWeekPersonal.toLocaleString('en-IN')}
+              ₹{formatInr(thisWeekPersonal)}
             </span>
             <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 overflow-hidden">
               <div
@@ -476,7 +595,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               />
             </div>
             <span className="text-[10px] text-slate-400 mt-1 block">
-              of ₹{weeklyAllowance.toLocaleString('en-IN')} budget
+              of ₹{formatInr(weeklyAllowance)} budget
             </span>
           </div>
 
@@ -486,7 +605,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               This Month
             </span>
             <span className="text-base font-bold text-slate-900 tabular-nums block mt-0.5">
-              ₹{thisMonthPersonal.toLocaleString('en-IN')}
+              ₹{formatInr(thisMonthPersonal)}
             </span>
             <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 overflow-hidden">
               <div
@@ -497,13 +616,13 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               />
             </div>
             <span className="text-[10px] text-slate-400 mt-1 block">
-              of ₹{monthlyAllowance.toLocaleString('en-IN')} allowance
+              of ₹{formatInr(monthlyAllowance)} allowance
             </span>
           </div>
         </div>
       </section>
 
-      {/* Recent Activity Section (Stitch Inset Ledger) */}
+      {/* Recent Activity Section */}
       <section className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between pb-0.5">
           <h2 className="text-sm font-bold text-slate-900">Recent Activity</h2>
@@ -527,8 +646,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                     <span className="text-xs font-semibold text-slate-900">{tx.title}</span>
                     <span className="text-[11px] text-slate-500">
                       {tx.isCurrentUserPayer
-                        ? `You paid ₹${tx.amount} · Split equally`
-                        : `${tx.paidBy} paid ₹${tx.amount} · Split equally`}
+                        ? `You paid ₹${formatInr(tx.amount)}`
+                        : `${tx.paidBy} paid ₹${formatInr(tx.amount)}`}
                     </span>
                   </div>
                 </div>
@@ -540,8 +659,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                     }`}
                   >
                     {tx.impactAmount >= 0
-                      ? `+₹${tx.impactAmount.toLocaleString('en-IN')}`
-                      : `-₹${Math.abs(tx.impactAmount).toLocaleString('en-IN')}`}
+                      ? `+₹${formatInr(tx.impactAmount)}`
+                      : `-₹${formatInr(Math.abs(tx.impactAmount))}`}
                   </span>
                   <span className="text-[10px] text-slate-400">
                     {tx.impactAmount >= 0 ? 'you lent' : 'you borrowed'}
@@ -550,8 +669,10 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               </div>
             ))
           ) : (
-            <div className="p-5 text-center text-xs text-slate-400">
-              No transactions recorded yet in Flat 302.
+            <div className="p-6 text-center text-xs text-slate-400 space-y-1.5">
+              <Receipt className="w-7 h-7 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">No shared expenses recorded yet</p>
+              <p className="text-[11px] text-slate-500">Tap "+ Add Bill" above to split rent, groceries, or Wi-Fi.</p>
             </div>
           )}
         </div>
@@ -581,6 +702,19 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           }}
         />
       )}
+
+      {/* In-App Notification Center Drawer */}
+      <NotificationCenterDrawer
+        isOpen={isNotificationDrawerOpen}
+        onClose={() => setIsNotificationDrawerOpen(false)}
+        notifications={notifications}
+        onAction={onNotificationAction}
+        onToggleRead={onToggleNotificationRead || (() => {})}
+        onMarkAllRead={onMarkAllNotificationsRead || (() => {})}
+        onDeleteNotification={onDeleteNotification || (() => {})}
+        onClearReadNotifications={onClearReadNotifications || (() => {})}
+      />
     </div>
   );
 };
+
