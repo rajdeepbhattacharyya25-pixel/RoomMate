@@ -10,6 +10,7 @@ import {
 import { hapticSelection, hapticImpact, hapticSuccess } from '../../lib/native/haptics';
 import { UpiQrScannerModal } from './UpiQrScannerModal';
 import { MobileBottomSheet } from './MobileBottomSheet';
+import { CurrencyInput } from '../common/CurrencyInput';
 import {
   QrCode,
   Copy,
@@ -263,19 +264,13 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
           <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
             Settlement Amount in ₹
           </label>
-          <div className="relative flex items-center">
-            <span className="absolute left-3.5 text-xl font-bold text-indigo-600">₹</span>
-            <input
-              type="number"
-              step="any"
-              inputMode="decimal"
-              pattern="[0-9]*[.]?[0-9]*"
-              value={payAmount}
-              onChange={(e) => setPayAmount(e.target.value)}
-              placeholder="0"
-              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-extrabold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 tabular-nums transition-all"
-            />
-          </div>
+          <CurrencyInput
+            size="lg"
+            pattern="[0-9]*[.]?[0-9]*"
+            value={payAmount}
+            onChange={(val) => setPayAmount(val)}
+            placeholder="0"
+          />
 
           {/* Quick Split Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">

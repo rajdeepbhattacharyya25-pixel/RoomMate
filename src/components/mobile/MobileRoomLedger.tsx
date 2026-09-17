@@ -62,6 +62,7 @@ import { TransferOwnershipModal } from './TransferOwnershipModal';
 import { JoinRoomModal } from './JoinRoomModal';
 import { JoinRequestReviewModal } from './JoinRequestReviewModal';
 import { RoomActivitySection } from './RoomActivitySection';
+import { CurrencyInput } from '../common/CurrencyInput';
 import {
   RoomExportFormat,
   gatherRoomExportData,
@@ -800,7 +801,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       </div>
 
       {/* 0-Rooms Empty State Card */}
-      {rooms.length === 0 && (
+      {(!activeRoom || rooms.length === 0) && (
         <div className="rounded-2xl bg-white border border-slate-200/90 p-6 text-center space-y-3.5 shadow-xs">
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
             <Home className="w-6 h-6" />
@@ -940,10 +941,11 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       )}
 
       {/* Simplified Debts Matrix: Who Owes Whom */}
-      <div className="space-y-2">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
-          Simplified Room Settlements
-        </h2>
+      {activeRoom && (
+        <div className="space-y-2">
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+            Simplified Room Settlements
+          </h2>
 
         {summary && summary.pairwiseDebts.length > 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-2xl divide-y divide-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] overflow-hidden">
@@ -1047,6 +1049,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Room Activity Feed */}
       {activeRoom && (
@@ -1060,12 +1063,13 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       )}
 
       {/* Shared Expenses History Section with Monthly Filter, Summary & Export */}
-      <div className="space-y-3">
-        {/* Section Header with Export Action */}
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            Shared Expenses History
-          </h2>
+      {activeRoom && (
+        <div className="space-y-3">
+          {/* Section Header with Export Action */}
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Shared Expenses History
+            </h2>
 
           {activeRoom && (
             <button
@@ -1408,6 +1412,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* ========================================================================= */}
       {/* RoomMate Modal: Add Expense & Split With Roommates                        */}
@@ -1812,21 +1817,18 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
                         {splitMethod === 'EXACT' && (
                           <div className="flex items-center gap-2">
-                            <div className="relative flex items-center">
-                              <span className="absolute left-2.5 text-xs font-bold text-slate-400">₹</span>
-                              <input
-                                type="number"
-                                step="any"
-                                disabled={!isChecked}
-                                value={isChecked ? (customValues[u.id] ?? '') : ''}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setCustomValues((prev) => ({ ...prev, [u.id]: val }));
-                                }}
-                                placeholder="0"
-                                className="w-24 pl-6 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 text-right focus:ring-1 focus:ring-indigo-500 tabular-nums disabled:opacity-40"
-                              />
-                            </div>
+                            <CurrencyInput
+                              size="sm"
+                              step="any"
+                              disabled={!isChecked}
+                              value={isChecked ? (customValues[u.id] ?? '') : ''}
+                              onChange={(_val, num) => {
+                                setCustomValues((prev) => ({ ...prev, [u.id]: num }));
+                              }}
+                              placeholder="0"
+                              containerClassName="w-24"
+                              className="text-right"
+                            />
                             <button
                               type="button"
                               onClick={() => {
@@ -2086,27 +2088,19 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-lg font-bold text-indigo-600">₹</span>
-                  <input
-                    ref={settleAmountInputRef}
-                    type="number"
-                    step="any"
-                    value={settleAmount}
-                    onChange={(e) => {
-                      setSettleAmount(e.target.value);
-                      if (settleValidationErrors.amount) {
-                        setSettleValidationErrors((prev) => ({ ...prev, amount: undefined }));
-                      }
-                    }}
-                    placeholder="0"
-                    className={`w-full pl-8 pr-4 py-2 rounded-xl text-lg font-bold text-slate-900 placeholder-slate-400 tabular-nums outline-none transition-all ${
-                      settleValidationErrors.amount
-                        ? 'bg-rose-50/40 border-2 border-rose-400 ring-2 ring-rose-500/20'
-                        : 'bg-slate-50 border border-slate-200 focus:ring-1 focus:ring-indigo-500'
-                    }`}
-                  />
-                </div>
+                <CurrencyInput
+                  ref={settleAmountInputRef}
+                  size="md"
+                  value={settleAmount}
+                  onChange={(val) => {
+                    setSettleAmount(val);
+                    if (settleValidationErrors.amount) {
+                      setSettleValidationErrors((prev) => ({ ...prev, amount: undefined }));
+                    }
+                  }}
+                  hasError={Boolean(settleValidationErrors.amount)}
+                  placeholder="0"
+                />
                 {settleValidationErrors.amount && (
                   <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />

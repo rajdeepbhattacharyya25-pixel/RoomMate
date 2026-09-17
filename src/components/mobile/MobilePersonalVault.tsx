@@ -40,6 +40,7 @@ import {
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { ExportBottomSheet } from './ExportBottomSheet';
+import { CurrencyInput } from '../common/CurrencyInput';
 import { hapticImpact, hapticSelection, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
 import {
   gatherMonthlyExportData,
@@ -1172,30 +1173,20 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 </span>
               )}
             </label>
-            <div className="relative flex items-center">
-              <span className="absolute left-3 text-lg font-bold text-indigo-600">₹</span>
-              <input
-                ref={amountInputRef}
-                type="number"
-                step="any"
-                inputMode="decimal"
-                pattern="[0-9]*[.]?[0-9]*"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  if (validationErrors.amount) {
-                    setValidationErrors((prev) => ({ ...prev, amount: undefined }));
-                  }
-                }}
-                placeholder="0"
-                autoFocus
-                className={`w-full pl-8 pr-4 py-3 rounded-xl text-2xl font-bold text-slate-900 placeholder:text-slate-400 tabular-nums outline-none transition-all ${
-                  validationErrors.amount
-                    ? 'bg-rose-50/40 border-2 border-rose-400 ring-2 ring-rose-500/20 focus:border-rose-500'
-                    : 'bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500'
-                }`}
-              />
-            </div>
+            <CurrencyInput
+              ref={amountInputRef}
+              size="lg"
+              value={amount}
+              onChange={(val) => {
+                setAmount(val);
+                if (validationErrors.amount) {
+                  setValidationErrors((prev) => ({ ...prev, amount: undefined }));
+                }
+              }}
+              placeholder="0"
+              autoFocus
+              hasError={Boolean(validationErrors.amount)}
+            />
             {validationErrors.amount && (
               <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1362,17 +1353,13 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
               Total Monthly Allowance (₹)
             </label>
-            <div className="relative flex items-center">
-              <span className="absolute left-3 text-lg font-bold text-indigo-600">₹</span>
-              <input
-                type="number"
-                step="100"
-                value={editAllowanceInput}
-                onChange={(e) => setEditAllowanceInput(e.target.value)}
-                placeholder="8000"
-                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xl font-bold text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 tabular-nums"
-              />
-            </div>
+            <CurrencyInput
+              size="md"
+              step="100"
+              value={editAllowanceInput}
+              onChange={(val) => setEditAllowanceInput(val)}
+              placeholder="8000"
+            />
 
             {/* Quick Budget Presets */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -1429,21 +1416,18 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                       <cat.icon className="w-3.5 h-3.5 text-slate-600" />
                       <span className="text-xs font-semibold text-slate-800">{cat.name}</span>
                     </div>
-                    <div className="relative flex items-center">
-                      <span className="absolute left-2.5 text-xs text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        value={currentCap || ''}
-                        onChange={(e) =>
-                          setEditCategoryCaps((prev) => ({
-                            ...prev,
-                            [cat.name]: Number(e.target.value) || 0,
-                          }))
-                        }
-                        placeholder="0"
-                        className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 tabular-nums focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
+                    <CurrencyInput
+                      size="sm"
+                      value={currentCap || ''}
+                      onChange={(_val, num) =>
+                        setEditCategoryCaps((prev) => ({
+                          ...prev,
+                          [cat.name]: num,
+                        }))
+                      }
+                      placeholder="0"
+                      containerClassName="bg-white"
+                    />
                   </div>
                 );
               })}

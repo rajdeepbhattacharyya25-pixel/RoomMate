@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Smartphone, X, Loader2, Check } from 'lucide-react';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { updateProfilePhone, validateAndFormatPhoneNumber } from '../../../../lib/storage/cloudStorageAdapter';
+import { PhoneInput } from '../../../common/PhoneInput';
+import { extractTenDigits } from '../../../common/phoneFormat';
 import { User } from '../../../../types';
 
 interface EditPhoneModalProps {
@@ -17,14 +19,14 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
   onClose,
   onSaved,
 }) => {
-  const [phone, setPhone] = useState(currentUser.phone || '');
+  const [digits, setDigits] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setPhone(currentUser.phone || '');
+      setDigits(extractTenDigits(currentUser.phone || ''));
       setError(null);
       setTimeout(() => inputRef.current?.focus(), 150);
     }
@@ -34,7 +36,7 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validation = validateAndFormatPhoneNumber(phone);
+    const validation = validateAndFormatPhoneNumber(digits);
     if (!validation.isValid) {
       setError(validation.error || 'Please enter a valid 10-digit mobile number.');
       hapticWarning();
@@ -71,7 +73,7 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 space-y-4 animate-in slide-in-from-bottom-6 duration-200"
+        className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 space-y-4 animate-in slide-in-from-bottom-6 duration-200"
       >
         <div className="flex items-center justify-between pb-1 border-b border-slate-100">
           <div className="flex items-center space-x-2.5">
@@ -100,27 +102,18 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
             <label htmlFor="phone-number-input" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Mobile Number
             </label>
-            <div className="relative flex items-center">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
-                  +91
-                </span>
-              </div>
-              <input
-                id="phone-number-input"
-                ref={inputRef}
-                type="tel"
-                value={phone.replace(/^\+?91\s*/, '')}
-                onChange={(e) => {
-                  setPhone(e.target.value);
-                  if (error) setError(null);
-                }}
-                disabled={isSaving}
-                placeholder="98765 43210"
-                maxLength={13}
-                className="w-full pl-13 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-              />
-            </div>
+
+            <PhoneInput
+              ref={inputRef}
+              value={digits}
+              onChange={(clean) => {
+                setDigits(clean);
+                if (error) setError(null);
+              }}
+              disabled={isSaving}
+              hasError={Boolean(error)}
+            />
+
             {error && (
               <p className="text-[11px] text-rose-600 font-medium mt-1.5">{error}</p>
             )}
@@ -140,7 +133,7 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSaving || !phone.trim()}
+              disabled={isSaving || !digits.trim()}
               className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-sm active:scale-98 transition-all"
             >
               {isSaving ? (

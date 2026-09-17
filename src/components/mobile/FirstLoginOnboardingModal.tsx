@@ -3,6 +3,7 @@ import { User } from '../../types';
 import { Sparkles, Smartphone, ArrowRight, ArrowLeft, Check, Loader2, User as UserIcon } from 'lucide-react';
 import { hapticSuccess, hapticWarning, hapticImpact } from '../../lib/native/haptics';
 import { completeProfileOnboarding, validateAndFormatPhoneNumber } from '../../lib/storage/cloudStorageAdapter';
+import { PhoneInput } from '../common/PhoneInput';
 
 interface FirstLoginOnboardingModalProps {
   isOpen: boolean;
@@ -248,28 +249,17 @@ export const FirstLoginOnboardingModal: React.FC<FirstLoginOnboardingModalProps>
               >
                 Phone number
               </label>
-              <div className="relative flex items-center">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <span className="text-xs font-bold text-slate-700 bg-slate-200/80 px-1.5 py-0.5 rounded font-mono">
-                    +91
-                  </span>
-                </div>
-                <input
-                  id="onboarding-phone-number"
-                  ref={phoneInputRef}
-                  type="tel"
-                  value={phone.replace(/^\+?91\s*/, '')}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    if (error) setError(null);
-                  }}
-                  disabled={isSaving}
-                  placeholder="98765 43210"
-                  autoComplete="tel-national"
-                  maxLength={13}
-                  className="w-full pl-14 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 placeholder:font-normal"
-                />
-              </div>
+              <PhoneInput
+                id="onboarding-phone-number"
+                ref={phoneInputRef}
+                value={phone}
+                onChange={(cleanDigits) => {
+                  setPhone(cleanDigits);
+                  if (error) setError(null);
+                }}
+                disabled={isSaving}
+                hasError={Boolean(error)}
+              />
               <p className="text-[11px] text-slate-400 mt-1.5">
                 Used for instant UPI QR settlements and room expense notifications.
               </p>
