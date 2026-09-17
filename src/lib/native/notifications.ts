@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { PushNotifications, PushNotificationSchema } from '@capacitor/push-notifications';
 import { playNotificationSound, playSuccessSound } from './notificationSound';
 
 export const EXPENSES_CHANNEL_ID = 'roommate_expenses_channel';
@@ -54,19 +53,6 @@ export async function initNativeNotifications(): Promise<void> {
         lightColor: '#25D366',
       });
 
-      // 2. Setup Push Notification Listeners
-      PushNotifications.addListener('registration', (token) => {
-        console.log('[Push] Device registered token:', token.value);
-      });
-
-      PushNotifications.addListener('registrationError', (error) => {
-        console.warn('[Push] Registration error:', error);
-      });
-
-      PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
-        console.log('[Push] Notification received in foreground:', notification);
-      });
-
       isChannelsInitialized = true;
     } catch (err) {
       console.warn('Failed to initialize native notifications:', err);
@@ -82,16 +68,6 @@ export async function requestNotificationPermissions(): Promise<boolean> {
     try {
       await initNativeNotifications();
       const localStatus = await LocalNotifications.requestPermissions();
-      const pushStatus = await PushNotifications.requestPermissions();
-
-      if (pushStatus.receive === 'granted') {
-        try {
-          await PushNotifications.register();
-        } catch (e) {
-          console.warn('[Push] Safe register catch in requestNotificationPermissions:', e);
-        }
-      }
-
       return localStatus.display === 'granted';
     } catch (err) {
       console.warn('Notification permission request error:', err);

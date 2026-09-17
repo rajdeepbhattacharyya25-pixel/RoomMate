@@ -3,11 +3,117 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { getFirebaseMessaging, isFirebaseConfigured, firebaseConfig } from './config';
 import { playNotificationSound, playSuccessSound } from '../native/notificationSound';
-import { updateFcmTokenCloud } from '../storage/cloudStorageAdapter';
+import { updateFcmTokenCloud, deactivateFcmTokenCloud } from '../storage/cloudStorageAdapter';
 import { supabase } from '../supabase/client';
+
+export const EXPENSES_CHANNEL_ID = 'roommate_expenses_channel';
+export const SETTLEMENTS_CHANNEL_ID = 'roommate_settlements_channel';
+export const NUDGES_CHANNEL_ID = 'roommate_nudges_channel';
+export const REQUESTS_CHANNEL_ID = 'roommate_requests_channel';
 
 const PRIMARY_FCM_TOKEN_STORAGE_KEY = 'roommate_fcm_token';
 const LEGACY_FCM_TOKEN_STORAGE_KEY = 'campusflow_fcm_token';
+const DEVICE_ID_STORAGE_KEY = 'roommate_device_id';
+
+let areChannelsInitialized = false;
+
+/**
+ * Returns a persistent device identifier across sessions to support multi-device push tracking.
+ */
+export function getOrCreateDeviceId(): string {
+  if (typeof localStorage === 'undefined') return 'browser_unknown';
+  let deviceId = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+  if (!deviceId) {
+    deviceId = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+/**
+ * Checks current notification permission status without prompting.
+ */
+export async function getNotificationPermissionStatus(): Promise<'prompt' | 'granted' | 'denied'> {
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('PushNotifications')) {
+    try {
+      const status = await PushNotifications.checkPermissions();
+      if (status.receive === 'granted') return 'granted';
+      if (status.receive === 'denied') return 'denied';
+      return 'prompt';
+    } catch {
+      return 'denied';
+    }
+  }
+  if (typeof window !== 'undefined' && 'Notification' in window && window.Notification) {
+    const perm = window.Notification.permission;
+    if (perm === 'granted') return 'granted';
+    if (perm === 'denied') return 'denied';
+    return 'prompt';
+  }
+  return 'denied';
+}
+
+/**
+ * Initializes Android notification channels on native PushNotifications plugin.
+ */
+export async function createPushNotificationChannels(): Promise<void> {
+  if (areChannelsInitialized || !Capacitor.isNativePlatform()) return;
+
+  try {
+    if (Capacitor.isPluginAvailable('PushNotifications')) {
+      await PushNotifications.createChannel({
+        id: EXPENSES_CHANNEL_ID,
+        name: 'Room Shared Expenses',
+        description: 'Instant alerts when a roommate records a new shared bill or split',
+        importance: 4, // High importance
+        visibility: 1, // Public
+        sound: 'notification.mp3',
+        vibration: true,
+        lights: true,
+        lightColor: '#6366F1',
+      });
+
+      await PushNotifications.createChannel({
+        id: SETTLEMENTS_CHANNEL_ID,
+        name: 'UPI & Cash Settlements',
+        description: 'Confirmations when a roommate settles debt via UPI or cash',
+        importance: 4,
+        visibility: 1,
+        sound: 'notification.mp3',
+        vibration: true,
+        lights: true,
+        lightColor: '#10B981',
+      });
+
+      await PushNotifications.createChannel({
+        id: NUDGES_CHANNEL_ID,
+        name: 'Roommate WhatsApp Nudges',
+        description: 'Reminders and nudges from flatmates for pending balances',
+        importance: 4,
+        visibility: 1,
+        vibration: true,
+        lights: true,
+        lightColor: '#25D366',
+      });
+
+      await PushNotifications.createChannel({
+        id: REQUESTS_CHANNEL_ID,
+        name: 'Room Join Requests & Approvals',
+        description: 'Alerts when members request or join a shared room ledger',
+        importance: 4,
+        visibility: 1,
+        sound: 'notification.mp3',
+        vibration: true,
+        lights: true,
+        lightColor: '#6366F1',
+      });
+
+      areChannelsInitialized = true;
+    }
+  } catch (err) {
+    console.warn('[Push] Channel creation notice:', err);
+  }
+}
 
 /**
  * Get cached FCM token from local storage
@@ -21,10 +127,12 @@ export function getCachedFcmToken(): string | null {
 }
 
 /**
- * Requests push notification permissions and retrieves FCM Device Token.
- * Seamlessly handles both Native Capacitor push and Web FCM push.
+ * Requests push notification permissions, initializes channels, and retrieves FCM Device Token.
+ * Seamlessly handles both Native Capacitor push and Web FCM push with multi-device tracking.
  */
 export async function registerPushNotifications(userId?: string): Promise<string | null> {
+  const deviceId = getOrCreateDeviceId();
+
   // 1. Native Mobile (Android / iOS)
   if (Capacitor.isNativePlatform()) {
     try {
@@ -32,6 +140,8 @@ export async function registerPushNotifications(userId?: string): Promise<string
         console.warn('[Push] PushNotifications plugin is not available on this platform.');
         return null;
       }
+
+      await createPushNotificationChannels();
 
       let permStatus = await PushNotifications.checkPermissions();
       if (permStatus.receive === 'prompt') {
@@ -65,7 +175,7 @@ export async function registerPushNotifications(userId?: string): Promise<string
             localStorage.setItem(PRIMARY_FCM_TOKEN_STORAGE_KEY, token.value);
           }
           if (userId) {
-            await updateFcmTokenCloud(userId, token.value);
+            await updateFcmTokenCloud(userId, token.value, deviceId, Capacitor.getPlatform());
           }
           cleanup(token.value);
         });
@@ -131,7 +241,7 @@ export async function registerPushNotifications(userId?: string): Promise<string
         localStorage.setItem(PRIMARY_FCM_TOKEN_STORAGE_KEY, token);
       }
       if (userId) {
-        await updateFcmTokenCloud(userId, token);
+        await updateFcmTokenCloud(userId, token, deviceId, 'web');
       }
       return token;
     }
@@ -143,30 +253,76 @@ export async function registerPushNotifications(userId?: string): Promise<string
 }
 
 /**
- * Attach foreground push listeners to display in-app banner/chime when received while app is active.
+ * Deactivates this device's token when the user signs out.
  */
-export async function initPushListeners(
-  onForegroundNotification?: (payload: { title: string; body: string; data?: unknown }) => void
-): Promise<() => void> {
+export async function deactivateCurrentDevicePush(userId: string): Promise<boolean> {
+  const deviceId = getOrCreateDeviceId();
+  return deactivateFcmTokenCloud(userId, deviceId);
+}
+
+export interface PushNotificationPayload {
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}
+
+export interface PushActionPayload {
+  actionId: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Attach push listeners to handle foreground alerts and tap actions.
+ */
+export async function initPushListeners(callbacks?: {
+  onForegroundNotification?: (payload: PushNotificationPayload) => void;
+  onNotificationActionPerformed?: (action: PushActionPayload) => void;
+}): Promise<() => void> {
+  const cleanups: Array<() => void> = [];
+
   // Native listener
   if (Capacitor.isNativePlatform()) {
     try {
+      await createPushNotificationChannels();
+
       const receiveHandle = await PushNotifications.addListener(
         'pushNotificationReceived',
         (notification) => {
-          playNotificationSound();
-          if (onForegroundNotification) {
-            onForegroundNotification({
-              title: notification.title || 'Room Ledger Update',
+          const title = notification.title || 'Room Ledger Update';
+          if (title.toLowerCase().includes('settled') || title.toLowerCase().includes('paid')) {
+            playSuccessSound();
+          } else {
+            playNotificationSound();
+          }
+
+          if (callbacks?.onForegroundNotification) {
+            callbacks.onForegroundNotification({
+              title,
               body: notification.body || '',
-              data: notification.data,
+              data: notification.data as Record<string, unknown>,
             });
           }
         }
       );
+      cleanups.push(() => receiveHandle.remove());
+
+      // Handle user tapping notification in system tray
+      const actionHandle = await PushNotifications.addListener(
+        'pushNotificationActionPerformed',
+        (notificationAction) => {
+          console.log('[Push] Notification tapped:', notificationAction);
+          if (callbacks?.onNotificationActionPerformed) {
+            callbacks.onNotificationActionPerformed({
+              actionId: notificationAction.actionId,
+              data: notificationAction.notification.data as Record<string, unknown>,
+            });
+          }
+        }
+      );
+      cleanups.push(() => actionHandle.remove());
 
       return () => {
-        receiveHandle.remove();
+        cleanups.forEach((fn) => fn());
       };
     } catch {
       return () => {};
@@ -190,8 +346,12 @@ export async function initPushListeners(
         playNotificationSound();
       }
 
-      if (onForegroundNotification) {
-        onForegroundNotification({ title, body, data: payload.data });
+      if (callbacks?.onForegroundNotification) {
+        callbacks.onForegroundNotification({
+          title,
+          body,
+          data: payload.data as Record<string, unknown>,
+        });
       }
     });
 
@@ -208,11 +368,18 @@ export async function sendPushNotificationToMembers(params: {
   recipientUserIds: string[];
   title: string;
   body: string;
+  channelId?: string;
   data?: Record<string, string>;
 }): Promise<boolean> {
+  if (!params.recipientUserIds || params.recipientUserIds.length === 0) {
+    return false;
+  }
   try {
     const { data, error } = await supabase.functions.invoke('send-push', {
-      body: params,
+      body: {
+        ...params,
+        channelId: params.channelId || EXPENSES_CHANNEL_ID,
+      },
     });
 
     if (error) {
@@ -226,4 +393,57 @@ export async function sendPushNotificationToMembers(params: {
     console.warn('[PushService] Push dispatch failed:', err);
     return false;
   }
+}
+
+export type RoommatePushEventType =
+  | 'NEW_SHARED_EXPENSE'
+  | 'EXPENSE_UPDATED'
+  | 'SETTLEMENT_RECORDED'
+  | 'PAYMENT_REMINDER'
+  | 'ROOM_INVITATION'
+  | 'JOIN_REQUEST'
+  | 'JOIN_APPROVED';
+
+export interface RoommatePushEventParams {
+  eventType: RoommatePushEventType;
+  recipientUserIds: string[];
+  roomId: string;
+  roomName?: string;
+  senderName: string;
+  title: string;
+  body: string;
+  extraData?: Record<string, string>;
+}
+
+/**
+ * Standardized RoomMate push event dispatcher.
+ * Maps event types to logical channels and packages contextual data for tap handling.
+ */
+export async function sendRoommatePushEvent(params: RoommatePushEventParams): Promise<boolean> {
+  let channelId = EXPENSES_CHANNEL_ID;
+  if (params.eventType === 'SETTLEMENT_RECORDED') {
+    channelId = SETTLEMENTS_CHANNEL_ID;
+  } else if (params.eventType === 'PAYMENT_REMINDER') {
+    channelId = NUDGES_CHANNEL_ID;
+  } else if (
+    params.eventType === 'ROOM_INVITATION' ||
+    params.eventType === 'JOIN_REQUEST' ||
+    params.eventType === 'JOIN_APPROVED'
+  ) {
+    channelId = REQUESTS_CHANNEL_ID;
+  }
+
+  return sendPushNotificationToMembers({
+    recipientUserIds: params.recipientUserIds,
+    title: params.title,
+    body: params.body,
+    channelId,
+    data: {
+      type: params.eventType,
+      roomId: params.roomId,
+      roomName: params.roomName || '',
+      senderName: params.senderName,
+      ...params.extraData,
+    },
+  });
 }
