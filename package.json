@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@capacitor-firebase/crashlytics": "^8.5.2",
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.1.1",
     "@capacitor/cli": "^8.5.1",
@@ -46,6 +47,7 @@
     "jspdf-autotable": "^5.0.8",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.43.0",
+    "posthog-js": "^1.433.9",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "xlsx": "^0.18.5"

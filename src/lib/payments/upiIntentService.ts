@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { analytics } from '../analytics/posthog';
 
 export type UpiAppTarget = 'gpay' | 'phonepe' | 'paytm' | 'generic';
 
@@ -72,6 +73,7 @@ export function generateUpiAppIntent(app: UpiAppTarget, options: UpiIntentOption
  * Launches the selected UPI intent or falls back gracefully.
  */
 export function launchUpiIntent(app: UpiAppTarget, options: UpiIntentOptions): boolean {
+  analytics.trackPaymentFlowStarted({ appTarget: app, isFallback: false });
   const uri = generateUpiAppIntent(app, options);
 
   if (typeof window === 'undefined') return false;
@@ -85,12 +87,15 @@ export function launchUpiIntent(app: UpiAppTarget, options: UpiIntentOptions): b
     // Secondary fallback: generic intent
     if (app !== 'generic') {
       try {
+        analytics.trackPaymentFlowStarted({ appTarget: 'generic', isFallback: true });
         window.location.href = generateUpiAppIntent('generic', options);
         return true;
       } catch {
+        analytics.trackPaymentFlowFailed({ reason: 'generic_fallback_error' });
         return false;
       }
     }
+    analytics.trackPaymentFlowFailed({ reason: 'direct_intent_error' });
     return false;
   }
 }
