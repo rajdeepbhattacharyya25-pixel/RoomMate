@@ -1,21 +1,60 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Project specific ProGuard rules for RoomMate Android Application
+# Optimized for R8 Code & Resource Shrinking
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# 1. Preserve Annotations and Line Numbers
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# 2. Capacitor Core Bridge & Plugin Reflection
+-keep class com.getcapacitor.** { *; }
+-keep public class * extends com.getcapacitor.Plugin {
+    public <methods>;
+    public <fields>;
+}
+-keep public class * extends com.getcapacitor.Bridge {
+    public <methods>;
+    public <fields>;
+}
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod public <methods>;
+    @com.getcapacitor.annotation.CapacitorPlugin public <methods>;
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# 3. Android WebView JavaScript Interface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# 4. Plugins: Biometric Auth, Capgo Updater, Notifications & Hardware
+-keep class com.aparajita.capacitor.biometricauth.** { *; }
+-keep class ee.forgr.capacitor_updater.** { *; }
+-keep class com.capacitorjs.plugins.pushnotifications.** { *; }
+-keep class com.capacitorjs.plugins.localnotifications.** { *; }
+-keep class com.capacitorjs.plugins.keyboard.** { *; }
+-keep class com.capacitorjs.plugins.statusbar.** { *; }
+-keep class com.capacitorjs.plugins.haptics.** { *; }
+-keep class com.capacitorjs.plugins.network.** { *; }
+-keep class com.capacitorjs.plugins.app.** { *; }
+-keep class com.capacitorjs.plugins.splashscreen.** { *; }
+
+# 5. Firebase & Google Play Services
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# 6. AndroidX Core & Splashscreen
+-keep class androidx.core.splashscreen.** { *; }
+-keep class androidx.appcompat.** { *; }
+-keep class androidx.coordinatorlayout.** { *; }
+
+# 7. Suppress harmless warnings from build-time annotations
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.checkerframework.**
+-dontwarn javax.annotation.**
+
+# 8. Firebase Crashlytics & Capawesome Plugin
+-keepattributes SourceFile,LineNumberTable,*Annotation*
+-keep public class * extends java.lang.Exception
+-keep class io.capawesome.capacitorjs.plugins.firebase.crashlytics.** { *; }
+-dontwarn io.capawesome.capacitorjs.plugins.firebase.crashlytics.**
+

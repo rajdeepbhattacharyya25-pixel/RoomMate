@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "100000000000",
-    "project_id": "roommate-expense-app",
-    "storage_bucket": "roommate-expense-app.appspot.com"
+    "project_number": "385178566763",
+    "project_id": "roommate-eb1d3",
+    "storage_bucket": "roommate-eb1d3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:100000000000:android:a1b2c3d4e5f67890",
+        "mobilesdk_app_id": "1:385178566763:android:cb7ae860019cdc5884b12e",
         "android_client_info": {
           "package_name": "io.campusflow.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyMockKeyForSafePushRegistration000"
+          "current_key": "AIzaSyAMBcpgCsF5DITbkr1oaZUQoST2KG5R-z4"
         }
       ],
       "services": {
