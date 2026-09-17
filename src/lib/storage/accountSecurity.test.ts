@@ -4,6 +4,7 @@ import {
   signOutOtherDevicesCloud,
   signOutAllDevicesCloud,
   deleteUserAccountCloud,
+  signInResidentWithCredentialsCloud,
 } from './cloudStorageAdapter';
 import { storeResidentSession, getStoredResidentSession, createResidentToken } from '../auth/jwtService';
 
@@ -272,6 +273,68 @@ describe('Account Security & Session Management Test Suite', () => {
       expect(globalThis.localStorage.getItem('roommate_app_lock_enabled')).toBeNull();
       expect(globalThis.localStorage.getItem('roommate_biometric_enrolled')).toBeNull();
       expect(db.getState().users.some((u) => u.id === delUserId)).toBe(false);
+    });
+  });
+
+  describe('Credential Authentication & Account Synthesis Prevention (Problems 1 & 2)', () => {
+    it('strictly rejects incorrect password and does NOT synthesize a new account', async () => {
+      const initialUserCount = db.getState().users.length;
+      const residentUser = {
+        id: 'usr-strict-auth-1',
+        name: 'Strict Auth User',
+        email: 'strict@college.edu',
+        role: 'STUDENT' as const,
+        isSuspended: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      db.upsertUser(residentUser);
+      // Store a valid local pin
+      globalThis.localStorage.setItem(`roommate_vault_pin_${residentUser.id}`, '4321');
+
+      // Attempt login with WRONG pin/password
+      const result = await signInResidentWithCredentialsCloud(residentUser.email, '9999');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/incorrect|invalid/i);
+      expect(result.token).toBeUndefined();
+
+      // Ensure NO dummy user was synthesized
+      const finalUsers = db.getState().users;
+      expect(finalUsers.length).toBe(initialUserCount + 1);
+      expect(finalUsers.some((u) => u.id.startsWith('usr-') && u.id.length > 20 && !u.id.includes('-'))).toBe(false);
+    });
+
+    it('strictly rejects non-existent resident without creating an account', async () => {
+      const initialUserCount = db.getState().users.length;
+      const nonExistentEmail = 'ghost-user-never-registered@random.org';
+
+      const result = await signInResidentWithCredentialsCloud(nonExistentEmail, 'anyPassword123');
+
+      expect(result.success).toBe(false);
+      expect(result.token).toBeUndefined();
+      expect(db.getState().users.length).toBe(initialUserCount);
+      expect(db.getState().users.some((u) => u.email === nonExistentEmail)).toBe(false);
+    });
+
+    it('authenticates successfully when correct credentials are provided', async () => {
+      const testUser = {
+        id: 'usr-valid-pin-user',
+        name: 'Valid Pin User',
+        email: 'validpin@college.edu',
+        role: 'STUDENT' as const,
+        isSuspended: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      db.upsertUser(testUser);
+      globalThis.localStorage.setItem(`roommate_vault_pin_${testUser.id}`, '7890');
+
+      const result = await signInResidentWithCredentialsCloud(testUser.email, '7890');
+
+      expect(result.success).toBe(true);
+      expect(result.user?.id).toBe(testUser.id);
+      expect(result.token).toBeDefined();
     });
   });
 });

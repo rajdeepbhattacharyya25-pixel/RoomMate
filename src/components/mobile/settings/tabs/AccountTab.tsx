@@ -150,7 +150,11 @@ export const AccountTab: React.FC<AccountTabProps> = ({
       const result = await uploadImage(pendingQrFile, `${currentUser.name}_upi_qr`);
       if (result.success && result.url) {
         // 1. Save QR image URL
-        await updateUpiQrUrl(currentUser.id, result.url);
+        const saved = await updateUpiQrUrl(currentUser.id, result.url);
+        if (!saved) {
+          onShowToast('Could not save QR code to cloud profile. Please check your connection and retry.');
+          return;
+        }
         setUpiQrUrlOverride(result.url);
 
         // 2. Save UPI ID if confirmed or edited

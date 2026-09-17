@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  Flame,
 } from 'lucide-react';
 import { User } from '../../../../types';
 import { BUILD_INFO } from '../../../../config/buildInfo';
@@ -25,6 +26,7 @@ import {
   handleVersionTap,
   setDeveloperMode,
 } from '../../../../lib/services/developerMode';
+import { crashService } from '../../../../lib/crashlytics/crashService';
 
 interface AboutTabProps {
   currentUser: User;
@@ -413,6 +415,48 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </button>
                 )}
+
+                {/* Crashlytics Diagnostics & Controlled Test Crash */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await hapticImpact('LIGHT');
+                    await crashService.testNonFatalError();
+                    onShowToast('🧪 Recorded diagnostic non-fatal to Crashlytics');
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-50/80 transition-all text-xs font-medium text-slate-700 flex items-center justify-between"
+                >
+                  <div className="flex items-center space-x-2">
+                    <Flame className="w-4 h-4 text-amber-500" />
+                    <span>Record Non-Fatal Diagnostic (Dev)</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                    Test Event
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      confirm(
+                        '⚠️ Trigger Crashlytics Fatal Crash?\n\nThis will intentionally terminate/crash the application to verify native Firebase crash delivery.'
+                      )
+                    ) {
+                      await hapticImpact('HEAVY');
+                      await crashService.testCrash();
+                    }
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-rose-50/70 border border-rose-200 hover:bg-rose-100/70 transition-all text-xs font-medium text-rose-700 flex items-center justify-between"
+                >
+                  <div className="flex items-center space-x-2">
+                    <Flame className="w-4 h-4 text-rose-600" />
+                    <span className="font-semibold text-rose-800">Trigger Fatal Crash (Dev Only)</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-bold">
+                    Force Exit
+                  </span>
+                </button>
 
                 <button
                   type="button"

@@ -15,6 +15,7 @@ import {
   Loader2,
   ArrowRight,
   Sparkles,
+  HardDrive,
 } from 'lucide-react';
 import { User } from '../../../../types';
 import { db } from '../../../../lib/storage/mockStorage';
@@ -31,6 +32,7 @@ import { ExportBottomSheet } from '../../ExportBottomSheet';
 import { createEncryptedBackup } from '../../../../lib/storage/backupCryptoService';
 import { shareOrDownloadBackup } from '../../../../lib/storage/shareBackupService';
 import { RestoreBackupModal } from '../modals/RestoreBackupModal';
+import { GoogleDriveBackupModal } from '../modals/GoogleDriveBackupModal';
 import { StrictPinInput } from '../../../common/StrictPinInput';
 
 interface DataBackupTabProps {
@@ -52,6 +54,7 @@ export const DataBackupTab: React.FC<DataBackupTabProps> = ({
   // Backup & Restore States
   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
   const [showBackupPinModal, setShowBackupPinModal] = useState<boolean>(false);
+  const [showGoogleDriveModal, setShowGoogleDriveModal] = useState<boolean>(false);
   const [backupPin, setBackupPin] = useState<string>('');
   const [backupMode, setBackupMode] = useState<'share' | 'download'>('share');
   const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
@@ -231,29 +234,40 @@ export const DataBackupTab: React.FC<DataBackupTabProps> = ({
         </div>
 
         <p className="text-[11px] text-slate-600 leading-relaxed">
-          Create an encrypted snapshot of your personal expenses and budget. Save directly to your <strong>Google Drive</strong>, local files, or WhatsApp via your phone&apos;s native share sheet.
+          Create an encrypted snapshot of your personal expenses and budget. Save directly to your chosen <strong>Google Drive</strong> account, local device, or external apps.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+        <div className="space-y-2 pt-1">
           <button
             type="button"
-            onClick={() => handleStartBackup('share')}
-            disabled={isBackingUp}
-            className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 active:scale-98 transition-all shadow-xs"
+            onClick={() => setShowGoogleDriveModal(true)}
+            className="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 active:scale-98 transition-all shadow-xs"
           >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Backup &amp; Share (Drive/Files)</span>
+            <HardDrive className="w-4 h-4" />
+            <span>Backup to Google Drive (Choose Account)</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => handleStartBackup('download')}
-            disabled={isBackingUp}
-            className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download .json</span>
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleStartBackup('share')}
+              disabled={isBackingUp}
+              className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share (Other Apps)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStartBackup('download')}
+              disabled={isBackingUp}
+              className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download .json</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -418,6 +432,14 @@ export const DataBackupTab: React.FC<DataBackupTabProps> = ({
         onClose={() => setShowRestoreModal(false)}
         currentUser={currentUser}
         onRestoreSuccess={(msg) => onShowToast(msg)}
+      />
+
+      {/* Google Drive Account Selector & Backup Modal */}
+      <GoogleDriveBackupModal
+        isOpen={showGoogleDriveModal}
+        currentUser={currentUser}
+        onClose={() => setShowGoogleDriveModal(false)}
+        onShowToast={onShowToast}
       />
 
       {/* Export Bottom Sheet */}

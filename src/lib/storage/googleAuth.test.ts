@@ -109,6 +109,46 @@ describe('Google OAuth & Session Synchronization Test Suite', () => {
     expect(syncResult.user.email).toBe('akash.patel@gmail.com');
   });
 
+  it('strictly preserves upi_qr_url and upi_id during Google OAuth profile sync (Problem 3)', async () => {
+    const userId = 'usr-qr-preserve-test-999';
+    const existingQrUrl = 'https://i.ibb.co/abcdef/qr.png';
+    const existingUpi = 'resident@oksbi';
+
+    // Pre-populate user in local database with existing QR and UPI ID
+    db.upsertUser({
+      id: userId,
+      name: 'Priya Sharma',
+      email: 'priya.sharma@gmail.com',
+      role: 'STUDENT',
+      upiQrUrl: existingQrUrl,
+      upiId: existingUpi,
+      onboardingCompleted: true,
+      isSuspended: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const fakeOAuthUser = {
+      id: userId,
+      email: 'priya.sharma@gmail.com',
+      user_metadata: {
+        full_name: 'Priya Sharma',
+        avatar_url: 'https://lh3.googleusercontent.com/a/priya',
+      },
+    };
+
+    const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+
+    // Verify QR code URL and UPI ID were NOT wiped or overwritten
+    expect(syncResult.user.upiQrUrl).toBe(existingQrUrl);
+    expect(syncResult.user.upiId).toBe(existingUpi);
+
+    // Verify in local database
+    const dbUser = db.getState().users.find((u) => u.id === userId);
+    expect(dbUser?.upiQrUrl).toBe(existingQrUrl);
+    expect(dbUser?.upiId).toBe(existingUpi);
+  });
+
   describe('OAuth Redirect URL & Hash Parser', () => {
     it('returns error on empty or invalid input in redeemOAuthUrlOrHash', async () => {
       const res = await redeemOAuthUrlOrHash('');
