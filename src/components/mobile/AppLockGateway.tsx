@@ -196,7 +196,7 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
                   triggerBiometricAuth();
                 }}
                 disabled={isPrompting}
-                className="w-full h-13 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm"
+                className="w-full h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm"
               >
                 {isFaceId ? (
                   <ScanFace className="w-5 h-5" />

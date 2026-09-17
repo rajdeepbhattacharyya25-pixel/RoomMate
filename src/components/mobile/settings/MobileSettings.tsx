@@ -63,6 +63,7 @@ export interface MobileSettingsProps {
   subscription?: UserSubscription;
   onUpgradePlan?: (planCode: 'PRO' | 'CAMPUS_MAX') => void;
   onOpenSecurityAudit?: () => void;
+  onOpenSupabaseModal?: () => void;
   onResetData?: () => void;
   onLogout?: () => void;
   onProfileUpdated?: () => void;
@@ -75,6 +76,7 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
   subscription,
   onUpgradePlan,
   onOpenSecurityAudit,
+  onOpenSupabaseModal,
   onResetData,
   onLogout,
   onProfileUpdated,
@@ -249,6 +251,7 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
               allUsers={allUsers}
               onSwitchUser={onSwitchUser}
               onOpenSecurityAudit={onOpenSecurityAudit}
+              onOpenSupabaseModal={onOpenSupabaseModal}
               onResetData={onResetData}
               onLogout={onLogout}
               onShowToast={showToast}

@@ -14,17 +14,24 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
+  Database,
 } from 'lucide-react';
 import { User } from '../../../../types';
 import { BUILD_INFO } from '../../../../config/buildInfo';
 import { liveUpdater, type UpdateState } from '../../../../services/updater';
 import { hapticImpact, hapticSelection } from '../../../../lib/native/haptics';
+import {
+  isDeveloperModeEnabled,
+  handleVersionTap,
+  setDeveloperMode,
+} from '../../../../lib/services/developerMode';
 
 interface AboutTabProps {
   currentUser: User;
   allUsers?: User[];
   onSwitchUser?: (user: User) => void;
   onOpenSecurityAudit?: () => void;
+  onOpenSupabaseModal?: () => void;
   onResetData?: () => void;
   onLogout?: () => void;
   onShowToast: (msg: string) => void;
@@ -35,19 +42,28 @@ export const AboutTab: React.FC<AboutTabProps> = ({
   allUsers = [],
   onSwitchUser,
   onOpenSecurityAudit,
+  onOpenSupabaseModal,
   onResetData,
   onLogout,
   onShowToast,
 }) => {
   const [updaterState, setUpdaterState] = useState<UpdateState>(() => liveUpdater.getState());
   const [isManualChecking, setIsManualChecking] = useState<boolean>(false);
-  const [devToolsOpen, setDevToolsOpen] = useState<boolean>(false);
+  const [devToolsOpen, setDevToolsOpen] = useState<boolean>(true);
+  const [isDevMode, setIsDevMode] = useState<boolean>(() => isDeveloperModeEnabled());
 
   useEffect(() => {
     const unsub = liveUpdater.subscribe((state) => {
       setUpdaterState(state);
     });
-    return () => unsub();
+    const handleDevModeChange = () => {
+      setIsDevMode(isDeveloperModeEnabled());
+    };
+    window.addEventListener('roommate_dev_mode_changed', handleDevModeChange);
+    return () => {
+      unsub();
+      window.removeEventListener('roommate_dev_mode_changed', handleDevModeChange);
+    };
   }, []);
 
   const handleManualCheck = async () => {
@@ -126,15 +142,32 @@ export const AboutTab: React.FC<AboutTabProps> = ({
 
         {/* Version Grid: Installed App vs Live Bundle */}
         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-left">
-          {/* Installed App Card */}
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100/90 space-y-1">
-            <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
-              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-              <span>Installed App</span>
+          {/* Installed App Card (Tap 5 times for Developer Mode) */}
+          <button
+            type="button"
+            onClick={() => {
+              const res = handleVersionTap();
+              if (res.message) {
+                onShowToast(res.message);
+              }
+            }}
+            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-98 transition-all border border-slate-100/90 space-y-1 text-left w-full cursor-pointer select-none"
+            title="Tap 5 times to toggle Developer Mode"
+          >
+            <div className="flex items-center justify-between text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
+              <div className="flex items-center space-x-1.5">
+                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                <span>Installed App</span>
+              </div>
+              {isDevMode && (
+                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                  DEV
+                </span>
+              )}
             </div>
             <div className="text-xs font-bold text-slate-800">v{BUILD_INFO.version}</div>
             <div className="text-[10px] text-slate-500">Build code: {BUILD_INFO.buildNumber}</div>
-          </div>
+          </button>
 
           {/* Live Bundle Card */}
           <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100/90 space-y-1">
@@ -257,8 +290,8 @@ export const AboutTab: React.FC<AboutTabProps> = ({
         )}
       </div>
 
-      {/* Card 2: Developer Tools (STRICTLY GATED TO DEV MODE) */}
-      {import.meta.env.DEV && (
+      {/* Card 2: Developer Tools (Gated to Dev Mode or 5-Tap Unlock) */}
+      {isDevMode && (
         <div className="rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs overflow-hidden">
           <button
             type="button"
@@ -272,7 +305,7 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                   Developer & Staging Tools
                 </span>
                 <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 border border-amber-300">
-                  ⚠️ Development-only
+                  🛠️ Active
                 </span>
               </div>
             </div>
@@ -330,8 +363,24 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                 </div>
               )}
 
-              {/* Security Audit & Reset Buttons */}
+              {/* Developer Actions (Supabase, Security Audit, Reset) */}
               <div className="space-y-2 pt-1 border-t border-amber-200/60">
+                {onOpenSupabaseModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenSupabaseModal}
+                    className="w-full p-2.5 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50/70 transition-all text-xs font-medium text-slate-900 flex items-center justify-between shadow-2xs"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Database className="w-4 h-4 text-indigo-600" />
+                      <span className="font-semibold text-indigo-950">Supabase Backend Hub & SQL</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                      10 Tables + RLS
+                    </span>
+                  </button>
+                )}
+
                 {onOpenSecurityAudit && (
                   <button
                     type="button"
@@ -364,6 +413,17 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeveloperMode(false);
+                    onShowToast('🔒 Developer Mode Disabled');
+                  }}
+                  className="w-full text-center text-[10px] text-amber-700 hover:text-amber-900 py-1 font-semibold transition-colors"
+                >
+                  Hide Developer Tools (Tap Version to Re-enable)
+                </button>
               </div>
             </div>
           )}

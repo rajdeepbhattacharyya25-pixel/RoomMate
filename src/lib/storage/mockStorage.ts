@@ -106,6 +106,14 @@ export const INITIAL_DATA: DatabaseState = {
 };
 
 
+const DUMMY_USER_IDS = new Set(['usr-rajdeep-1', 'usr-sneha-2', 'usr-amit-3']);
+const DUMMY_ROOM_IDS = new Set(['room-flat-302']);
+const DUMMY_INVITE_CODES = new Set(['FLAT02', 'rm_inv_flat302_token_7Hk92LmX']);
+const DUMMY_NOTIFICATION_IDS = new Set(['notif-seed-1', 'notif-seed-2', 'notif-seed-3']);
+const DUMMY_BUG_IDS = new Set(['bug-1024', 'bug-1025', 'bug-1026']);
+const DUMMY_FEATURE_IDS = new Set(['feat-218', 'feat-219', 'feat-220']);
+const DUMMY_CONTACT_IDS = new Set(['req-301']);
+
 export const DEFAULT_STAGING_SEEDS: DatabaseState = {
   users: [
     {
@@ -118,312 +126,29 @@ export const DEFAULT_STAGING_SEEDS: DatabaseState = {
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
-    {
-      id: 'usr-rajdeep-1',
-      name: 'Rajdeep',
-      email: 'rajdeep@roommate.app',
-      phone: '+91 98765 43210',
-      role: 'STUDENT',
-      isSuspended: false,
-      createdAt: '2026-09-01T00:00:00.000Z',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-    },
-    {
-      id: 'usr-sneha-2',
-      name: 'Sneha',
-      email: 'sneha@roommate.app',
-      phone: '+91 98765 12345',
-      role: 'STUDENT',
-      isSuspended: false,
-      createdAt: '2026-09-01T00:00:00.000Z',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-    },
-    {
-      id: 'usr-amit-3',
-      name: 'Amit',
-      email: 'amit@roommate.app',
-      phone: '+91 98765 67890',
-      role: 'STUDENT',
-      isSuspended: false,
-      createdAt: '2026-09-01T00:00:00.000Z',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-    },
   ],
   subscriptions: [],
   subscriptionEvents: [],
-  rooms: [
-    {
-      id: 'room-flat-302',
-      name: 'Flat 302',
-      description: 'RoomMate Student Ledger - Flat 302',
-      createdBy: 'usr-rajdeep-1',
-      adminUserId: 'usr-rajdeep-1',
-      joinPolicy: 'APPROVAL_REQUIRED',
-      invitePolicy: 'ALL_MEMBERS',
-      isArchived: false,
-      createdAt: '2026-09-01T00:00:00.000Z',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-    },
-  ],
-  roomMembers: [
-    {
-      id: 'rm-rajdeep-1',
-      roomId: 'room-flat-302',
-      userId: 'usr-rajdeep-1',
-      role: 'ROOM_ADMIN',
-      status: 'ACTIVE',
-      joinedAt: '2026-09-01T00:00:00.000Z',
-    },
-    {
-      id: 'rm-sneha-2',
-      roomId: 'room-flat-302',
-      userId: 'usr-sneha-2',
-      role: 'MEMBER',
-      status: 'ACTIVE',
-      joinedAt: '2026-09-01T00:00:00.000Z',
-    },
-    {
-      id: 'rm-amit-3',
-      roomId: 'room-flat-302',
-      userId: 'usr-amit-3',
-      role: 'MEMBER',
-      status: 'ACTIVE',
-      joinedAt: '2026-09-01T00:00:00.000Z',
-    },
-  ],
-  roomInvitations: [
-    {
-      id: 'inv-flat-302',
-      roomId: 'room-flat-302',
-      token: 'rm_inv_flat302_token_7Hk92LmX',
-      inviteCode: 'FLAT02',
-      createdBy: 'usr-rajdeep-1',
-      expiresAt: '2030-01-01T00:00:00.000Z',
-      isRevoked: false,
-      createdAt: '2026-09-01T00:00:00.000Z',
-    },
-  ],
+  rooms: [],
+  roomMembers: [],
+  roomInvitations: [],
   roomJoinRequests: [],
   personalExpenses: [],
   sharedExpenses: [],
   expenseSplits: [],
   settlementPayments: [],
   auditLogs: [],
-  notifications: [
-    {
-      id: 'notif-seed-1',
-      userId: 'usr-rajdeep-1',
-      roomId: 'room-flat-302',
-      type: 'PAYMENT_REQUIRED',
-      title: 'Payment Due',
-      message: 'You owe Sneha ₹250 for the electricity bill.',
-      priority: 'HIGH',
-      isRead: false,
-      createdAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-      actionType: 'PAY_NOW',
-      actionTarget: 'room-flat-302',
-      metadata: { amount: 250, payeeName: 'Sneha', roomName: 'Flat 302' },
-      eventId: 'seed_notif_1',
-    },
-    {
-      id: 'notif-seed-2',
-      userId: 'usr-rajdeep-1',
-      roomId: 'room-flat-302',
-      type: 'EXPENSE_ADDED',
-      title: 'New Shared Expense',
-      message: 'Electricity bill of ₹1,200 was added to Flat 302. Your share: ₹400.',
-      priority: 'MEDIUM',
-      isRead: false,
-      createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      actionType: 'VIEW_EXPENSE',
-      actionTarget: 'room-flat-302',
-      metadata: { amount: 1200, payerName: 'Sneha', roomName: 'Flat 302' },
-      eventId: 'seed_notif_2',
-    },
-    {
-      id: 'notif-seed-3',
-      userId: 'usr-rajdeep-1',
-      roomId: 'room-flat-302',
-      type: 'EXPENSE_SETTLED',
-      title: 'Expense Settled',
-      message: 'Your ₹300 grocery balance with Amit has been settled.',
-      priority: 'LOW',
-      isRead: true,
-      readAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      actionType: 'VIEW_DETAILS',
-      actionTarget: 'room-flat-302',
-      metadata: { amount: 300, payeeName: 'Amit', roomName: 'Flat 302' },
-      eventId: 'seed_notif_3',
-    },
-  ],
-  bugReports: [
-    {
-      id: 'bug-1024',
-      userId: 'usr-rajdeep-1',
-      userName: 'Rajdeep',
-      userEmail: 'rajdeep@roommate.app',
-      userRole: 'STUDENT',
-      category: 'EXPENSE_SPLIT',
-      severity: 'HIGH',
-      status: 'OPEN',
-      description: "Shared electricity bill for ₹1,200 added 10 minutes ago isn't reflecting on flatmate Sneha's balance breakdown.",
-      diagnostics: {
-        route: '/rooms/room-flat-302',
-        appVersion: '1.0.3',
-        platform: 'Android 14',
-        networkOnline: true,
-        viewport: { width: 390, height: 844, pixelRatio: 3 },
-        userAgent: 'RoomMate-Mobile-Native/1.0.3',
-        roomId: 'room-flat-302',
-        roomName: 'Flat 302',
-        timestamp: '2026-09-14T21:24:00.000Z',
-      },
-      createdAt: '2026-09-14T21:24:00.000Z',
-      updatedAt: '2026-09-14T21:24:00.000Z',
-    },
-    {
-      id: 'bug-1025',
-      userId: 'usr-sneha-2',
-      userName: 'Sneha',
-      userEmail: 'sneha@roommate.app',
-      userRole: 'STUDENT',
-      category: 'PAYMENT_UPI',
-      severity: 'MEDIUM',
-      status: 'INVESTIGATING',
-      description: 'GPay intent timeout when attempting instant settlement of ₹250.',
-      diagnostics: {
-        route: '/settle/upi',
-        appVersion: '1.0.3',
-        platform: 'Android 14 (Pixel 8)',
-        networkOnline: true,
-        viewport: { width: 412, height: 915, pixelRatio: 2.6 },
-        userAgent: 'RoomMate-Mobile-Native/1.0.3',
-        timestamp: '2026-09-14T19:15:00.000Z',
-      },
-      createdAt: '2026-09-14T19:15:00.000Z',
-      updatedAt: '2026-09-14T20:00:00.000Z',
-    },
-    {
-      id: 'bug-1026',
-      userId: 'usr-amit-3',
-      userName: 'Amit',
-      userEmail: 'amit@roommate.app',
-      userRole: 'STUDENT',
-      category: 'ROOM_MANAGEMENT',
-      severity: 'LOW',
-      status: 'RESOLVED',
-      description: 'Room invitation 6-character code showed as expired after regenerating once.',
-      diagnostics: {
-        route: '/rooms/settings',
-        appVersion: '1.0.2',
-        platform: 'iOS 17.5',
-        networkOnline: true,
-        viewport: { width: 390, height: 844, pixelRatio: 3 },
-        userAgent: 'RoomMate-Mobile-Native/1.0.2',
-        timestamp: '2026-09-13T14:30:00.000Z',
-      },
-      adminNotes: 'Resolved: regenerated token rotation fixed in v1.0.3 release.',
-      resolvedAt: '2026-09-14T10:00:00.000Z',
-      createdAt: '2026-09-13T14:30:00.000Z',
-      updatedAt: '2026-09-14T10:00:00.000Z',
-    },
-  ],
-  featureSuggestions: [
-    {
-      id: 'feat-218',
-      userId: 'usr-sneha-2',
-      userName: 'Sneha',
-      userEmail: 'sneha@roommate.app',
-      title: 'Add recurring monthly rent expenses',
-      description: 'Allow setting a recurring monthly shared rent bill on the 1st of every month that automatically notifies flatmates.',
-      category: 'Expenses',
-      status: 'REVIEWING',
-      votesCount: 24,
-      adminNotes: 'High user demand across student hostels. Scheduled for Q4 sprint.',
-      createdAt: '2026-09-14T18:00:00.000Z',
-      updatedAt: '2026-09-14T18:30:00.000Z',
-    },
-    {
-      id: 'feat-219',
-      userId: 'usr-rajdeep-1',
-      userName: 'Rajdeep',
-      userEmail: 'rajdeep@roommate.app',
-      title: 'WhatsApp PDF statement export with digital settlement receipt',
-      description: 'Generate a signed single-page PDF containing all month-end room balances and push directly to roommate WhatsApp group.',
-      category: 'Export',
-      status: 'PLANNED',
-      votesCount: 42,
-      createdAt: '2026-09-13T11:00:00.000Z',
-      updatedAt: '2026-09-14T09:00:00.000Z',
-    },
-    {
-      id: 'feat-220',
-      userId: 'usr-amit-3',
-      userName: 'Amit',
-      userEmail: 'amit@roommate.app',
-      title: 'Split by custom percentages alongside exact amounts',
-      description: 'Support percentage-based division (e.g. 40%-30%-30%) for room grocery bulk buys.',
-      category: 'Splits',
-      status: 'IN_DEVELOPMENT',
-      votesCount: 18,
-      createdAt: '2026-09-12T16:00:00.000Z',
-      updatedAt: '2026-09-14T15:00:00.000Z',
-    },
-  ],
-  contactRequests: [
-    {
-      id: 'req-301',
-      userId: 'usr-rajdeep-1',
-      userName: 'Warden Sharma',
-      userEmail: 'sharma.warden@campus.edu',
-      phone: '+91 98111 22334',
-      subject: 'Hostel Block B 40-Room Pilot Onboarding',
-      message: 'We want to onboard entire Block B (160 residents) into RoomMate for electricity and mess billing. Need superadmin assistance for bulk hostel creation.',
-      status: 'NEW',
-      createdAt: '2026-09-14T16:45:00.000Z',
-    },
-  ],
-  announcements: [
-    {
-      id: 'ann-1',
-      title: 'Scheduled System Maintenance Notice',
-      message: 'RoomMate core databases will undergo routine optimization on 18 Sept between 03:00 AM - 03:30 AM IST. Offline mode will remain active on mobile apps.',
-      audience: 'EVERYONE',
-      priority: 'IMPORTANT',
-      deliveryChannels: ['IN_APP', 'PUSH'],
-      recipientsCount: 12482,
-      status: 'DELIVERED',
-      sentAt: '2026-09-14T12:00:00.000Z',
-      createdBy: 'usr-superadmin-master',
-    },
-    {
-      id: 'ann-2',
-      title: 'New Instant UPI Split & Verification Engine is Live',
-      message: 'Residents can now verify settlements directly with UPI transaction reference numbers and celebrate zero-debt status with one-tap confetti!',
-      audience: 'EVERYONE',
-      priority: 'NORMAL',
-      deliveryChannels: ['IN_APP'],
-      recipientsCount: 12482,
-      status: 'DELIVERED',
-      sentAt: '2026-09-12T09:00:00.000Z',
-      createdBy: 'usr-superadmin-master',
-    },
-  ],
+  notifications: [],
+  bugReports: [],
+  featureSuggestions: [],
+  contactRequests: [],
+  announcements: [],
   settings: DEFAULT_PLATFORM_SETTINGS,
-  systemIncidents: [
-    {
-      id: 'inc-1',
-      service: 'Database',
-      error: 'Query latency spike during month-end bulk ledger reconciliation',
-      severity: 'LOW',
-      status: 'RESOLVED',
-      occurrences: 3,
-      details: 'PostgreSQL connection pool automatically scaled. Max latency capped at 120ms.',
-      createdAt: '2026-09-13T23:45:00.000Z',
-      resolvedAt: '2026-09-14T00:15:00.000Z',
-    },
-  ],
+  systemIncidents: [],
+  superAdminSecuritySettings: {},
+  superAdminRecoveryCodes: [],
+  superAdminTrustedDevices: [],
+  securityAuditLogs: [],
 };
 
 class MockDatabase {
@@ -459,37 +184,106 @@ class MockDatabase {
     }
     if (!raw) {
       this.save(DEFAULT_STAGING_SEEDS);
-      return DEFAULT_STAGING_SEEDS;
+      return JSON.parse(JSON.stringify(DEFAULT_STAGING_SEEDS));
     }
     try {
       const parsed = JSON.parse(raw);
-      if (!parsed.users || parsed.users.length === 0) {
+      if (!parsed.users || !Array.isArray(parsed.users) || parsed.users.length === 0) {
         this.save(DEFAULT_STAGING_SEEDS);
-        return DEFAULT_STAGING_SEEDS;
+        return JSON.parse(JSON.stringify(DEFAULT_STAGING_SEEDS));
       }
+
+      // Automatic sanitization of legacy hardcoded dummy data from existing device localStorage
+      let hadLegacyDummyData = false;
+      if (Array.isArray(parsed.users)) {
+        const filteredUsers = parsed.users.filter((u: User) => !DUMMY_USER_IDS.has(u.id));
+        if (filteredUsers.length !== parsed.users.length) {
+          parsed.users = filteredUsers;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.rooms)) {
+        const filteredRooms = parsed.rooms.filter((r: Room) => !DUMMY_ROOM_IDS.has(r.id));
+        if (filteredRooms.length !== parsed.rooms.length) {
+          parsed.rooms = filteredRooms;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.roomMembers)) {
+        const filteredMembers = parsed.roomMembers.filter(
+          (m: RoomMember) => !DUMMY_ROOM_IDS.has(m.roomId) && !DUMMY_USER_IDS.has(m.userId)
+        );
+        if (filteredMembers.length !== parsed.roomMembers.length) {
+          parsed.roomMembers = filteredMembers;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.roomInvitations)) {
+        const filteredInvites = parsed.roomInvitations.filter(
+          (inv: RoomInvitation) => !DUMMY_ROOM_IDS.has(inv.roomId) && !DUMMY_INVITE_CODES.has(inv.inviteCode)
+        );
+        if (filteredInvites.length !== parsed.roomInvitations.length) {
+          parsed.roomInvitations = filteredInvites;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.notifications)) {
+        const filteredNotifs = parsed.notifications.filter(
+          (n: InAppNotification) =>
+            !DUMMY_NOTIFICATION_IDS.has(n.id) &&
+            !DUMMY_ROOM_IDS.has(n.roomId || '') &&
+            !DUMMY_USER_IDS.has(n.userId)
+        );
+        if (filteredNotifs.length !== parsed.notifications.length) {
+          parsed.notifications = filteredNotifs;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.bugReports)) {
+        const filteredBugs = parsed.bugReports.filter((b: BugReport) => !DUMMY_BUG_IDS.has(b.id));
+        if (filteredBugs.length !== parsed.bugReports.length) {
+          parsed.bugReports = filteredBugs;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.featureSuggestions)) {
+        const filteredFeats = parsed.featureSuggestions.filter((f: FeatureSuggestion) => !DUMMY_FEATURE_IDS.has(f.id));
+        if (filteredFeats.length !== parsed.featureSuggestions.length) {
+          parsed.featureSuggestions = filteredFeats;
+          hadLegacyDummyData = true;
+        }
+      }
+      if (Array.isArray(parsed.contactRequests)) {
+        const filteredReqs = parsed.contactRequests.filter((c: ContactRequest) => !DUMMY_CONTACT_IDS.has(c.id));
+        if (filteredReqs.length !== parsed.contactRequests.length) {
+          parsed.contactRequests = filteredReqs;
+          hadLegacyDummyData = true;
+        }
+      }
+
       if (!parsed.roomJoinRequests) {
         parsed.roomJoinRequests = [];
       }
       if (!parsed.notifications || !Array.isArray(parsed.notifications)) {
-        parsed.notifications = [...DEFAULT_STAGING_SEEDS.notifications];
+        parsed.notifications = [];
       }
       if (!parsed.bugReports || !Array.isArray(parsed.bugReports)) {
-        parsed.bugReports = [...DEFAULT_STAGING_SEEDS.bugReports];
+        parsed.bugReports = [];
       }
       if (!parsed.featureSuggestions || !Array.isArray(parsed.featureSuggestions)) {
-        parsed.featureSuggestions = [...DEFAULT_STAGING_SEEDS.featureSuggestions];
+        parsed.featureSuggestions = [];
       }
       if (!parsed.contactRequests || !Array.isArray(parsed.contactRequests)) {
-        parsed.contactRequests = [...DEFAULT_STAGING_SEEDS.contactRequests];
+        parsed.contactRequests = [];
       }
       if (!parsed.announcements || !Array.isArray(parsed.announcements)) {
-        parsed.announcements = [...DEFAULT_STAGING_SEEDS.announcements];
+        parsed.announcements = [];
       }
       if (!parsed.settings) {
         parsed.settings = { ...DEFAULT_PLATFORM_SETTINGS };
       }
       if (!parsed.systemIncidents || !Array.isArray(parsed.systemIncidents)) {
-        parsed.systemIncidents = [...DEFAULT_STAGING_SEEDS.systemIncidents];
+        parsed.systemIncidents = [];
       }
 
       // Guarantee SuperAdmin master user exists
@@ -498,6 +292,7 @@ class MockDatabase {
         if (!hasAdmin) {
           const masterAdmin = DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN')!;
           parsed.users.unshift(masterAdmin);
+          hadLegacyDummyData = true;
         }
       }
 
@@ -521,10 +316,15 @@ class MockDatabase {
           }
         });
       }
+
+      if (hadLegacyDummyData) {
+        this.save(parsed);
+      }
+
       return parsed;
     } catch {
       this.save(DEFAULT_STAGING_SEEDS);
-      return DEFAULT_STAGING_SEEDS;
+      return JSON.parse(JSON.stringify(DEFAULT_STAGING_SEEDS));
     }
   }
 
@@ -1927,10 +1727,11 @@ class MockDatabase {
     }
   }
 
-  public markAllNotificationsRead(userId: string): void {
+  public markAllNotificationsRead(userId?: string, ids?: string[]): void {
     let changed = false;
     (this.state.notifications || []).forEach((n) => {
-      if (n.userId === userId && !n.isRead) {
+      const match = ids && ids.length > 0 ? ids.includes(n.id) : (userId ? n.userId === userId : true);
+      if (match && !n.isRead) {
         n.isRead = true;
         n.readAt = new Date().toISOString();
         changed = true;
@@ -1949,10 +1750,11 @@ class MockDatabase {
     }
   }
 
-  public clearReadNotifications(userId: string): void {
+  public clearReadNotifications(userId?: string, ids?: string[]): void {
     let changed = false;
     (this.state.notifications || []).forEach((n) => {
-      if (n.userId === userId && n.isRead && !n.isDeleted) {
+      const match = ids && ids.length > 0 ? ids.includes(n.id) : (userId ? n.userId === userId : true);
+      if (match && n.isRead && !n.isDeleted) {
         n.isDeleted = true;
         changed = true;
       }

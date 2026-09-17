@@ -105,12 +105,13 @@ interface MobileLayoutProps {
   onLogout?: () => void;
   isRealtimeLive?: boolean;
   onOpenSupabaseModal?: () => void;
+  onOpenCloudSyncSheet?: () => void;
   onProfileUpdated?: () => void;
   notifications?: InAppNotification[];
   onToggleNotificationRead?: (id: string, currentRead: boolean) => void;
-  onMarkAllNotificationsRead?: () => void;
+  onMarkAllNotificationsRead?: (ids?: string[]) => void;
   onDeleteNotification?: (id: string) => void;
-  onClearReadNotifications?: () => void;
+  onClearReadNotifications?: (ids?: string[]) => void;
 }
 
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
@@ -150,6 +151,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   onLogout,
   isRealtimeLive,
   onOpenSupabaseModal,
+  onOpenCloudSyncSheet,
   onProfileUpdated,
   notifications = [],
   onToggleNotificationRead,
@@ -322,6 +324,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               onRecordSettlement={onRecordSettlement}
               isRealtimeLive={isRealtimeLive}
               onOpenSupabaseModal={onOpenSupabaseModal}
+              onOpenCloudSyncSheet={onOpenCloudSyncSheet}
             />
           )}
 
@@ -384,6 +387,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               subscription={currentSubscription}
               onUpgradePlan={onUpgradePlan}
               onOpenSecurityAudit={onOpenSecurityAudit}
+              onOpenSupabaseModal={onOpenSupabaseModal}
               onResetData={onResetData}
               onLogout={onLogout}
               onProfileUpdated={onProfileUpdated}

@@ -192,7 +192,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-3 text-xs">
                   <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div className="flex-1">
-                    <p className="font-semibold text-slate-900">Recorded shared expense in Flat 302</p>
+                    <p className="font-semibold text-slate-900">Recorded shared expense</p>
                     <p className="text-[11px] text-slate-400">3 days ago</p>
                   </div>
                 </div>

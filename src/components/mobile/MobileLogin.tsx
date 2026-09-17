@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from '../../types';
 import {
   createResidentToken,
@@ -9,7 +9,6 @@ import {
   ResidentJwtPayload,
   validateStrict4DigitPin,
 } from '../../lib/auth/jwtService';
-import { DEFAULT_STAGING_SEEDS } from '../../lib/storage/mockStorage';
 import {
   Fingerprint,
   Lock,
@@ -67,24 +66,25 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
   // 3-Segment Tab Switcher: signin | join | create
   const [authTab, setAuthTab] = useState<'signin' | 'join' | 'create'>('signin');
 
-  // Available residents - guaranteed fallback to staging seeds so no empty deadlock
-  const residentUsers =
-    allUsers && allUsers.length > 0
-      ? allUsers.filter((u) => u.role !== 'SUPER_ADMIN')
-      : DEFAULT_STAGING_SEEDS.users;
+  // Available residents registered on device
+  const residentUsers = useMemo(
+    () =>
+      allUsers && allUsers.length > 0
+        ? allUsers.filter((u) => u.role !== 'SUPER_ADMIN')
+        : [],
+    [allUsers]
+  );
 
   // Form Fields for Sign In
-  const [identifier, setIdentifier] = useState(
-    residentUsers[0] ? residentUsers[0].email : 'rajdeep@roommate.app'
-  );
-  const [password, setPassword] = useState('4821');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
 
   // Form Fields for Join with Code & QR Wizard
-  const [joinInviteCode, setJoinInviteCode] = useState('FLAT02');
+  const [joinInviteCode, setJoinInviteCode] = useState('');
   const [joinResidentName, setJoinResidentName] = useState('');
   const [joinResidentEmail, setJoinResidentEmail] = useState('');
-  const [joinPin, setJoinPin] = useState('4821');
+  const [joinPin, setJoinPin] = useState('');
   const [joinMode, setJoinMode] = useState<'code' | 'camera'>('code');
   const [joinWizardStep, setJoinWizardStep] = useState<
     'scan_or_code' | 'confirm_room' | 'resident_info' | 'existing_user_auth' | 'email_verification' | 'waiting'
@@ -254,25 +254,6 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     }
   };
 
-  // Handle Quick Demo 1-Tap Resident Selection
-  const handleSelectDemoResident = (user: User) => {
-    hapticImpact('LIGHT');
-    setSelectedDemoUserId(user.id);
-    setIdentifier(user.email);
-    setPassword('4821');
-    setErrorMessage(null);
-
-    const token = createResidentToken(user, {
-      expiresInDays: 7,
-      biometricVerified: false,
-    });
-
-    storeResidentSession(token, true);
-    setTimeout(() => {
-      hapticSuccess();
-      onLogin(user, token);
-    }, 200);
-  };
 
   // Handle Biometric Login
   const handleBiometricAuth = async () => {
@@ -802,7 +783,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
   // Enter room once approved by Admin
   const handleEnterApprovedRoom = () => {
     hapticSuccess();
-    const activeUser = pendingJoinUser || residentUsers[0] || DEFAULT_STAGING_SEEDS.users[0];
+    const activeUser = pendingJoinUser || residentUsers[0];
+    if (!activeUser) return;
     const token = createResidentToken(activeUser, { expiresInDays: 7, biometricVerified: false });
     storeResidentSession(token, true);
     localStorage.removeItem('roommate_active_join_request');
@@ -1046,7 +1028,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     setLogoTapCount(nextCount);
     if (nextCount >= 5) {
       setLogoTapCount(0);
-      const target = residentUsers[0] || DEFAULT_STAGING_SEEDS.users[0];
+      const target = residentUsers[0] || (allUsers && allUsers[0]);
+      if (!target) return;
       const demoToken = createResidentToken(target, {
         expiresInDays: 7,
         biometricVerified: true,
@@ -1057,9 +1040,6 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
       }
     }
   };
-
-  // Top 3 demo residents for staging 1-tap fast access
-  const topDemoResidents = residentUsers.slice(0, 3);
 
   return (
     <main className="w-full min-h-screen bg-[#F9F9FF] text-slate-900 flex flex-col justify-between selection:bg-indigo-100 selection:text-indigo-900 select-none pb-safe pt-safe">
@@ -1108,7 +1088,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
           {/* Active Ledger Pill Badge */}
           <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] font-semibold text-slate-700">Flat 302 Ledger</span>
+            <span className="text-[11px] font-semibold text-slate-700">Student Ledger</span>
             <span className="text-slate-300 text-[11px]">•</span>
             <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5">
               <ShieldCheck className="w-3 h-3" />
@@ -1255,7 +1235,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     spellCheck={false}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="resident@roommate.app or +91 98765..."
+                    placeholder="name@example.com or +91 98765..."
                     className="w-full h-12 pl-10 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs text-slate-900 font-medium placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none transition-colors"
                     required
                   />
@@ -1498,7 +1478,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                         autoCapitalize="characters"
                         autoCorrect="off"
                         spellCheck={false}
-                        className="w-full h-13 text-center text-xl font-mono font-bold tracking-[0.25em] bg-slate-50 border-2 border-indigo-200 focus:border-indigo-600 rounded-2xl uppercase text-indigo-700 focus:outline-none transition-colors"
+                        className="w-full h-14 text-center text-xl font-mono font-bold tracking-[0.25em] bg-slate-50 border-2 border-indigo-200 focus:border-indigo-600 rounded-2xl uppercase text-indigo-700 focus:outline-none transition-colors"
                         required
                         autoFocus
                       />
@@ -2037,7 +2017,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 </h2>
               </div>
               <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 rounded-full">
-                Flat 302
+                New Account
               </span>
             </div>
 
@@ -2253,79 +2233,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
           </section>
         )}
 
-        {/* 4. Quick-Select Demo Profile Row (Flat 302 Staging) */}
-        {topDemoResidents.length > 0 && (
-          <section className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">
-                  Quick Select Account (Staging)
-                </span>
-              </div>
-              <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                Flat 302
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {topDemoResidents.map((user, idx) => {
-                const isActive =
-                  selectedDemoUserId === user.id ||
-                  identifier.toLowerCase() === user.email.toLowerCase();
-                const initials = user.name.charAt(0).toUpperCase();
-
-                const bgColors = [
-                  'bg-indigo-100 text-indigo-700',
-                  'bg-purple-100 text-purple-700',
-                  'bg-emerald-100 text-emerald-700',
-                ];
-
-                const roomLabels = ['Room 302', 'Room 14', 'Wing B'];
-
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => handleSelectDemoResident(user)}
-                    className={`flex flex-col items-center p-2 rounded-xl transition-all active:scale-95 text-center shadow-2xs ${
-                      isActive
-                        ? 'bg-indigo-50/70 border-2 border-indigo-600 ring-2 ring-indigo-100'
-                        : 'bg-slate-50/60 border border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="relative">
-                      <div
-                        className={`w-10 h-10 rounded-full ${
-                          bgColors[idx % 3]
-                        } font-bold flex items-center justify-center text-xs shadow-inner`}
-                      >
-                        {initials}
-                      </div>
-                      {isActive && (
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center">
-                          <Check className="w-2 h-2 text-white stroke-[3.5]" />
-                        </span>
-                      )}
-                    </div>
-                    <span className="mt-1 text-xs font-semibold text-slate-900 truncate w-full">
-                      {user.name.split(' ')[0]}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      {roomLabels[idx % 3]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-1">
-              <Sparkles className="w-3 h-3 text-indigo-500" />
-              <span>Tap any resident to sign in instantly</span>
-            </p>
-          </section>
-        )}
-
-        {/* 5. Alternative Onboarding Action Banner */}
+        {/* Alternative Onboarding Action Banner */}
         {authTab !== 'join' && (
           <button
             type="button"

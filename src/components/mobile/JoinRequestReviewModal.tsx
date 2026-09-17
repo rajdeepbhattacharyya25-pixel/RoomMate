@@ -80,7 +80,7 @@ export const JoinRequestReviewModal: React.FC<JoinRequestReviewModalProps> = ({
         {/* Requester Identity Card */}
         <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 to-purple-50/50 border border-indigo-100/80 space-y-3">
           <div className="flex items-center gap-3.5">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+            <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center font-bold text-lg shadow-sm">
               {request.user.name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">

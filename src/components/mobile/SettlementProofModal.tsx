@@ -132,7 +132,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
         </div>
 
         {/* Digital Proof Voucher Card (Aesthetic Preview) */}
-        <div className="relative rounded-2xl bg-gradient-to-b from-slate-800/90 to-indigo-950/90 border border-white/15 p-4.5 space-y-3.5 shadow-inner overflow-hidden">
+        <div className="relative rounded-2xl bg-gradient-to-b from-slate-800/90 to-indigo-950/90 border border-white/15 p-4 space-y-3.5 shadow-inner overflow-hidden">
           {/* Subtle Top Accent */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-indigo-500 to-blue-500" />
 

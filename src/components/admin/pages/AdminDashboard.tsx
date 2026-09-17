@@ -453,7 +453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-slate-900">Shared expense added</p>
-                <p className="text-[11px] text-slate-500 truncate">₹850 Groceries in Flat 302</p>
+                <p className="text-[11px] text-slate-500 truncate">₹850 Groceries in Shared Room</p>
               </div>
               <span className="text-[10px] text-slate-400 shrink-0">8 mins ago</span>
             </div>

@@ -36,13 +36,25 @@ export const SecurityTestModal: React.FC<SecurityTestModalProps> = ({ onClose })
       });
 
       // 2. Test Privacy Isolation (Student B querying Student A's personal expenses)
+      let testExpId: string | null = null;
+      const studentA = 'usr-test-student-a-' + Math.random().toString(36).substr(2, 5);
+      const studentB = 'usr-test-student-b-' + Math.random().toString(36).substr(2, 5);
+
       try {
-        const sneakPeek = db.getPersonalExpenses('usr-sneha-2');
-        const hasRajdeepExpenses = sneakPeek.some((e) => e.userId === 'usr-rajdeep-1');
+        const createdExp = db.createPersonalExpense(studentA, {
+          title: 'Private Textbook',
+          amount: 450,
+          category: 'Academics',
+          expenseDate: new Date().toISOString(),
+        });
+        testExpId = createdExp.id;
+
+        const sneakPeek = db.getPersonalExpenses(studentB);
+        const hasAExpenses = sneakPeek.some((e) => e.userId === studentA);
         results.push({
           category: 'PRIVACY_RLS',
           name: 'Personal Expense Isolation: Student B cannot retrieve Student A’s private expenses',
-          passed: !hasRajdeepExpenses && sneakPeek.every((e) => e.userId === 'usr-sneha-2'),
+          passed: !hasAExpenses && sneakPeek.every((e) => e.userId === studentB),
           details: 'Verified database RLS query strictly filters by auth.uid = user_id',
         });
       } catch (err: unknown) {
@@ -57,10 +69,18 @@ export const SecurityTestModal: React.FC<SecurityTestModalProps> = ({ onClose })
       // 3. Test IDOR Attack (Student B attempting to delete Student A’s personal expense)
       try {
         let caughtIdor = false;
-        try {
-          db.deletePersonalExpense('usr-sneha-2', 'pe-rajdeep-1');
-        } catch (err: unknown) {
-          caughtIdor = String(err).includes('IDOR_VIOLATION');
+        if (testExpId) {
+          try {
+            db.deletePersonalExpense(studentB, testExpId);
+          } catch (err: unknown) {
+            caughtIdor = String(err).includes('IDOR_VIOLATION');
+          }
+          // Cleanup test expense using legitimate owner
+          try {
+            db.deletePersonalExpense(studentA, testExpId);
+          } catch {
+            // ignore
+          }
         }
         results.push({
           category: 'IDOR_PROTECTION',
@@ -83,13 +103,13 @@ export const SecurityTestModal: React.FC<SecurityTestModalProps> = ({ onClose })
       try {
         let caughtAccessDenied = false;
         try {
-          db.createSharedExpense('usr-sneha-2', {
-            roomId: 'room-hostel-14', // Sneha is NOT a member of Hostel Room 14
-            paidBy: 'usr-sneha-2',
+          db.createSharedExpense(studentB, {
+            roomId: 'room-unjoined-security-test',
+            paidBy: studentB,
             title: 'Sneak Attack Bill',
             totalAmount: 500,
             category: 'Electricity',
-            participantUserIds: ['usr-aryan-3'],
+            participantUserIds: [studentA],
           });
         } catch (err: unknown) {
           caughtAccessDenied = String(err).includes('ACCESS_DENIED');
@@ -117,13 +137,13 @@ export const SecurityTestModal: React.FC<SecurityTestModalProps> = ({ onClose })
         const firstDispatch = db.processRazorpayWebhook(
           testEventId,
           'subscription.charged',
-          'usr-rajdeep-1',
+          studentA,
           { amount: 4900 }
         );
         const secondDispatch = db.processRazorpayWebhook(
           testEventId,
           'subscription.charged',
-          'usr-rajdeep-1',
+          studentA,
           { amount: 4900 }
         );
 

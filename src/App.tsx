@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   User,
   Room,
@@ -48,6 +48,7 @@ import { AdminRouter } from './components/admin/AdminRouter';
 import { AdminLoginView } from './components/admin/AdminLoginView';
 import { SecurityTestModal } from './components/SecurityTestModal';
 import { SupabaseSyncModal } from './components/SupabaseSyncModal';
+import { CloudSyncSheet } from './components/mobile/CloudSyncSheet';
 import { sendLocalJoinApprovalNotification } from './lib/native/notifications';
 import { MobileLayout } from './components/mobile/MobileLayout';
 import { MobileLogin } from './components/mobile/MobileLogin';
@@ -112,11 +113,41 @@ export function AppContent() {
   });
   const [viewMode, setViewMode] = useState<'mobile' | 'desktop'>(() => getInitialDeviceMode());
   const [activeTab, setActiveTab] = useState<'dashboard' | 'personal' | 'rooms' | 'subscription' | 'admin'>('dashboard');
+  // Active rooms where currentUser is an active member
+  const userRooms = useMemo(() => {
+    return dbState.rooms.filter((r) =>
+      dbState.roomMembers.some(
+        (m) => m.roomId === r.id && m.userId === currentUser.id && m.status === 'ACTIVE'
+      )
+    );
+  }, [dbState.rooms, dbState.roomMembers, currentUser.id]);
+
   const [activeRoom, setActiveRoom] = useState<Room | null>(() => {
-    return db.getState().rooms[0] || null;
+    const session = getStoredResidentSession();
+    const userId = session?.sub || DEFAULT_RESIDENT.id;
+    const initialUserRooms = db.getState().rooms.filter((r) =>
+      db.getState().roomMembers.some(
+        (m) => m.roomId === r.id && m.userId === userId && m.status === 'ACTIVE'
+      )
+    );
+    return initialUserRooms[0] || null;
   });
+
+  // Keep activeRoom strictly in sync with userRooms
+  useEffect(() => {
+    if (activeRoom) {
+      const stillActive = userRooms.find((r: Room) => r.id === activeRoom.id);
+      if (!stillActive) {
+        setActiveRoom(userRooms[0] || null);
+      }
+    } else if (userRooms.length > 0) {
+      setActiveRoom(userRooms[0]);
+    }
+  }, [userRooms, activeRoom]);
+
   const [showSecurityAudit, setShowSecurityAudit] = useState(false);
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [showCloudSyncSheet, setShowCloudSyncSheet] = useState(false);
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
   const [remoteSyncToast, setRemoteSyncToast] = useState<string | null>(null);
   const [roomJoinRequests, setRoomJoinRequests] = useState<Array<RoomJoinRequest & { user: User }>>([]);
@@ -573,39 +604,77 @@ export function AppContent() {
 
   // In-App Notification Action Handlers
   const handleToggleNotificationRead = async (id: string, currentRead: boolean) => {
-    await toggleNotificationReadCloud(id, currentRead);
+    // 1. Instant optimistic local UI update
     setDbState((prev) => ({
       ...prev,
       notifications: (prev.notifications || []).map((n) =>
         n.id === id ? { ...n, isRead: !currentRead, readAt: !currentRead ? new Date().toISOString() : undefined } : n
       ),
     }));
+
+    // 2. Background cloud & storage persistence
+    try {
+      await toggleNotificationReadCloud(id, currentRead);
+    } catch (err) {
+      console.warn('handleToggleNotificationRead error:', err);
+    }
   };
 
-  const handleMarkAllNotificationsRead = async () => {
-    await markAllNotificationsReadCloud(currentUser.id);
-    setDbState((prev) => ({
-      ...prev,
-      notifications: (prev.notifications || []).map((n) =>
-        n.userId === currentUser.id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
-      ),
-    }));
+  const handleMarkAllNotificationsRead = async (ids?: string[]) => {
+    // 1. Instant optimistic local UI update (0ms delay)
+    const nowIso = new Date().toISOString();
+    setDbState((prev) => {
+      const updated = (prev.notifications || []).map((n) => {
+        const isTarget = ids && ids.length > 0
+          ? ids.includes(n.id)
+          : (n.userId === currentUser.id || !n.userId || n.userId === 'usr-rajdeep-1' || currentUser.name?.toLowerCase().includes('rajdeep'));
+        return isTarget && !n.isRead ? { ...n, isRead: true, readAt: nowIso } : n;
+      });
+      return { ...prev, notifications: updated };
+    });
+
+    // 2. Background cloud & storage persistence
+    try {
+      await markAllNotificationsReadCloud(currentUser.id, ids);
+    } catch (err) {
+      console.warn('handleMarkAllNotificationsRead error:', err);
+    }
   };
 
   const handleDeleteNotification = async (id: string) => {
-    await deleteNotificationCloud(id);
+    // 1. Instant optimistic local UI update
     setDbState((prev) => ({
       ...prev,
       notifications: (prev.notifications || []).filter((n) => n.id !== id),
     }));
+
+    // 2. Background cloud & storage persistence
+    try {
+      await deleteNotificationCloud(id);
+    } catch (err) {
+      console.warn('handleDeleteNotification error:', err);
+    }
   };
 
-  const handleClearReadNotifications = async () => {
-    await clearReadNotificationsCloud(currentUser.id);
+  const handleClearReadNotifications = async (ids?: string[]) => {
+    // 1. Instant optimistic local UI update
     setDbState((prev) => ({
       ...prev,
-      notifications: (prev.notifications || []).filter((n) => !(n.userId === currentUser.id && n.isRead)),
+      notifications: (prev.notifications || []).filter((n) => {
+        if (ids && ids.length > 0) {
+          return !ids.includes(n.id);
+        }
+        const isUserTarget = n.userId === currentUser.id || !n.userId || n.userId === 'usr-rajdeep-1' || currentUser.name?.toLowerCase().includes('rajdeep');
+        return !(isUserTarget && n.isRead);
+      }),
     }));
+
+    // 2. Background cloud & storage persistence
+    try {
+      await clearReadNotificationsCloud(currentUser.id, ids);
+    } catch (err) {
+      console.warn('handleClearReadNotifications error:', err);
+    }
   };
 
   const handleTransferOwnership = async (roomId: string, newAdminId: string) => {
@@ -1118,7 +1187,7 @@ export function AppContent() {
           allUsers={dbState.users}
           onSwitchUser={handleSwitchUser}
           activeRoom={activeRoom}
-          rooms={dbState.rooms}
+          rooms={userRooms}
           onSelectRoom={setActiveRoom}
           roomMembers={dbState.roomMembers}
           roomInvitations={dbState.roomInvitations}
@@ -1177,8 +1246,16 @@ export function AppContent() {
           onLogout={handleLogout}
           isRealtimeLive={isRealtimeLive}
           onOpenSupabaseModal={() => setShowSupabaseModal(true)}
+          onOpenCloudSyncSheet={() => setShowCloudSyncSheet(true)}
           onProfileUpdated={refreshState}
-          notifications={dbState.notifications || []}
+          notifications={
+            (dbState.notifications || []).filter(
+              (n) =>
+                n.userId === currentUser.id ||
+                !n.userId ||
+                (n.userId === 'usr-rajdeep-1' && (currentUser.id === 'usr-rajdeep-1' || currentUser.name?.toLowerCase().includes('rajdeep')))
+            )
+          }
           onToggleNotificationRead={handleToggleNotificationRead}
           onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
           onDeleteNotification={handleDeleteNotification}
@@ -1187,6 +1264,22 @@ export function AppContent() {
 
         {showSecurityAudit && (
           <SecurityTestModal onClose={() => setShowSecurityAudit(false)} />
+        )}
+
+        {showCloudSyncSheet && (
+          <CloudSyncSheet
+            isOpen={showCloudSyncSheet}
+            onClose={() => setShowCloudSyncSheet(false)}
+            roomsCount={userRooms.length}
+            expensesCount={(dbState.personalExpenses?.length || 0) + (dbState.sharedExpenses?.length || 0)}
+            onForceSync={async () => {
+              refreshState();
+            }}
+            onOpenDeveloperHub={() => {
+              setShowCloudSyncSheet(false);
+              setShowSupabaseModal(true);
+            }}
+          />
         )}
 
         {showSupabaseModal && (
@@ -1297,7 +1390,7 @@ export function AppContent() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         activeRoom={activeRoom}
-        rooms={dbState.rooms}
+        rooms={userRooms}
         onSelectRoom={setActiveRoom}
         onOpenSecurityAudit={() => setShowSecurityAudit(true)}
         onOpenSupabaseSync={() => setShowSupabaseModal(true)}
@@ -1313,7 +1406,7 @@ export function AppContent() {
             expenseSplits={dbState.expenseSplits}
             settlementPayments={dbState.settlementPayments}
             allUsers={dbState.users}
-            rooms={dbState.rooms}
+            rooms={userRooms}
             onOpenAddPersonal={handleOpenAddPersonal}
             onOpenAddShared={handleOpenAddShared}
             onNavigateTab={setActiveTab}
@@ -1335,7 +1428,7 @@ export function AppContent() {
           <RoomLedger
             currentUser={currentUser}
             allUsers={dbState.users}
-            rooms={dbState.rooms}
+            rooms={userRooms}
             activeRoom={activeRoom}
             onSelectRoom={setActiveRoom}
             roomMembers={dbState.roomMembers}

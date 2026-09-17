@@ -45,11 +45,12 @@ interface MobileDashboardProps {
   onNavigateToRooms: () => void;
   isRealtimeLive?: boolean;
   onOpenSupabaseModal?: () => void;
+  onOpenCloudSyncSheet?: () => void;
   notifications?: InAppNotification[];
   onToggleNotificationRead?: (id: string, currentRead: boolean) => void;
-  onMarkAllNotificationsRead?: () => void;
+  onMarkAllNotificationsRead?: (ids?: string[]) => void;
   onDeleteNotification?: (id: string) => void;
-  onClearReadNotifications?: () => void;
+  onClearReadNotifications?: (ids?: string[]) => void;
   onNotificationAction?: (notification: InAppNotification) => void;
   onRecordSettlement?: (data: {
     roomId: string;
@@ -80,6 +81,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   onNavigateToRooms,
   isRealtimeLive,
   onOpenSupabaseModal,
+  onOpenCloudSyncSheet,
   notifications = [],
   onToggleNotificationRead,
   onMarkAllNotificationsRead,
@@ -277,15 +279,15 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onOpenSupabaseModal && (
+            {(onOpenCloudSyncSheet || onOpenSupabaseModal) && (
               <button
-                onClick={onOpenSupabaseModal}
+                onClick={onOpenCloudSyncSheet || onOpenSupabaseModal}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-2xs active:scale-95 transition-all ${
                   !isOnline
                     ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
                     : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
-                title={!isOnline ? 'Offline Mode - Operating on Local Vault' : 'Supabase Cloud Sync'}
+                title={!isOnline ? 'Offline Mode - Operating on Local Vault' : 'Cloud Backup & Sync'}
               >
                 {!isOnline ? (
                   <>
@@ -300,10 +302,10 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                           ? 'bg-indigo-500 animate-spin'
                           : isRealtimeLive
                           ? 'bg-emerald-500 animate-pulse'
-                          : 'bg-slate-400'
+                          : 'bg-emerald-500'
                       }`}
                     />
-                    <span>{isReconnecting ? 'Syncing...' : isRealtimeLive ? 'Cloud Live' : 'Supabase'}</span>
+                    <span>{isReconnecting ? 'Syncing...' : isRealtimeLive ? 'Cloud Live' : 'Cloud Saved'}</span>
                   </>
                 )}
               </button>
@@ -454,20 +456,41 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       <section className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between pb-0.5">
           <h2 className="text-sm font-bold text-slate-900">
-            Roommates in {activeRoom?.name || 'Your Room'}
+            {activeRoom ? `Roommates in ${activeRoom.name}` : 'Shared Room Ledger'}
           </h2>
           <button
             onClick={onNavigateToRooms}
             className="text-xs text-indigo-600 font-semibold hover:underline"
             type="button"
           >
-            See all
+            {activeRoom ? 'See all' : 'Explore'}
           </button>
         </div>
 
         {/* Inset List Container */}
         <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)]">
-          {roommateBalances.length > 0 ? (
+          {!activeRoom ? (
+            <div className="p-6 text-center flex flex-col items-center">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 shadow-2xs">
+                <Home className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-bold text-slate-800 mb-0.5">No Active Room Yet</p>
+              <p className="text-[11px] text-slate-500 max-w-[260px] mb-3 leading-relaxed">
+                Create a room for your flat, PG, or hostel, or join your flatmates using their 6-character room code.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  hapticImpact('LIGHT');
+                  onNavigateToRooms();
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create or Join Room</span>
+              </button>
+            </div>
+          ) : roommateBalances.length > 0 ? (
             roommateBalances.map((rm, idx) => {
               const owesMe = rm.balance > 0;
               const iOweHim = rm.balance < 0;
