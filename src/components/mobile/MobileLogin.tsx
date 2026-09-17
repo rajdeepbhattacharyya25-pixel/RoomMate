@@ -45,6 +45,7 @@ import {
   checkEmailVerificationStatusCloud,
   resendConfirmationEmailCloud,
   signInWithGoogleOAuth,
+  signInResidentWithCredentialsCloud,
 } from '../../lib/storage/cloudStorageAdapter';
 import { StrictPinInput } from '../common/StrictPinInput';
 import { GoogleSignInButton } from '../common/GoogleSignInButton';
@@ -79,6 +80,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // Form Fields for Join with Code & QR Wizard
   const [joinInviteCode, setJoinInviteCode] = useState('');
@@ -173,62 +175,63 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     }
   }, [residentUsers, selectedDemoUserId]);
 
-  // Handle Standard Sign In
-  const handleSignIn = (e?: React.FormEvent) => {
+  // Handle Standard Sign In with Strict Backend Credential Verification
+  const handleSignIn = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage(null);
     hapticImpact('LIGHT');
 
     const cleanId = identifier.trim().toLowerCase();
-    let matchedUser = residentUsers.find(
-      (u) =>
-        u.email.toLowerCase() === cleanId ||
-        (u.phone && u.phone.replace(/\s/g, '').includes(cleanId)) ||
-        u.name.toLowerCase() === cleanId
-    );
-
-    // If account doesn't exist, offer smooth automatic creation rather than a dead-end
-    if (!matchedUser) {
-      if (cleanId.includes('@') || /^\+?\d{8,15}$/.test(cleanId)) {
-        const generatedName = cleanId.includes('@')
-          ? cleanId.split('@')[0].replace(/[._-]/g, ' ')
-          : 'Resident';
-        const capitalized =
-          generatedName.charAt(0).toUpperCase() + generatedName.slice(1);
-        matchedUser = {
-          id: 'usr-' + Math.random().toString(36).substring(2, 9),
-          name: capitalized,
-          email: cleanId.includes('@') ? cleanId : `${cleanId}@roommate.app`,
-          phone: !cleanId.includes('@') ? cleanId : undefined,
-          role: 'STUDENT',
-          isSuspended: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        hapticWarning();
-        setErrorMessage(
-          'Please enter a valid email or phone number to sign in or create an account.'
-        );
-        return;
-      }
-    }
-
-    const token = createResidentToken(matchedUser, {
-      expiresInDays: rememberDevice ? 7 : 1,
-      biometricVerified: false,
-    });
-
-    const verifyResult = verifyResidentToken(token);
-    if (!verifyResult.valid) {
+    if (!cleanId) {
       hapticWarning();
-      setErrorMessage(`Verification Notice: ${verifyResult.error}`);
+      setErrorMessage('Please enter your email address or mobile number.');
       return;
     }
 
-    hapticSuccess();
-    storeResidentSession(token, rememberDevice);
-    onLogin(matchedUser, token);
+    if (!password || !password.trim()) {
+      hapticWarning();
+      setErrorMessage('Please enter your 4-digit security PIN.');
+      return;
+    }
+
+    setIsSigningIn(true);
+
+    try {
+      const authResult = await signInResidentWithCredentialsCloud(cleanId, password);
+
+      if (!authResult.success || !authResult.user) {
+        hapticWarning();
+        setErrorMessage(
+          authResult.error || 'Authentication failed. Please check your credentials.'
+        );
+        return;
+      }
+
+      const verifiedUser = authResult.user;
+
+      const token = createResidentToken(verifiedUser, {
+        expiresInDays: rememberDevice ? 7 : 1,
+        biometricVerified: false,
+      });
+
+      const verifyResult = verifyResidentToken(token);
+      if (!verifyResult.valid) {
+        hapticWarning();
+        setErrorMessage(`Verification Notice: ${verifyResult.error}`);
+        return;
+      }
+
+      hapticSuccess();
+      storeResidentSession(token, rememberDevice);
+      onLogin(verifiedUser, token);
+    } catch (err: unknown) {
+      hapticWarning();
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Sign-in failed. Please try again.'
+      );
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   // Handle Google OAuth Sign-In
@@ -264,20 +267,19 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
     try {
       const cleanId = identifier.trim().toLowerCase();
-      const targetUser =
-        residentUsers.find(
-          (u) =>
-            u.email.toLowerCase() === cleanId ||
-            (u.phone && u.phone.replace(/\s/g, '').includes(cleanId))
-        ) ||
-        (selectedDemoUserId
-          ? residentUsers.find((u) => u.id === selectedDemoUserId)
-          : null) ||
-        residentUsers[0];
+      const targetUser = cleanId
+        ? residentUsers.find(
+            (u) =>
+              u.email.toLowerCase() === cleanId ||
+              (u.phone && u.phone.replace(/\s/g, '').includes(cleanId))
+          )
+        : (selectedDemoUserId
+            ? residentUsers.find((u) => u.id === selectedDemoUserId)
+            : null);
 
       if (!targetUser) {
         hapticWarning();
-        setErrorMessage('Please select or enter your resident account first.');
+        setErrorMessage('Please enter your registered email or phone number first.');
         setIsScanningBiometrics(false);
         return;
       }
@@ -1286,10 +1288,20 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               {/* Primary Action Button */}
               <button
                 type="submit"
-                className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center space-x-2 shadow-sm transition-all duration-150"
+                disabled={isSigningIn}
+                className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 disabled:pointer-events-none active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center space-x-2 shadow-sm transition-all duration-150"
               >
-                <span>Sign In to RoomMate</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSigningIn ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to RoomMate</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
 

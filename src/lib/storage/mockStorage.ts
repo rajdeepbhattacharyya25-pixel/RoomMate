@@ -1302,6 +1302,34 @@ class MockDatabase {
     return updated;
   }
 
+  public resetSuperAdminMfa(userId: string): SuperAdminSecuritySettings {
+    if (!this.state.superAdminSecuritySettings) {
+      this.state.superAdminSecuritySettings = {};
+    }
+    const existingHash = this.state.superAdminSecuritySettings[userId]?.masterPasswordHash;
+    const fresh: SuperAdminSecuritySettings = {
+      userId,
+      masterPasswordHash: existingHash,
+      totpEnrolled: false,
+      totpFactorId: undefined,
+      totpSecret: undefined,
+      backupTotpEnrolled: false,
+      backupTotpFactorId: undefined,
+      biometricEnabled: false,
+      recoveryCodesConfigured: false,
+      recoveryCodesRemaining: 0,
+      mfaRequired: true,
+      failedMfaAttempts: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.superAdminSecuritySettings[userId] = fresh;
+    if (this.state.superAdminRecoveryCodes) {
+      this.state.superAdminRecoveryCodes = this.state.superAdminRecoveryCodes.filter((c) => c.userId !== userId);
+    }
+    this.save(this.state);
+    return fresh;
+  }
+
   public getSuperAdminTrustedDevices(userId: string): SuperAdminDevice[] {
     if (!this.state.superAdminTrustedDevices) {
       this.state.superAdminTrustedDevices = [];
@@ -1378,8 +1406,17 @@ class MockDatabase {
     return count;
   }
 
-  public storeRecoveryCodes(userId: string, codeHashes: string[], deviceId?: string): number {
-    this.assertSuperAdminAccess(userId, 3, deviceId);
+  public storeRecoveryCodes(
+    userId: string,
+    codeHashes: string[],
+    deviceId?: string,
+    isInitialEnrollment = false
+  ): number {
+    if (!isInitialEnrollment) {
+      this.assertSuperAdminAccess(userId, 3, deviceId);
+    } else {
+      this.assertSuperAdminAccess(userId, 1, deviceId);
+    }
 
     if (codeHashes.length !== 8) {
       throw new Error('INVALID_ARGUMENT: Canonical recovery code count must be exactly 8');
@@ -1852,6 +1889,86 @@ class MockDatabase {
 
     this.save(this.state);
     return feat;
+  }
+
+  public getContactRequests(): ContactRequest[] {
+    return this.state.contactRequests || [];
+  }
+
+  public updateContactRequestStatus(
+    superAdminId: string,
+    contactId: string,
+    status: 'NEW' | 'IN_REVIEW' | 'RESOLVED',
+    adminNotes?: string
+  ): ContactRequest | null {
+    const admin = this.state.users.find((u) => u.id === superAdminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('ACCESS_DENIED: Super Admin privileges required');
+    }
+
+    if (!this.state.contactRequests) this.state.contactRequests = [];
+    const req = this.state.contactRequests.find((c) => c.id === contactId);
+    if (!req) return null;
+
+    req.status = status;
+    if (adminNotes !== undefined) (req as any).adminNotes = adminNotes;
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'CONTACT_REQUEST_STATUS_CHANGED',
+      resourceType: 'CONTACT_REQUEST',
+      resourceId: contactId,
+      metadata: { newStatus: status, subject: req.subject },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return req;
+  }
+
+  public updateUserRole(
+    superAdminId: string,
+    targetUserId: string,
+    newRole: UserRole,
+    deviceId?: string
+  ): boolean {
+    const admin = this.state.users.find((u) => u.id === superAdminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new Error('FORBIDDEN: Caller lacks SUPER_ADMIN platform authorization');
+    }
+
+    if (superAdminId === targetUserId && newRole !== 'SUPER_ADMIN') {
+      throw new Error('INVALID_ACTION: SuperAdmin cannot demote their own account');
+    }
+
+    const user = this.state.users.find((u) => u.id === targetUserId);
+    if (!user) {
+      return false;
+    }
+
+    const previousRole = user.role;
+    user.role = newRole;
+    user.updatedAt = new Date().toISOString();
+
+    this.state.auditLogs.unshift({
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
+      userId: superAdminId,
+      action: 'USER_ROLE_CHANGED',
+      resourceType: 'USER',
+      resourceId: targetUserId,
+      metadata: {
+        targetUserName: user.name,
+        targetUserEmail: user.email,
+        previousRole,
+        newRole,
+        deviceId: deviceId || null,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.save(this.state);
+    return true;
   }
 
   public getAnnouncements(): PlatformAnnouncement[] {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   UserCheck,
@@ -10,20 +10,28 @@ import {
   AlertTriangle,
   Receipt,
   CheckCircle2,
+  ArrowRightLeft,
+  Shield,
+  ShieldAlert,
 } from 'lucide-react';
-import { User, Room, RoomMember } from '../../../types';
+import { User, UserRole, Room, RoomMember, SharedExpense, SettlementPayment, AuditLog } from '../../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { ConfirmationDialog } from '../common/ConfirmationDialog';
-import { formatFullDateTime, formatRelativeTime } from '../../../lib/utils/currencyFormatter';
+import { formatFullDateTime, formatRelativeTime, formatInr } from '../../../lib/utils/currencyFormatter';
 
 interface AdminUserDetailModalProps {
   user: User | null;
   onClose: () => void;
   rooms: Room[];
   roomMembers: RoomMember[];
+  sharedExpenses?: SharedExpense[];
+  settlementPayments?: SettlementPayment[];
+  auditLogs?: AuditLog[];
+  currentAdminUser?: User;
   onToggleSuspension: (userId: string, suspend: boolean, reason?: string) => void;
   onRevokeSessions: (userId: string) => void;
   onSendNotification: (userId: string, title: string, message: string) => void;
+  onUpdateUserRole?: (userId: string, newRole: UserRole) => Promise<void> | void;
 }
 
 export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
@@ -31,13 +39,19 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   onClose,
   rooms,
   roomMembers,
+  sharedExpenses = [],
+  settlementPayments = [],
+  auditLogs = [],
+  currentAdminUser,
   onToggleSuspension,
   onRevokeSessions,
   onSendNotification,
+  onUpdateUserRole,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'rooms' | 'activity' | 'actions'>('overview');
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
   const [notifSuccess, setNotifSuccess] = useState(false);
@@ -47,6 +61,101 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   // Rooms this user belongs to
   const userRoomMemberships = roomMembers.filter((m) => m.userId === user.id);
   const userRooms = rooms.filter((r) => userRoomMemberships.some((m) => m.roomId === r.id));
+
+  // Synthesize real user activity stream
+  const userActivity = useMemo(() => {
+    if (!user) return [];
+    const items: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      timestamp: string;
+      icon: 'clock' | 'receipt' | 'building' | 'settlement' | 'shield';
+    }> = [];
+
+    // 1. Account registration
+    if (user.createdAt) {
+      items.push({
+        id: `reg-${user.id}`,
+        title: 'Student profile verified',
+        description: `Registered with ${user.email}`,
+        timestamp: user.createdAt,
+        icon: 'clock',
+      });
+    }
+
+    // 2. Room memberships
+    userRoomMemberships.forEach((m) => {
+      const room = rooms.find((r) => r.id === m.roomId);
+      items.push({
+        id: `room-${m.id}`,
+        title: `Joined room ${room?.name || 'Flat'}`,
+        description: `Role assigned: ${m.role === 'ROOM_ADMIN' ? 'Room Admin' : 'Resident'}`,
+        timestamp: m.joinedAt,
+        icon: 'building',
+      });
+    });
+
+    // 3. Shared expenses recorded or paid
+    sharedExpenses.forEach((e) => {
+      if (e.paidBy === user.id) {
+        items.push({
+          id: `exp-${e.id}`,
+          title: `Paid bill: "${e.title}"`,
+          description: `Total ${formatInr(e.totalAmount)} (${e.category})`,
+          timestamp: e.createdAt,
+          icon: 'receipt',
+        });
+      } else if (e.createdBy === user.id) {
+        items.push({
+          id: `exp-create-${e.id}`,
+          title: `Recorded shared expense: "${e.title}"`,
+          description: `${formatInr(e.totalAmount)} &bull; ${e.category}`,
+          timestamp: e.createdAt,
+          icon: 'receipt',
+        });
+      }
+    });
+
+    // 4. Settlement payments
+    settlementPayments.forEach((s) => {
+      if (s.payerId === user.id) {
+        items.push({
+          id: `settle-pay-${s.id}`,
+          title: `Settled balance payment`,
+          description: `Transferred ${formatInr(s.amount)} via ${s.paymentMethod}`,
+          timestamp: s.createdAt,
+          icon: 'settlement',
+        });
+      } else if (s.payeeId === user.id) {
+        items.push({
+          id: `settle-rec-${s.id}`,
+          title: `Received balance reimbursement`,
+          description: `Received ${formatInr(s.amount)} via ${s.paymentMethod}`,
+          timestamp: s.createdAt,
+          icon: 'settlement',
+        });
+      }
+    });
+
+    // 5. Audit logs for this user
+    auditLogs.forEach((a) => {
+      if (a.userId === user.id || (a.details as any)?.targetUserId === user.id) {
+        items.push({
+          id: `audit-${a.id}`,
+          title: a.action.replace(/_/g, ' '),
+          description: a.ipAddress ? `IP: ${a.ipAddress}` : undefined,
+          timestamp: a.createdAt,
+          icon: 'shield',
+        });
+      }
+    });
+
+    // Sort descending by timestamp
+    return items
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 15);
+  }, [user, userRoomMemberships, rooms, sharedExpenses, settlementPayments, auditLogs]);
 
   const handleSendDirectNotif = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,32 +288,47 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
 
           {activeTab === 'activity' && (
             <div className="space-y-3">
-              <div className="text-xs font-bold text-slate-800">Non-Sensitive Activity Stream</div>
-              <div className="space-y-2.5">
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-3 text-xs">
-                  <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-900">Signed in to RoomMate Mobile</p>
-                    <p className="text-[11px] text-slate-400">{formatRelativeTime(user.updatedAt)}</p>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-3 text-xs">
-                  <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-900">Recorded shared expense</p>
-                    <p className="text-[11px] text-slate-400">3 days ago</p>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-3 text-xs">
-                  <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-900">Joined room with invite code</p>
-                    <p className="text-[11px] text-slate-400">{formatRelativeTime(user.createdAt)}</p>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                <span>Non-Sensitive Activity Stream</span>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {userActivity.length} events recorded
+                </span>
               </div>
+
+              {userActivity.length > 0 ? (
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {userActivity.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-3 text-xs hover:bg-slate-100/60 transition-colors"
+                    >
+                      {item.icon === 'clock' && <Clock className="w-4 h-4 text-indigo-600 shrink-0" />}
+                      {item.icon === 'receipt' && <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />}
+                      {item.icon === 'building' && <Building2 className="w-4 h-4 text-purple-600 shrink-0" />}
+                      {item.icon === 'settlement' && <ArrowRightLeft className="w-4 h-4 text-teal-600 shrink-0" />}
+                      {item.icon === 'shield' && <Shield className="w-4 h-4 text-amber-600 shrink-0" />}
+
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{item.title}</p>
+                        {item.description && (
+                          <p className="text-[11px] text-slate-500 truncate">{item.description}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-400 shrink-0 whitespace-nowrap">
+                        {formatRelativeTime(item.timestamp)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+                  <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">No Activity Recorded</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    This student has not performed any room or billing transactions yet.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -246,6 +370,63 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
                     Dispatch Notification
                   </button>
                 </form>
+              </div>
+
+              {/* Role Authority & Privilege Management Zone */}
+              <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-purple-800">
+                    <Shield className="w-4 h-4" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider">Platform Role Authority</h4>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      user.role === 'SUPER_ADMIN'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    Current: {user.role === 'SUPER_ADMIN' ? 'SuperAdmin' : 'Resident Student'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600 leading-snug">
+                  {user.role === 'SUPER_ADMIN'
+                    ? 'This user holds SuperAdmin privileges, enabling platform configuration, user governance, room freezes, and security telemetry.'
+                    : 'This user is currently a standard Resident Student. Elevating them will grant platform-wide SuperAdmin console access.'}
+                </p>
+
+                <div className="pt-1">
+                  {user.role === 'STUDENT' ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowRoleDialog(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 border border-purple-600 shadow-2xs transition-colors"
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Promote to SuperAdmin</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={Boolean(currentAdminUser && currentAdminUser.id === user.id)}
+                      onClick={() => setShowRoleDialog(true)}
+                      title={
+                        currentAdminUser && currentAdminUser.id === user.id
+                          ? 'You cannot demote your own active SuperAdmin account.'
+                          : undefined
+                      }
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>
+                        {currentAdminUser && currentAdminUser.id === user.id
+                          ? 'Cannot Demote Current Admin (Protected)'
+                          : 'Demote to Resident Student'}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Dangerous Actions Zone */}
@@ -291,6 +472,27 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Role Change Confirmation Dialog */}
+        <ConfirmationDialog
+          isOpen={showRoleDialog}
+          onClose={() => setShowRoleDialog(false)}
+          onConfirm={() => {
+            const nextRole: UserRole = user.role === 'SUPER_ADMIN' ? 'STUDENT' : 'SUPER_ADMIN';
+            if (onUpdateUserRole) {
+              onUpdateUserRole(user.id, nextRole);
+            }
+            setShowRoleDialog(false);
+          }}
+          title={user.role === 'SUPER_ADMIN' ? 'Demote SuperAdmin to Student' : 'Promote Student to SuperAdmin'}
+          description={
+            user.role === 'SUPER_ADMIN'
+              ? `Are you sure you want to revoke administrative privileges for ${user.name}? They will immediately lose access to the SuperAdmin console and revert to a standard student resident account.`
+              : `CRITICAL PRIVILEGE ESCALATION: Are you sure you want to promote ${user.name} to SuperAdmin? They will receive full administrative control over all rooms, user accounts, and platform settings.`
+          }
+          variant={user.role === 'SUPER_ADMIN' ? 'warning' : 'danger'}
+          confirmLabel={user.role === 'SUPER_ADMIN' ? 'Demote to Student' : 'Promote to SuperAdmin'}
+        />
 
         {/* Suspend Confirmation Dialog */}
         <ConfirmationDialog

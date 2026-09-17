@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { Database, Json } from '../../types/supabase';
-import { db, DatabaseState } from './mockStorage';
+import { db, DatabaseState, DEFAULT_STAGING_SEEDS } from './mockStorage';
 import {
   User,
   Room,
@@ -17,36 +17,31 @@ import {
   InAppNotification,
   BugReport,
   BugStatus,
+  SystemIncident,
+  PlatformAnnouncement,
+  PlatformSettings,
+  FeatureSuggestionStatus,
+  ContactRequest,
 } from '../../types';
 import { enqueueOfflineItem } from './offlineQueue';
-import { validateStrict4DigitPin, hashPin, clearResidentSession } from '../auth/jwtService';
+import { validateStrict4DigitPin, hashPin, clearResidentSession, createResidentToken } from '../auth/jwtService';
 import { isNativeApp } from '../platform/deviceDetector';
 
 export const IS_LIVE_SYNC_ENABLED =
   isSupabaseConfigured && import.meta.env.VITE_USE_LIVE_SUPABASE === 'true';
 
-// Helper to authenticate user with Supabase Auth for RLS
+// Helper to verify user has an active Supabase Auth session
 export async function authenticateResidentWithSupabase(email: string): Promise<boolean> {
-  if (!IS_LIVE_SYNC_ENABLED) return false;
+  if (!IS_LIVE_SYNC_ENABLED || !email) return false;
 
   try {
     const { data: session } = await supabase.auth.getSession();
     if (session?.session?.user?.email?.toLowerCase() === email.toLowerCase()) {
       return true;
     }
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: 'CampusFlowPassword2026!',
-    });
-
-    if (error) {
-      console.warn('Supabase Auth auto-login notice:', error.message);
-      return false;
-    }
-    return true;
+    return false;
   } catch (err) {
-    console.warn('Supabase Auth connection offline:', err);
+    console.warn('Supabase Auth session verification error:', err);
     return false;
   }
 }
@@ -78,6 +73,18 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       createdAt: p.created_at,
       updatedAt: p.updated_at,
     }));
+
+    // Ensure SuperAdmin exists in the users list for administrative platform access
+    const hasSuperAdmin = users.some((u) => u.role === 'SUPER_ADMIN');
+    if (!hasSuperAdmin) {
+      const defaultAdmin = DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN');
+      if (defaultAdmin) {
+        users.unshift(defaultAdmin);
+      }
+    }
+
+    // Keep local database cache in sync with cloud profiles
+    users.forEach((u) => db.upsertUser(u));
 
     // 2. Rooms
     const { data: rawRooms } = await supabase.from('rooms').select('*').eq('is_archived', false);
@@ -221,6 +228,31 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       // fallback to local notifications if table not yet migrated or offline
     }
 
+    // System Incidents (Crashlytics, telemetry warnings, system health)
+    let systemIncidents: SystemIncident[] = localState.systemIncidents || [];
+    try {
+      const { data: rawIncidents } = await (supabase as any)
+        .from('system_incidents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (rawIncidents && rawIncidents.length > 0) {
+        systemIncidents = rawIncidents.map((inc: any) => ({
+          id: inc.id,
+          service: inc.service,
+          error: inc.error,
+          severity: inc.severity,
+          status: inc.status,
+          occurrences: inc.occurrences,
+          details: inc.details || undefined,
+          createdAt: inc.created_at,
+          resolvedAt: inc.resolved_at || undefined,
+        }));
+      }
+    } catch {
+      // fallback to local incidents if table not yet migrated or offline
+    }
+
     return {
       users,
       rooms,
@@ -240,7 +272,7 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       contactRequests: localState.contactRequests || [],
       announcements: localState.announcements || [],
       settings: localState.settings,
-      systemIncidents: localState.systemIncidents || [],
+      systemIncidents,
     };
   } catch (err) {
     console.error('Failed to sync state from Supabase Cloud:', err);
@@ -861,6 +893,222 @@ export async function checkEmailVerificationStatusCloud(
   }
 }
 
+export interface ResidentAuthResult {
+  success: boolean;
+  user?: User;
+  token?: string;
+  error?: string;
+  isOAuthAccount?: boolean;
+}
+
+/**
+ * Authenticates an existing resident account using strict backend credential verification.
+ * NEVER creates a new account on failure or unrecognized credentials.
+ * Rejects invalid passwords with an authentication failure.
+ */
+export async function signInResidentWithCredentialsCloud(
+  identifier: string,
+  rawPinOrPassword: string
+): Promise<ResidentAuthResult> {
+  const cleanId = (identifier || '').trim().toLowerCase();
+  if (!cleanId) {
+    return { success: false, error: 'Please enter your registered email or phone number.' };
+  }
+  if (!rawPinOrPassword || !rawPinOrPassword.trim()) {
+    return { success: false, error: 'Please enter your 4-digit passcode or password.' };
+  }
+
+  // 1. Resolve email from identifier (if phone number provided, find associated account email)
+  let resolvedEmail = cleanId;
+  if (!cleanId.includes('@')) {
+    const cleanPhoneDigits = cleanId.replace(/\D/g, '');
+    const localMatch = db.getState().users.find((u) => {
+      if (!u.phone) return false;
+      const digits = u.phone.replace(/\D/g, '');
+      return digits === cleanPhoneDigits || digits.endsWith(cleanPhoneDigits) || cleanPhoneDigits.endsWith(digits);
+    });
+
+    if (localMatch?.email) {
+      resolvedEmail = localMatch.email.toLowerCase();
+    } else if (IS_LIVE_SYNC_ENABLED) {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('email')
+          .ilike('phone', `%${cleanPhoneDigits}%`)
+          .maybeSingle();
+        if (prof?.email) {
+          resolvedEmail = prof.email.toLowerCase();
+        } else {
+          return { success: false, error: 'No account found with this phone number.' };
+        }
+      } catch {
+        return { success: false, error: 'No account found with this phone number.' };
+      }
+    } else {
+      return { success: false, error: 'No account found with this phone number.' };
+    }
+  }
+
+  // 2. Prepare auth password (handle both 4-digit PIN hash and plain passwords)
+  const pinValidation = validateStrict4DigitPin(rawPinOrPassword);
+  let authPassword = rawPinOrPassword;
+  if (pinValidation.isValid) {
+    const hashedPin = await hashPin(pinValidation.sanitized);
+    authPassword = `RoomMate_${hashedPin.slice(0, 16)}!`;
+  }
+
+  // 3. Check for local mock / demo resident personas (non-UUID ID)
+  const existingLocal = db.getState().users.find(
+    (u) => u.email.toLowerCase() === resolvedEmail.toLowerCase()
+  );
+
+  const isLocalMockUser =
+    existingLocal &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(existingLocal.id);
+
+  if (isLocalMockUser) {
+    if (pinValidation.isValid) {
+      const storedPin =
+        (typeof localStorage !== 'undefined' &&
+          (localStorage.getItem(`roommate_vault_pin_${existingLocal.id}`) ||
+            localStorage.getItem('roommate_vault_pin'))) ||
+        '';
+      if (storedPin && storedPin !== pinValidation.sanitized) {
+        return {
+          success: false,
+          error: 'Incorrect 4-digit security PIN.',
+        };
+      }
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`roommate_vault_pin_${existingLocal.id}`, pinValidation.sanitized);
+          localStorage.setItem('roommate_vault_pin', pinValidation.sanitized);
+        }
+      } catch {}
+    }
+    const token = createResidentToken(existingLocal);
+    return {
+      success: true,
+      user: existingLocal,
+      token,
+    };
+  }
+
+  // 4. Supabase Auth credential verification
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: resolvedEmail,
+        password: authPassword,
+      });
+
+      if (signInError) {
+        const msg = signInError.message.toLowerCase();
+        if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+          return {
+            success: false,
+            error: 'Incorrect email or passcode. Please check your credentials.',
+          };
+        }
+        if (msg.includes('email not confirmed')) {
+          return {
+            success: false,
+            error: 'Email address is not verified yet. Please check your inbox for the confirmation link.',
+          };
+        }
+        return {
+          success: false,
+          error: signInError.message || 'Authentication failed. Please verify your credentials.',
+        };
+      }
+
+      if (signInData?.user) {
+        const authUser = signInData.user;
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        const resolvedUser: User = {
+          id: authUser.id,
+          name: prof?.name || authUser.user_metadata?.name || resolvedEmail.split('@')[0],
+          email: prof?.email || authUser.email || resolvedEmail,
+          phone: prof?.phone || undefined,
+          avatarUrl: prof?.avatar_url || undefined,
+          upiQrUrl: prof?.upi_qr_url || undefined,
+          upiId: prof?.upi_id || undefined,
+          role: (prof?.role as User['role']) || 'STUDENT',
+          isSuspended: Boolean(prof?.is_suspended),
+          onboardingCompleted: Boolean(prof?.onboarding_completed || (prof?.name && prof?.phone)),
+          createdAt: prof?.created_at || new Date().toISOString(),
+          updatedAt: prof?.updated_at || new Date().toISOString(),
+        };
+
+        db.upsertUser(resolvedUser);
+
+        if (pinValidation.isValid) {
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(`roommate_vault_pin_${resolvedUser.id}`, pinValidation.sanitized);
+              localStorage.setItem('roommate_vault_pin', pinValidation.sanitized);
+            }
+          } catch {}
+        }
+
+        const token = createResidentToken(resolvedUser);
+        return {
+          success: true,
+          user: resolvedUser,
+          token,
+        };
+      }
+    } catch (err: unknown) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Authentication service error.',
+      };
+    }
+  }
+
+  // 5. Final fallback verification (strictly verify existing user, NO account creation)
+  if (!existingLocal) {
+    return {
+      success: false,
+      error: 'Account not found. Please create an account first.',
+    };
+  }
+
+  // Verify PIN if 4-digit PIN is used
+  if (pinValidation.isValid) {
+    const storedPin =
+      (typeof localStorage !== 'undefined' &&
+        (localStorage.getItem(`roommate_vault_pin_${existingLocal.id}`) ||
+          localStorage.getItem('roommate_vault_pin'))) ||
+      '';
+    if (storedPin && storedPin !== pinValidation.sanitized) {
+      return {
+        success: false,
+        error: 'Incorrect 4-digit security PIN.',
+      };
+    }
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`roommate_vault_pin_${existingLocal.id}`, pinValidation.sanitized);
+        localStorage.setItem('roommate_vault_pin', pinValidation.sanitized);
+      }
+    } catch {}
+  }
+
+  const token = createResidentToken(existingLocal);
+  return {
+    success: true,
+    user: existingLocal,
+    token,
+  };
+}
+
 /**
  * Resends a native Supabase signup confirmation email.
  */
@@ -1237,12 +1485,23 @@ export async function syncOAuthSessionToProfile(sessionUser: {
 
   const resolvedName = existingName || extractedFirstName;
 
+  const existingQrUrl =
+    (typeof existingProfile?.upi_qr_url === 'string' && existingProfile.upi_qr_url
+      ? existingProfile.upi_qr_url
+      : localUser?.upiQrUrl) || undefined;
+  const existingUpiId =
+    (typeof existingProfile?.upi_id === 'string' && existingProfile.upi_id
+      ? existingProfile.upi_id
+      : localUser?.upiId) || undefined;
+
   const resolvedUser: User = {
     id: sessionUser.id,
     name: resolvedName,
     email: (existingProfile?.email as string) || localUser?.email || cleanEmail,
     avatarUrl: (existingProfile?.avatar_url as string) || localUser?.avatarUrl || avatarUrl,
     phone: existingPhone,
+    upiQrUrl: existingQrUrl,
+    upiId: existingUpiId,
     role: ((existingProfile?.role as User['role']) || localUser?.role || 'STUDENT'),
     isSuspended: Boolean(existingProfile?.is_suspended ?? localUser?.isSuspended),
     onboardingCompleted: isProfileComplete,
@@ -1253,7 +1512,7 @@ export async function syncOAuthSessionToProfile(sessionUser: {
   // 5. Upsert profile into Supabase
   if (IS_LIVE_SYNC_ENABLED && isUuid) {
     try {
-      await supabase.from('profiles').upsert({
+      const upsertPayload: Database['public']['Tables']['profiles']['Insert'] = {
         id: resolvedUser.id,
         name: resolvedUser.name,
         email: resolvedUser.email,
@@ -1262,18 +1521,23 @@ export async function syncOAuthSessionToProfile(sessionUser: {
         role: resolvedUser.role,
         is_suspended: resolvedUser.isSuspended,
         onboarding_completed: resolvedUser.onboardingCompleted ?? false,
-      });
+        upi_qr_url: existingQrUrl || null,
+        upi_id: existingUpiId || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      await supabase.from('profiles').upsert(upsertPayload);
     } catch (err) {
       console.warn('syncOAuthSessionToProfile upsert error:', err);
     }
   }
 
-  // 5. Save to local DB cache
+  // 6. Save to local DB cache
   db.upsertUser(resolvedUser);
 
   return {
     user: resolvedUser,
-    needsPinSetup: !hasLocalPin,
+    needsPinSetup: !isProfileComplete && !hasLocalPin,
     needsProfileOnboarding: !isProfileComplete,
     extractedFirstName,
     isExistingUser,
@@ -1399,20 +1663,31 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string): Pr
   }
 
   if (IS_LIVE_SYNC_ENABLED) {
+    let targetId = userId;
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        targetId = authData.user.id;
+      }
+    } catch {}
 
-      if (error) {
-        console.warn('updateProfileAvatar cloud error:', error.message);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    if (isUuid) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+          .eq('id', targetId);
+
+        if (error) {
+          console.warn('updateProfileAvatar cloud error:', error.message);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('updateProfileAvatar exception:', err);
         return false;
       }
-      return true;
-    } catch (err) {
-      console.warn('updateProfileAvatar exception:', err);
-      return false;
     }
   }
 
@@ -1421,34 +1696,55 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string): Pr
 
 // Update UPI QR Code URL (Cloud + Local)
 export async function updateUpiQrUrl(userId: string, upiQrUrl: string): Promise<boolean> {
-  const localUser = db.getState().users.find((u) => u.id === userId);
-  if (localUser) {
-    db.upsertUser({ ...localUser, upiQrUrl });
+  // 1. Resolve canonical authenticated Supabase user ID if available
+  let targetId = userId;
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        targetId = authData.user.id;
+      }
+    } catch {
+      // fallback to passed userId
+    }
   }
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+
+  // 2. Update Supabase first if live sync enabled and valid UUID
+  if (IS_LIVE_SYNC_ENABLED && isUuid) {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ upi_qr_url: upiQrUrl, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+        .update({ upi_qr_url: upiQrUrl || null, updated_at: new Date().toISOString() })
+        .eq('id', targetId);
 
       if (error) {
         console.warn('updateUpiQrUrl cloud error:', error.message);
         return false;
       }
-      return true;
     } catch (err) {
       console.warn('updateUpiQrUrl exception:', err);
       return false;
     }
   }
 
+  // 3. Update local DB user
+  const localUser = db.getState().users.find((u) => u.id === targetId || u.id === userId);
+  if (localUser) {
+    db.upsertUser({ ...localUser, upiQrUrl });
+  }
+
   return true;
 }
 
-// Update FCM Device Token (Cloud + Local)
-export async function updateFcmTokenCloud(userId: string, fcmToken: string): Promise<boolean> {
+// Update FCM Device Token (Cloud + Local + Multi-Device)
+export async function updateFcmTokenCloud(
+  userId: string,
+  fcmToken: string,
+  deviceId?: string,
+  platform?: string
+): Promise<boolean> {
   const localUser = db.getState().users.find((u) => u.id === userId);
   if (localUser) {
     db.upsertUser({ ...localUser, fcmToken });
@@ -1456,6 +1752,27 @@ export async function updateFcmTokenCloud(userId: string, fcmToken: string): Pro
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      // 1. Multi-device tracking in user_devices (if deviceId provided)
+      if (deviceId) {
+        try {
+          await supabase.from('user_devices').upsert(
+            {
+              user_id: userId,
+              device_id: deviceId,
+              fcm_token: fcmToken,
+              platform: platform || 'android',
+              is_active: true,
+              last_seen_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,device_id' }
+          );
+        } catch (devErr) {
+          console.warn('user_devices upsert notice (non-fatal):', devErr);
+        }
+      }
+
+      // 2. Backward compatibility: update profiles.fcm_token
       const { error } = await supabase
         .from('profiles')
         .update({ fcm_token: fcmToken, updated_at: new Date().toISOString() })
@@ -1475,6 +1792,36 @@ export async function updateFcmTokenCloud(userId: string, fcmToken: string): Pro
   return true;
 }
 
+// Deactivate FCM Device Token on User Logout / Device Unlink
+export async function deactivateFcmTokenCloud(userId: string, deviceId?: string): Promise<boolean> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      if (deviceId) {
+        try {
+          await supabase
+            .from('user_devices')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .match({ user_id: userId, device_id: deviceId });
+        } catch {
+          // non-fatal if table pending migration
+        }
+      }
+
+      await supabase
+        .from('profiles')
+        .update({ fcm_token: null, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      return true;
+    } catch (err) {
+      console.warn('deactivateFcmTokenCloud exception:', err);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Update Profile Full Name (Cloud + Local)
 export async function updateProfileName(userId: string, name: string): Promise<boolean> {
   const cleanName = name.trim();
@@ -1486,20 +1833,31 @@ export async function updateProfileName(userId: string, name: string): Promise<b
   }
 
   if (IS_LIVE_SYNC_ENABLED) {
+    let targetId = userId;
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: cleanName, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        targetId = authData.user.id;
+      }
+    } catch {}
 
-      if (error) {
-        console.warn('updateProfileName cloud error:', error.message);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    if (isUuid) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ name: cleanName, updated_at: new Date().toISOString() })
+          .eq('id', targetId);
+
+        if (error) {
+          console.warn('updateProfileName cloud error:', error.message);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('updateProfileName exception:', err);
         return false;
       }
-      return true;
-    } catch (err) {
-      console.warn('updateProfileName exception:', err);
-      return false;
     }
   }
 
@@ -1623,20 +1981,31 @@ export async function updateProfileUpiId(userId: string, upiId: string): Promise
   }
 
   if (IS_LIVE_SYNC_ENABLED) {
+    let targetId = userId;
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ upi_id: cleanUpi, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        targetId = authData.user.id;
+      }
+    } catch {}
 
-      if (error) {
-        console.warn('updateProfileUpiId cloud error:', error.message);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+    if (isUuid) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ upi_id: cleanUpi, updated_at: new Date().toISOString() })
+          .eq('id', targetId);
+
+        if (error) {
+          console.warn('updateProfileUpiId cloud error:', error.message);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('updateProfileUpiId exception:', err);
         return false;
       }
-      return true;
-    } catch (err) {
-      console.warn('updateProfileUpiId exception:', err);
-      return false;
     }
   }
 
@@ -2512,8 +2881,11 @@ export async function signOutOtherDevicesCloud(): Promise<{ success: boolean; er
 /**
  * Revokes all active sessions globally in Supabase Auth and purges local resident tokens.
  */
-export async function signOutAllDevicesCloud(): Promise<{ success: boolean; error?: string }> {
+export async function signOutAllDevicesCloud(userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
+    if (userId) {
+      await deactivateFcmTokenCloud(userId);
+    }
     if (isSupabaseConfigured) {
       await supabase.auth.signOut({ scope: 'global' });
     }
@@ -2538,9 +2910,12 @@ export async function deleteUserAccountCloud(userId: string): Promise<{ success:
       if (error) {
         console.error('delete_user_account RPC error:', error);
         // Fallback: attempt direct profile delete if RPC not yet deployed
-        const { error: profErr } = await supabase.from('profiles').delete().eq('id', userId);
-        if (profErr) {
-          console.warn('Direct profile delete fallback error:', profErr.message);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+        if (isUuid) {
+          const { error: profErr } = await supabase.from('profiles').delete().eq('id', userId);
+          if (profErr) {
+            console.warn('Direct profile delete fallback error:', profErr.message);
+          }
         }
       } else {
         console.log('User account deleted from cloud successfully:', data);
@@ -2583,6 +2958,394 @@ export async function deleteUserAccountCloud(userId: string): Promise<{ success:
   }
 }
 
+/**
+ * Resolves a system incident on Supabase Cloud and local state
+ */
+export async function resolveSystemIncidentCloud(incidentId: string): Promise<boolean> {
+  const localIncidents = (db as any).state?.systemIncidents || [];
+  const target = localIncidents.find((i: any) => i.id === incidentId);
+  if (target) {
+    target.status = 'RESOLVED';
+    target.resolvedAt = new Date().toISOString();
+    db.saveState((db as any).state);
+  }
 
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { error } = await (supabase as any)
+        .from('system_incidents')
+        .update({
+          status: 'RESOLVED',
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('id', incidentId);
+
+      if (error) {
+        console.warn('Could not resolve incident on Supabase Cloud, local fallback saved:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('Cloud resolve incident error:', err);
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Fetches platform announcements from Supabase Cloud
+ */
+export async function fetchPlatformAnnouncementsCloud(): Promise<PlatformAnnouncement[]> {
+  if (!IS_LIVE_SYNC_ENABLED) return [];
+  try {
+    const { data, error } = await (supabase as any)
+      .from('platform_announcements')
+      .select('*')
+      .order('sent_at', { ascending: false });
+    if (error) throw error;
+    if (!data) return [];
+    return data.map((a: any) => ({
+      id: a.id,
+      title: a.title,
+      message: a.message,
+      audience: a.audience || 'EVERYONE',
+      targetUserIds: a.target_user_ids || [],
+      targetRoomIds: a.target_room_ids || [],
+      priority: a.priority || 'NORMAL',
+      deliveryChannels: a.delivery_channels || ['IN_APP'],
+      recipientsCount: a.recipients_count || 0,
+      status: a.status || 'DELIVERED',
+      sentAt: a.sent_at || a.created_at,
+      createdBy: a.created_by,
+    }));
+  } catch (err: any) {
+    console.warn('Fetch platform announcements cloud error:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Creates a platform announcement on Supabase Cloud
+ */
+export async function createPlatformAnnouncementCloud(
+  announcement: Omit<PlatformAnnouncement, 'id' | 'sentAt'>
+): Promise<PlatformAnnouncement | null> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('platform_announcements')
+        .insert({
+          title: announcement.title,
+          message: announcement.message,
+          audience: announcement.audience,
+          target_user_ids: announcement.targetUserIds && announcement.targetUserIds.length > 0 ? announcement.targetUserIds : null,
+          target_room_ids: announcement.targetRoomIds && announcement.targetRoomIds.length > 0 ? announcement.targetRoomIds : null,
+          priority: announcement.priority,
+          delivery_channels: announcement.deliveryChannels,
+          recipients_count: announcement.recipientsCount || 0,
+          status: announcement.status || 'DELIVERED',
+          created_by: announcement.createdBy,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      if (data) {
+        return {
+          id: data.id,
+          title: data.title,
+          message: data.message,
+          audience: data.audience,
+          targetUserIds: data.target_user_ids || [],
+          targetRoomIds: data.target_room_ids || [],
+          priority: data.priority,
+          deliveryChannels: data.delivery_channels || ['IN_APP'],
+          recipientsCount: data.recipients_count || 0,
+          status: data.status,
+          sentAt: data.sent_at || data.created_at,
+          createdBy: data.created_by,
+        };
+      }
+    } catch (err: any) {
+      console.warn('Create platform announcement cloud error:', err?.message || err);
+    }
+  }
+  return null;
+}
+
+/**
+ * Fetches system incidents from Supabase Cloud
+ */
+export async function fetchSystemIncidentsCloud(): Promise<SystemIncident[]> {
+  if (!IS_LIVE_SYNC_ENABLED) return [];
+  try {
+    const { data, error } = await (supabase as any)
+      .from('system_incidents')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    if (!data) return [];
+    return data.map((i: any) => ({
+      id: i.id,
+      service: i.service,
+      error: i.error,
+      severity: i.severity,
+      status: i.status,
+      occurrences: i.occurrences || 1,
+      details: i.details || undefined,
+      createdAt: i.created_at,
+      resolvedAt: i.resolved_at || undefined,
+    }));
+  } catch (err: any) {
+    console.warn('Fetch system incidents cloud error:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Creates a system incident in Supabase Cloud
+ */
+export async function createSystemIncidentCloud(
+  incident: Omit<SystemIncident, 'id' | 'createdAt'>
+): Promise<SystemIncident | null> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('system_incidents')
+        .insert({
+          service: incident.service,
+          error: incident.error,
+          severity: incident.severity,
+          status: incident.status,
+          occurrences: incident.occurrences || 1,
+          details: incident.details || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      if (data) {
+        return {
+          id: data.id,
+          service: data.service,
+          error: data.error,
+          severity: data.severity,
+          status: data.status,
+          occurrences: data.occurrences,
+          details: data.details || undefined,
+          createdAt: data.created_at,
+          resolvedAt: data.resolved_at || undefined,
+        };
+      }
+    } catch (err: any) {
+      console.warn('Create system incident cloud error:', err?.message || err);
+    }
+  }
+  return null;
+}
+
+/**
+ * Subscribes to realtime system incident changes on Supabase Cloud
+ */
+export function subscribeToSystemIncidentsRealtime(
+  callback: (incident: SystemIncident) => void
+): { unsubscribe: () => void } {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return { unsubscribe: () => {} };
+  }
+
+  const channel = supabase
+    .channel('realtime_system_incidents')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'system_incidents' },
+      (payload) => {
+        if (payload.new && typeof payload.new === 'object') {
+          const row = payload.new as any;
+          callback({
+            id: String(row.id),
+            service: row.service,
+            error: row.error,
+            severity: row.severity,
+            status: row.status,
+            occurrences: row.occurrences || 1,
+            details: row.details || undefined,
+            createdAt: row.created_at,
+            resolvedAt: row.resolved_at || undefined,
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return {
+    unsubscribe: () => {
+      supabase.removeChannel(channel);
+    },
+  };
+}
+
+// -----------------------------------------------------------------------------
+// SUPERADMIN PLATFORM SETTINGS & SUPPORT CLOUD ADAPTERS
+// -----------------------------------------------------------------------------
+
+export async function fetchPlatformSettingsCloud(): Promise<PlatformSettings | null> {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return db.getPlatformSettings();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('platform_settings')
+      .select('*')
+      .eq('id', 'global_settings')
+      .maybeSingle();
+
+    if (error || !data) {
+      console.warn('[RoomMate] Could not fetch cloud platform settings, using local fallback:', error?.message);
+      return db.getPlatformSettings();
+    }
+
+    const r = data as any;
+    const cloudSettings: PlatformSettings = {
+      appName: r.app_name || 'RoomMate',
+      supportEmail: r.support_email || 'admin@roommate.app',
+      supportPhone: r.support_phone || '+91 98765 43210',
+      googleAuthEnabled: r.google_auth_enabled ?? true,
+      emailVerificationRequired: r.email_verification_required ?? true,
+      sessionTimeoutMinutes: r.session_timeout_minutes ?? 1440,
+      maxRoomMembers: r.max_room_members ?? 12,
+      defaultJoinPolicy: (r.default_join_policy as JoinPolicy) || 'APPROVAL_REQUIRED',
+      defaultInvitePolicy: (r.default_invite_policy as InvitePolicy) || 'ALL_MEMBERS',
+      qrExpirationHours: r.qr_expiration_hours ?? 72,
+      maxExpenseAmount: Number(r.max_expense_amount) || 200000,
+      defaultSplitMethod: (r.default_split_method as SplitMethod) || 'EQUAL',
+      currencyCode: r.currency_code || 'INR',
+      globalNotificationsEnabled: r.global_notifications_enabled ?? true,
+      maintenanceMode: Boolean(r.maintenance_mode),
+      maintenanceMessage:
+        r.maintenance_message || 'RoomMate is undergoing scheduled maintenance. Back online shortly!',
+    };
+
+    return cloudSettings;
+  } catch (err) {
+    console.warn('[RoomMate] Cloud platform settings fetch exception:', err);
+    return db.getPlatformSettings();
+  }
+}
+
+export async function updatePlatformSettingsCloud(
+  settings: Partial<PlatformSettings>,
+  updatedByUserId?: string
+): Promise<boolean> {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return true;
+  }
+
+  try {
+    const payload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (settings.appName !== undefined) payload.app_name = settings.appName;
+    if (settings.supportEmail !== undefined) payload.support_email = settings.supportEmail;
+    if (settings.supportPhone !== undefined) payload.support_phone = settings.supportPhone;
+    if (settings.googleAuthEnabled !== undefined) payload.google_auth_enabled = settings.googleAuthEnabled;
+    if (settings.emailVerificationRequired !== undefined)
+      payload.email_verification_required = settings.emailVerificationRequired;
+    if (settings.sessionTimeoutMinutes !== undefined)
+      payload.session_timeout_minutes = settings.sessionTimeoutMinutes;
+    if (settings.maxRoomMembers !== undefined) payload.max_room_members = settings.maxRoomMembers;
+    if (settings.defaultJoinPolicy !== undefined) payload.default_join_policy = settings.defaultJoinPolicy;
+    if (settings.defaultInvitePolicy !== undefined) payload.default_invite_policy = settings.defaultInvitePolicy;
+    if (settings.qrExpirationHours !== undefined) payload.qr_expiration_hours = settings.qrExpirationHours;
+    if (settings.maxExpenseAmount !== undefined) payload.max_expense_amount = settings.maxExpenseAmount;
+    if (settings.defaultSplitMethod !== undefined) payload.default_split_method = settings.defaultSplitMethod;
+    if (settings.currencyCode !== undefined) payload.currency_code = settings.currencyCode;
+    if (settings.globalNotificationsEnabled !== undefined)
+      payload.global_notifications_enabled = settings.globalNotificationsEnabled;
+    if (settings.maintenanceMode !== undefined) payload.maintenance_mode = settings.maintenanceMode;
+    if (settings.maintenanceMessage !== undefined) payload.maintenance_message = settings.maintenanceMessage;
+    if (updatedByUserId) payload.updated_by = updatedByUserId;
+
+    const { error } = await supabase
+      .from('platform_settings')
+      .update(payload)
+      .eq('id', 'global_settings');
+
+    if (error) {
+      console.warn('[RoomMate] Supabase update platform settings error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[RoomMate] Supabase update platform settings network error:', err);
+    return false;
+  }
+}
+
+export async function updateFeatureSuggestionStatusCloud(
+  id: string,
+  status: FeatureSuggestionStatus,
+  adminNotes?: string
+): Promise<boolean> {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return true;
+  }
+
+  try {
+    const payload: Record<string, any> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (adminNotes !== undefined) payload.admin_notes = adminNotes;
+
+    const { error } = await supabase
+      .from('support_tickets')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) {
+      console.warn('[RoomMate] Supabase update feature suggestion error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[RoomMate] Supabase update feature suggestion network error:', err);
+    return false;
+  }
+}
+
+export async function updateContactRequestStatusCloud(
+  id: string,
+  status: 'NEW' | 'IN_REVIEW' | 'RESOLVED',
+  adminNotes?: string
+): Promise<boolean> {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return true;
+  }
+
+  try {
+    const payload: Record<string, any> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (adminNotes !== undefined) payload.admin_notes = adminNotes;
+    if (status === 'RESOLVED') payload.resolved_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('support_tickets')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) {
+      console.warn('[RoomMate] Supabase update contact request error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[RoomMate] Supabase update contact request network error:', err);
+    return false;
+  }
+}
 
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Receipt, ShieldCheck, MoreHorizontal } from 'lucide-react';
-import { SharedExpense, Room, User, ExpenseSplit, SettlementPayment } from '../../../types';
+import { SharedExpense, Room, User, ExpenseSplit, SettlementPayment, RoomMember } from '../../../types';
 import { DataTable, Column } from '../common/DataTable';
 import { StatusBadge } from '../common/StatusBadge';
 import { AdminExpenseDetailModal } from './AdminExpenseDetailModal';
@@ -10,6 +10,7 @@ interface AdminExpensesProps {
   sharedExpenses: SharedExpense[];
   rooms: Room[];
   allUsers: User[];
+  roomMembers?: RoomMember[];
   splits: ExpenseSplit[];
   settlementPayments: SettlementPayment[];
   initialSelectedExpenseId?: string;
@@ -19,6 +20,7 @@ export const AdminExpenses: React.FC<AdminExpensesProps> = ({
   sharedExpenses,
   rooms,
   allUsers,
+  roomMembers = [],
   splits,
   settlementPayments,
   initialSelectedExpenseId,
@@ -209,6 +211,7 @@ export const AdminExpenses: React.FC<AdminExpensesProps> = ({
           settlementPayments={settlementPayments}
           allUsers={allUsers}
           rooms={rooms}
+          roomMembers={roomMembers}
         />
       )}
     </div>

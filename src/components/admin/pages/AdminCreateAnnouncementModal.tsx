@@ -361,22 +361,32 @@ export const AdminCreateAnnouncementModal: React.FC<AdminCreateAnnouncementModal
 
             {/* Mobile notification preview card */}
             <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 shadow-sm flex items-start gap-3">
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                  priority === 'CRITICAL'
-                    ? 'bg-rose-100 text-rose-700'
-                    : priority === 'IMPORTANT'
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-indigo-50 text-indigo-600'
-                }`}
-              >
-                <Megaphone className="w-4 h-4" />
+              <div className="relative shrink-0">
+                <img
+                  src="/logo.png"
+                  alt="RoomMate"
+                  className="w-8 h-8 rounded-lg object-contain shadow-xs"
+                />
+                <div
+                  className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-white ${
+                    priority === 'CRITICAL'
+                      ? 'bg-rose-600'
+                      : priority === 'IMPORTANT'
+                      ? 'bg-amber-500'
+                      : 'bg-indigo-600'
+                  }`}
+                >
+                  <Megaphone className="w-2.5 h-2.5" />
+                </div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-slate-900 truncate">
-                    {title || 'Scheduled System Notice'}
-                  </span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-slate-900 truncate text-xs">
+                      {title || 'Scheduled System Notice'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0 font-medium">&bull; RoomMate</span>
+                  </div>
                   <span className="text-[10px] text-slate-400 shrink-0">now</span>
                 </div>
                 <p className="text-slate-600 text-[11px] mt-0.5 line-clamp-2">

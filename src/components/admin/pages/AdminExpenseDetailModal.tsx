@@ -11,6 +11,7 @@ interface AdminExpenseDetailModalProps {
   settlementPayments: SettlementPayment[];
   allUsers: UserType[];
   rooms: Room[];
+  roomMembers?: RoomMember[];
 }
 
 export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = ({
@@ -20,6 +21,7 @@ export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = (
   settlementPayments: _settlementPayments,
   allUsers,
   rooms,
+  roomMembers = [],
 }) => {
   if (!expense) return null;
 
@@ -27,9 +29,47 @@ export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = (
   const payer = allUsers.find((u) => u.id === expense.paidBy);
   const expenseSplits = splits.filter((s) => s.sharedExpenseId === expense.id);
 
-  // If no splits recorded in state for this expense, generate equal splits across room members
-  const memberCount = expenseSplits.length > 0 ? expenseSplits.length : 4;
+  // Active room members associated with this room
+  const activeRoomMembers = roomMembers.filter(
+    (m) => m.roomId === expense.roomId && m.status === 'ACTIVE'
+  );
+
+  // Determine member count from splits or actual room membership
+  const memberCount =
+    expenseSplits.length > 0
+      ? expenseSplits.length
+      : Math.max(activeRoomMembers.length, 1);
+
   const calculatedShare = expense.totalAmount / memberCount;
+
+  // Render items: if splits exist, use real splits; otherwise use real active room members
+  const nonPayerItems = (() => {
+    if (expenseSplits.length > 0) {
+      return expenseSplits
+        .filter((s) => s.userId !== expense.paidBy)
+        .map((s) => {
+          const user = allUsers.find((u) => u.id === s.userId);
+          return {
+            id: s.id,
+            name: user?.name || 'Resident',
+            email: user?.email,
+            share: s.shareAmount,
+          };
+        });
+    }
+
+    // If no split records, check if other active members exist in the room
+    const otherMembers = activeRoomMembers.filter((m) => m.userId !== expense.paidBy);
+    return otherMembers.map((m) => {
+      const user = allUsers.find((u) => u.id === m.userId);
+      return {
+        id: m.id,
+        name: user?.name || 'Resident',
+        email: user?.email,
+        share: calculatedShare,
+      };
+    });
+  })();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
@@ -46,7 +86,7 @@ export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = (
                 <StatusBadge variant="info" label={expense.category} size="sm" />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Room: <span className="font-semibold text-slate-700">{room?.name || 'Flat'}</span>
+                Room: <span className="font-semibold text-slate-700">{room?.name || 'Unassigned Flat'}</span>
               </p>
             </div>
           </div>
@@ -68,8 +108,10 @@ export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = (
               {formatInr(expense.totalAmount)}
             </p>
             <p className="text-xs text-emerald-700 mt-1">
-              Paid in full by <span className="font-bold">{payer?.name || 'Resident'}</span> • Split equally among{' '}
-              {memberCount} roommates
+              Paid in full by <span className="font-bold">{payer?.name || 'Resident'}</span>
+              {memberCount > 1 && (
+                <> &bull; Split equally among {memberCount} roommates</>
+              )}
             </p>
           </div>
 
@@ -91,34 +133,45 @@ export const AdminExpenseDetailModal: React.FC<AdminExpenseDetailModalProps> = (
                     </span>
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Share: {formatInr(calculatedShare)} • Paid: {formatInr(expense.totalAmount)}
+                    Share: {formatInr(calculatedShare)} &bull; Paid: {formatInr(expense.totalAmount)}
                   </p>
                 </div>
                 <div className="text-right">
                   <span className="font-mono font-bold text-emerald-600 block">
-                    +{formatInr(expense.totalAmount - calculatedShare)}
+                    +{formatInr(Math.max(0, expense.totalAmount - calculatedShare))}
                   </span>
-                  <span className="text-[10px] text-slate-400">Net Credit</span>
+                  <span className="text-[10px] text-slate-400">
+                    {memberCount > 1 ? 'Net Credit' : 'Solo Expense'}
+                  </span>
                 </div>
               </div>
 
               {/* Roommate Share Rows */}
-              {Array.from({ length: memberCount - 1 }).map((_, i) => (
-                <div key={i} className="p-3 flex items-center justify-between hover:bg-slate-50">
+              {nonPayerItems.map((item) => (
+                <div key={item.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
                   <div>
-                    <p className="font-semibold text-slate-800">Roommate {String.fromCharCode(65 + i)}</p>
+                    <p className="font-semibold text-slate-800">{item.name}</p>
+                    {item.email && (
+                      <p className="text-[10px] text-slate-400">{item.email}</p>
+                    )}
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Share: {formatInr(calculatedShare)} • Paid: ₹0
+                      Share: {formatInr(item.share)} &bull; Paid: ₹0
                     </p>
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-rose-600 block">
-                      -{formatInr(calculatedShare)}
+                      -{formatInr(item.share)}
                     </span>
                     <span className="text-[10px] text-slate-400">Owes Payer</span>
                   </div>
                 </div>
               ))}
+
+              {nonPayerItems.length === 0 && memberCount <= 1 && (
+                <div className="p-3 text-center text-xs text-slate-400 bg-slate-50">
+                  No other roommates participated in this transaction.
+                </div>
+              )}
             </div>
           </div>
 

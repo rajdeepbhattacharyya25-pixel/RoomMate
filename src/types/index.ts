@@ -404,7 +404,7 @@ export type IncidentStatus = 'OPERATIONAL' | 'INVESTIGATING' | 'MONITORING' | 'R
 
 export interface SystemIncident {
   id: string;
-  service: 'Application' | 'Database' | 'Authentication' | 'API' | 'Notifications';
+  service: 'Application' | 'Database' | 'Authentication' | 'API' | 'Notifications' | 'Crashlytics' | 'PostHog' | (string & {});
   error: string;
   severity: IncidentSeverity;
   status: IncidentStatus;

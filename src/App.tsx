@@ -76,7 +76,15 @@ import { listenToNetworkStatus, listenToAppLifecycle } from './lib/native/networ
 import { setupBackButtonListener } from './lib/native/backButton';
 import { DesktopLandingPage } from './components/desktop/DesktopLandingPage';
 import { isNativeApp, getInitialDeviceMode } from './lib/platform/deviceDetector';
-import { initPushListeners, sendPushNotificationToMembers } from './lib/firebase/pushService';
+import {
+  initPushListeners,
+  sendPushNotificationToMembers,
+  deactivateCurrentDevicePush,
+  EXPENSES_CHANNEL_ID,
+  SETTLEMENTS_CHANNEL_ID,
+} from './lib/firebase/pushService';
+import { crashService } from './lib/crashlytics/crashService';
+import { analytics } from './lib/analytics/posthog';
 import { ShieldAlert, Smartphone, Cloud, LogOut, CheckCircle2 } from 'lucide-react';
 import { NetworkProvider } from './context/NetworkContext';
 
@@ -92,6 +100,7 @@ const DEFAULT_RESIDENT: User = {
 
 export function AppContent() {
   const [dbState, setDbState] = useState<DatabaseState>(db.getState());
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(() => isSupabaseConfigured);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return Boolean(getStoredResidentSession());
   });
@@ -201,10 +210,22 @@ export function AppContent() {
     });
 
     let cleanupPush = () => {};
-    initPushListeners((notif) => {
-      setRemoteSyncToast(`🔔 ${notif.title}`);
-      setTimeout(() => setRemoteSyncToast(null), 4000);
-      refreshState();
+    initPushListeners({
+      onForegroundNotification: (notif) => {
+        setRemoteSyncToast(`🔔 ${notif.title}`);
+        setTimeout(() => setRemoteSyncToast(null), 4000);
+        refreshState();
+      },
+      onNotificationActionPerformed: (action) => {
+        const roomId = action.data?.roomId as string | undefined;
+        if (roomId) {
+          const targetRoom = db.getState().rooms.find((r) => r.id === roomId);
+          if (targetRoom) {
+            setActiveRoom(targetRoom);
+            setActiveTab('rooms');
+          }
+        }
+      },
     }).then((unsub) => {
       cleanupPush = unsub;
     });
@@ -269,26 +290,48 @@ export function AppContent() {
     };
   }, [refreshState]);
 
+  // Analytics & Diagnostics: User Identity Sync
+  useEffect(() => {
+    if (currentUser && currentUser.id !== DEFAULT_RESIDENT.id) {
+      crashService.setUserId(currentUser.id);
+      analytics.identify(currentUser.id, { role: currentUser.role });
+    } else {
+      crashService.setUserId(null);
+      analytics.reset();
+    }
+  }, [currentUser]);
+
+  // Analytics & Diagnostics: Tab / Screen Navigation Sync
+  useEffect(() => {
+    analytics.trackScreen(activeTab);
+    crashService.logBreadcrumb(`Navigation: Switched to ${activeTab} tab`);
+  }, [activeTab]);
+
   // 1. Initial State Hydration from Supabase Cloud
   useEffect(() => {
     if (!IS_LIVE_SYNC_ENABLED) return;
 
-    authenticateResidentWithSupabase(currentUser.email).then(() => {
-      fetchCloudDatabaseState().then((cloudState) => {
-        if (cloudState && cloudState.users.length > 0) {
-          setDbState(cloudState);
+    fetchCloudDatabaseState().then((cloudState) => {
+      if (cloudState && cloudState.users.length > 0) {
+        setDbState(cloudState);
+        if (isAuthenticated && currentUser.id !== DEFAULT_RESIDENT.id) {
           const matched =
-            cloudState.users.find((u) => u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-            cloudState.users[0];
-          setCurrentUser(matched);
-          if (cloudState.rooms.length > 0) {
-            setActiveRoom(cloudState.rooms[0]);
+            cloudState.users.find((u) => u.id === currentUser.id) ||
+            cloudState.users.find((u) => u.email.toLowerCase() === currentUser.email.toLowerCase());
+          if (matched) {
+            if (currentUser.role === 'SUPER_ADMIN' && matched.role !== 'SUPER_ADMIN') {
+              matched.role = 'SUPER_ADMIN';
+            }
+            setCurrentUser(matched);
           }
-          setIsRealtimeLive(true);
         }
-      });
+        if (cloudState.rooms.length > 0 && !activeRoom) {
+          setActiveRoom(cloudState.rooms[0]);
+        }
+        setIsRealtimeLive(true);
+      }
     });
-  }, [currentUser.email]);
+  }, [isAuthenticated, currentUser.id, currentUser.email, activeRoom]);
 
   // 2. Realtime Room Subscriptions (Multi-Device Broadcast Listener & Native Notifications)
   useEffect(() => {
@@ -381,8 +424,15 @@ export function AppContent() {
       return;
     }
 
+    const effectiveToken =
+      _token && _token !== 'superadmin_token'
+        ? _token
+        : createResidentToken(user, { expiresInDays: 7, biometricVerified: false });
+    storeResidentSession(effectiveToken, true);
+
     setCurrentUser(user);
     setIsAuthenticated(true);
+    analytics.trackLoginCompleted(user.email.includes('google') ? 'google' : 'email');
     if (IS_LIVE_SYNC_ENABLED) {
       authenticateResidentWithSupabase(user.email);
     }
@@ -395,6 +445,12 @@ export function AppContent() {
 
   // Handle Resident / Admin Logout
   const handleLogout = () => {
+    analytics.trackLogoutCompleted();
+    if (currentUser?.id && currentUser.id !== DEFAULT_RESIDENT.id) {
+      deactivateCurrentDevicePush(currentUser.id).catch((err) => {
+        console.warn('[Push] Error deactivating device token on logout:', err);
+      });
+    }
     clearResidentSession();
     if (isSupabaseConfigured) {
       try {
@@ -406,8 +462,7 @@ export function AppContent() {
     const updated = db.getState();
     setDbState({ ...updated });
     setIsAuthenticated(false);
-    const defaultStudent = updated.users.find((u) => u.role === 'STUDENT') || updated.users[0] || DEFAULT_RESIDENT;
-    setCurrentUser(defaultStudent);
+    setCurrentUser(DEFAULT_RESIDENT);
     setActiveTab('dashboard');
   };
 
@@ -431,6 +486,12 @@ export function AppContent() {
     hapticSuccess();
     refreshState();
 
+    analytics.trackSharedExpenseCreated({
+      category: data.category,
+      splitType: data.splitMethod || 'EQUAL',
+      participantCount: data.participantUserIds.length,
+    });
+
     // Notify other room members via push and in-app notifications
     const otherMembers = data.participantUserIds.filter((id) => id !== currentUser.id);
     if (otherMembers.length > 0) {
@@ -438,6 +499,7 @@ export function AppContent() {
         recipientUserIds: otherMembers,
         title: `New Bill: ${data.title}`,
         body: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Check your share.`,
+        channelId: EXPENSES_CHANNEL_ID,
         data: { roomId: data.roomId, type: 'expense' },
       });
 
@@ -489,6 +551,8 @@ export function AppContent() {
     hapticSuccess();
     refreshState();
 
+    analytics.trackSettlementRecorded({ paymentMethod: data.paymentMethod });
+
     // Notify payee or payer via push and in-app notifications
     const recipient = data.payeeId !== currentUser.id ? data.payeeId : data.payerId;
     if (recipient && recipient !== currentUser.id) {
@@ -496,6 +560,7 @@ export function AppContent() {
         recipientUserIds: [recipient],
         title: `Settlement: ₹${data.amount.toFixed(2)}`,
         body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
+        channelId: SETTLEMENTS_CHANNEL_ID,
         data: { roomId: data.roomId, type: 'settlement' },
       });
 
@@ -899,11 +964,53 @@ export function AppContent() {
 
   // 3. Supabase Auth State Change & Google OAuth Session Listener
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setIsAuthInitializing(false);
+      return;
+    }
 
     // Check existing or newly redirected session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user && session.user.app_metadata?.provider === 'google' && !isAuthenticated) {
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
+        if (session?.user) {
+          try {
+            const syncResult = await syncOAuthSessionToProfile(session.user);
+            refreshState();
+            if (!isAuthenticated) {
+              if (syncResult.needsProfileOnboarding) {
+                setProfileOnboardingUser({
+                  user: syncResult.user,
+                  extractedFirstName: syncResult.extractedFirstName,
+                  needsPin: syncResult.needsPinSetup,
+                  isGoogleUser: session.user.app_metadata?.provider === 'google',
+                });
+              } else if (syncResult.needsPinSetup) {
+                setGooglePinSetupUser(syncResult.user);
+              } else {
+                const token = createResidentToken(syncResult.user, {
+                  expiresInDays: 7,
+                  biometricVerified: false,
+                });
+                storeResidentSession(token, true);
+                setCurrentUser(syncResult.user);
+                setIsAuthenticated(true);
+              }
+            } else {
+              // Already authenticated, refresh user object
+              setCurrentUser(syncResult.user);
+            }
+          } catch (err) {
+            console.warn('Initial session resolution error:', err);
+          }
+        }
+      })
+      .finally(() => {
+        setIsAuthInitializing(false);
+      });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
         try {
           const syncResult = await syncOAuthSessionToProfile(session.user);
           refreshState();
@@ -912,7 +1019,7 @@ export function AppContent() {
               user: syncResult.user,
               extractedFirstName: syncResult.extractedFirstName,
               needsPin: syncResult.needsPinSetup,
-              isGoogleUser: true,
+              isGoogleUser: session.user.app_metadata?.provider === 'google',
             });
           } else if (syncResult.needsPinSetup) {
             setGooglePinSetupUser(syncResult.user);
@@ -924,51 +1031,32 @@ export function AppContent() {
             storeResidentSession(token, true);
             setCurrentUser(syncResult.user);
             setIsAuthenticated(true);
+            setRemoteSyncToast(`🎉 Signed in as ${syncResult.user.name}`);
+            setTimeout(() => setRemoteSyncToast(null), 3500);
           }
         } catch (err) {
-          console.warn('Initial OAuth session resolution error:', err);
+          console.warn('Supabase Auth session sync error:', err);
         }
-      }
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        const provider = session.user.app_metadata?.provider;
-        if (provider === 'google') {
-          try {
-            const syncResult = await syncOAuthSessionToProfile(session.user);
-            refreshState();
-            if (syncResult.needsProfileOnboarding) {
-              setProfileOnboardingUser({
-                user: syncResult.user,
-                extractedFirstName: syncResult.extractedFirstName,
-                needsPin: syncResult.needsPinSetup,
-                isGoogleUser: true,
-              });
-            } else if (syncResult.needsPinSetup) {
-              setGooglePinSetupUser(syncResult.user);
-            } else {
-              const token = createResidentToken(syncResult.user, {
-                expiresInDays: 7,
-                biometricVerified: false,
-              });
-              storeResidentSession(token, true);
-              setCurrentUser(syncResult.user);
-              setIsAuthenticated(true);
-              setRemoteSyncToast(`🎉 Signed in as ${syncResult.user.name}`);
-              setTimeout(() => setRemoteSyncToast(null), 3500);
-            }
-          } catch (err) {
-            console.warn('Google OAuth session sync error:', err);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser((prev) => {
+          if (prev && prev.role === 'SUPER_ADMIN') {
+            return prev; // Never log out SuperAdmin on Supabase background signout
           }
-        }
+          const session = getStoredResidentSession();
+          if (session && session.sub && !session.sub.startsWith('usr-default')) {
+            return prev;
+          }
+          clearResidentSession();
+          setIsAuthenticated(false);
+          return DEFAULT_RESIDENT;
+        });
       }
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [refreshState, isAuthenticated]);
+  }, []);
 
   const handleAddPersonalExpense = async (data: {
     title: string;
@@ -983,13 +1071,24 @@ export function AppContent() {
     });
     hapticSuccess();
     refreshState();
+    analytics.trackPersonalExpenseCreated({ category: data.category });
   };
 
   const handleDeletePersonalExpense = async (id: string) => {
     await deletePersonalExpenseCloud(currentUser.id, id);
     hapticImpact('LIGHT');
     refreshState();
+    analytics.trackExpenseDeleted({ isShared: false });
   };
+
+  if (isAuthInitializing) {
+    return (
+      <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-slate-300 font-medium text-xs tracking-wider uppercase">Loading RoomMate...</p>
+      </div>
+    );
+  }
 
   const isAdminPath = typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/admin');
 
@@ -1211,19 +1310,24 @@ export function AppContent() {
           onResolveInvite={handleResolveInvite}
           onRequestJoinRoom={handleRequestJoinRoom}
           onCreateRoom={async (name, desc) => {
+            analytics.trackRoomCreationStarted();
             try {
               const newR = await createRoomCloud(currentUser.id, name, desc);
+              analytics.trackRoomCreated({ initialMembers: 1 });
               refreshState();
               setActiveRoom(newR);
             } catch {
               const fallback = db.createRoom(currentUser.id, name, desc);
+              analytics.trackRoomCreated({ initialMembers: 1 });
               refreshState();
               setActiveRoom(fallback);
             }
           }}
           onJoinRoom={async (code) => {
+            analytics.trackRoomJoinStarted();
             try {
               const joined = await joinRoomWithCodeCloud(currentUser.id, code);
+              analytics.trackRoomJoined({ joinMethod: 'code' });
               refreshState();
               setActiveRoom(joined);
             } catch (err: unknown) {

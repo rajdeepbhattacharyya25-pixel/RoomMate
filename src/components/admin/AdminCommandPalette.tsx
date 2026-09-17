@@ -214,7 +214,12 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       >
         {/* Search Input */}
         <div className="flex items-center px-4 py-3.5 border-b border-slate-200 gap-3">
-          <Search className="w-5 h-5 text-indigo-600 shrink-0" />
+          <img
+            src="/logo.png"
+            alt="RoomMate"
+            className="w-5 h-5 rounded-md object-contain shrink-0"
+          />
+          <Search className="w-4 h-4 text-indigo-600 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -317,7 +322,14 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
               close
             </span>
           </div>
-          <span className="font-medium text-slate-500">RoomMate Ops</span>
+          <div className="flex items-center gap-1.5 font-medium text-slate-500">
+            <img
+              src="/logo.png"
+              alt="RoomMate"
+              className="w-3.5 h-3.5 rounded-xs object-contain"
+            />
+            <span>RoomMate Ops</span>
+          </div>
         </div>
       </div>
     </div>

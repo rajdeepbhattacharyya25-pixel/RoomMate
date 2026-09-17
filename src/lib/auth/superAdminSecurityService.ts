@@ -19,6 +19,7 @@ export type StepUpRiskLevel = 1 | 2 | 3;
 
 export interface SuperAdminSecuritySettings {
   userId: string;
+  masterPasswordHash?: string;
   totpEnrolled: boolean;
   totpFactorId?: string;
   totpSecret?: string;
@@ -231,6 +232,23 @@ export async function hashRecoveryCode(code: string): Promise<string> {
     .join('');
 }
 
+/**
+ * Computes SHA-256 hash of the master password with platform salt
+ */
+export async function hashMasterPassword(password: string): Promise<string> {
+  const normalized = password.trim();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`roommate_master_salt_${normalized}`);
+
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  return `h_${btoa(normalized)}`;
+}
+
 // -----------------------------------------------------------------------------
 // 3. RFC 6238 TOTP ENGINE (Standard Authenticator Apps)
 // -----------------------------------------------------------------------------
@@ -423,41 +441,43 @@ export async function verifySuperAdminTotp(
     };
   }
 
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured && factorId && !factorId.startsWith('factor_')) {
     try {
-      const { data: challenge, error: chalErr } = await supabase.auth.mfa.challenge({ factorId });
-      if (chalErr) throw chalErr;
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        const { data: challenge, error: chalErr } = await supabase.auth.mfa.challenge({ factorId });
+        if (chalErr) throw chalErr;
 
-      const { data: verifyData, error: verErr } = await supabase.auth.mfa.verify({
-        factorId,
-        challengeId: challenge.id,
-        code: code.trim(),
-      });
+        const { data: verifyData, error: verErr } = await supabase.auth.mfa.verify({
+          factorId,
+          challengeId: challenge.id,
+          code: code.trim(),
+        });
 
-      if (verErr) throw verErr;
+        if (verErr) throw verErr;
 
-      if (verifyData) {
-        resetMfaFailures();
-        inMemoryStepUpTimestamp = Date.now();
-        try {
-          const deviceId = getOrCreateDeviceId();
-          await (supabase as any).rpc('superadmin_verify_step_up', {
-            p_action: 'MFA_VERIFIED',
-            p_risk_level: riskLevel,
-            p_device_id: deviceId,
-          });
-        } catch {
-          // Server-side step-up recording if RPC supported
+        if (verifyData) {
+          resetMfaFailures();
+          inMemoryStepUpTimestamp = Date.now();
+          try {
+            const deviceId = getOrCreateDeviceId();
+            await (supabase as any).rpc('superadmin_verify_step_up', {
+              p_action: 'MFA_VERIFIED',
+              p_risk_level: riskLevel,
+              p_device_id: deviceId,
+            });
+          } catch {
+            // Server-side step-up recording if RPC supported
+          }
+          return { success: true };
         }
-        return { success: true };
       }
-    } catch {
-      recordMfaFailure();
-      return { success: false, error: 'Invalid authentication code.' };
+    } catch (err) {
+      console.warn('Supabase MFA challenge unavailable or rejected, trying standard RFC 6238 fallback:', err);
     }
   }
 
-  // Offline RFC 6238 verification
+  // Standard RFC 6238 TOTP verification (Google Authenticator / Authy / 1Password)
   if (fallbackSecret) {
     const ok = await verifyRfc6238Totp(fallbackSecret, code);
     if (ok) {

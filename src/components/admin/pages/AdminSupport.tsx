@@ -9,6 +9,7 @@ import {
   BugReport,
   BugStatus,
   FeatureSuggestion,
+  FeatureSuggestionStatus,
   ContactRequest,
   User,
 } from '../../../types';
@@ -23,6 +24,8 @@ interface AdminSupportProps {
   contactRequests?: ContactRequest[];
   allUsers: User[];
   onUpdateBugStatus: (bugId: string, status: BugStatus, adminNotes?: string) => Promise<void> | void;
+  onUpdateFeatureStatus?: (featureId: string, status: FeatureSuggestionStatus, adminNotes?: string) => Promise<void> | void;
+  onUpdateContactStatus?: (contactId: string, status: 'NEW' | 'IN_REVIEW' | 'RESOLVED', adminNotes?: string) => Promise<void> | void;
   onSendNotification?: (userId: string, title: string, message: string) => Promise<void> | void;
   initialSelectedTicketId?: string;
 }
@@ -35,6 +38,8 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({
   contactRequests = [],
   allUsers: _allUsers,
   onUpdateBugStatus,
+  onUpdateFeatureStatus,
+  onUpdateContactStatus,
   onSendNotification,
   initialSelectedTicketId,
 }) => {
@@ -434,6 +439,18 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({
           onClose={() => setSelectedItem(null)}
           onUpdateBugStatus={async (bugId, status, notes) => {
             await onUpdateBugStatus(bugId, status, notes);
+            setSelectedItem(null);
+          }}
+          onUpdateFeatureStatus={async (featId, status, notes) => {
+            if (onUpdateFeatureStatus) {
+              await onUpdateFeatureStatus(featId, status, notes);
+            }
+            setSelectedItem(null);
+          }}
+          onUpdateContactStatus={async (contactId, status, notes) => {
+            if (onUpdateContactStatus) {
+              await onUpdateContactStatus(contactId, status, notes);
+            }
             setSelectedItem(null);
           }}
           onSendUserReply={async (userId, title, message) => {

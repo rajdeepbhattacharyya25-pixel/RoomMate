@@ -15,7 +15,7 @@ import {
   FileText,
   User as UserIcon,
 } from 'lucide-react';
-import { BugReport, BugStatus, FeatureSuggestion, ContactRequest } from '../../../types';
+import { BugReport, BugStatus, FeatureSuggestion, FeatureSuggestionStatus, ContactRequest } from '../../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatRelativeTime, formatFullDateTime } from '../../../lib/utils/currencyFormatter';
 
@@ -28,6 +28,8 @@ interface AdminSupportDetailModalProps {
   item: SupportItem | null;
   onClose: () => void;
   onUpdateBugStatus?: (bugId: string, status: BugStatus, adminNotes?: string) => Promise<void> | void;
+  onUpdateFeatureStatus?: (featureId: string, status: FeatureSuggestionStatus, adminNotes?: string) => Promise<void> | void;
+  onUpdateContactStatus?: (contactId: string, status: 'NEW' | 'IN_REVIEW' | 'RESOLVED', adminNotes?: string) => Promise<void> | void;
   onSendUserReply?: (userId: string, title: string, message: string) => Promise<void> | void;
 }
 
@@ -35,6 +37,8 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
   item,
   onClose,
   onUpdateBugStatus,
+  onUpdateFeatureStatus,
+  onUpdateContactStatus,
   onSendUserReply,
 }) => {
   const isBug = item?.type === 'BUG';
@@ -45,8 +49,12 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
   const feature = isFeature ? (item?.data as FeatureSuggestion) : null;
   const contact = isContact ? (item?.data as ContactRequest) : null;
 
-  const [status, setStatus] = useState<BugStatus>(bug?.status || 'OPEN');
-  const [adminNotes, setAdminNotes] = useState(bug?.adminNotes || feature?.adminNotes || '');
+  const [bugStatus, setBugStatus] = useState<BugStatus>(bug?.status || 'OPEN');
+  const [featureStatus, setFeatureStatus] = useState<FeatureSuggestionStatus>(feature?.status || 'NEW');
+  const [contactStatus, setContactStatus] = useState<'NEW' | 'IN_REVIEW' | 'RESOLVED'>(contact?.status || 'NEW');
+  const [adminNotes, setAdminNotes] = useState(
+    bug?.adminNotes || feature?.adminNotes || (contact as any)?.adminNotes || ''
+  );
   const [replyMessage, setReplyMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingReply, setIsSendingReply] = useState(false);
@@ -58,7 +66,27 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
     if (!bug || !onUpdateBugStatus) return;
     setIsSaving(true);
     try {
-      await onUpdateBugStatus(bug.id, status, adminNotes);
+      await onUpdateBugStatus(bug.id, bugStatus, adminNotes);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveFeatureStatus = async () => {
+    if (!feature || !onUpdateFeatureStatus) return;
+    setIsSaving(true);
+    try {
+      await onUpdateFeatureStatus(feature.id, featureStatus, adminNotes);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveContactStatus = async () => {
+    if (!contact || !onUpdateContactStatus) return;
+    setIsSaving(true);
+    try {
+      await onUpdateContactStatus(contact.id, contactStatus, adminNotes);
     } finally {
       setIsSaving(false);
     }
@@ -166,8 +194,8 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
               </div>
               <div className="flex items-center gap-3">
                 <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as BugStatus)}
+                  value={bugStatus}
+                  onChange={(e) => setBugStatus(e.target.value as BugStatus)}
                   className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="OPEN">🔴 Open</option>
@@ -178,10 +206,79 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
                 <button
                   onClick={handleSaveBugStatus}
                   disabled={isSaving}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  {isSaving ? 'Saving...' : 'Update'}
+                  {isSaving ? 'Saving...' : 'Update Status'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Status Controller for Feature Suggestions */}
+          {isFeature && feature && (
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Feature Roadmap Lifecycle
+                </span>
+                <span className="text-xs font-medium text-slate-600 mt-0.5 block">
+                  Update suggestion status to inform student roadmap and votes.
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={featureStatus}
+                  onChange={(e) => setFeatureStatus(e.target.value as FeatureSuggestionStatus)}
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="NEW">🔵 New</option>
+                  <option value="REVIEWING">🟡 Reviewing</option>
+                  <option value="PLANNED">🟣 Planned</option>
+                  <option value="IN_DEVELOPMENT">🟠 In Development</option>
+                  <option value="IMPLEMENTED">🟢 Implemented</option>
+                  <option value="DECLINED">⚪ Declined</option>
+                </select>
+                <button
+                  onClick={handleSaveFeatureStatus}
+                  disabled={isSaving}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {isSaving ? 'Saving...' : 'Update Status'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Status Controller for Contact Requests */}
+          {isContact && contact && (
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Inquiry Handling Status
+                </span>
+                <span className="text-xs font-medium text-slate-600 mt-0.5 block">
+                  Track resident contact request from receipt to resolution.
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={contactStatus}
+                  onChange={(e) => setContactStatus(e.target.value as 'NEW' | 'IN_REVIEW' | 'RESOLVED')}
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="NEW">🟡 New</option>
+                  <option value="IN_REVIEW">🔵 In Review</option>
+                  <option value="RESOLVED">🟢 Resolved</option>
+                </select>
+                <button
+                  onClick={handleSaveContactStatus}
+                  disabled={isSaving}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {isSaving ? 'Saving...' : 'Update Status'}
                 </button>
               </div>
             </div>

@@ -16,6 +16,7 @@ export interface Column<T> {
   header: string;
   render?: (row: T, index: number) => React.ReactNode;
   sortable?: boolean;
+  sortValue?: (row: T) => any;
   align?: 'left' | 'center' | 'right';
   width?: string;
 }
@@ -34,6 +35,8 @@ export interface DataTableProps<T> {
   toolbarExtras?: React.ReactNode;
   emptyMessage?: string;
   emptySubtitle?: string;
+  initialSortKey?: string;
+  initialSortOrder?: 'asc' | 'desc';
 }
 
 export function DataTable<T = any>({
@@ -50,10 +53,12 @@ export function DataTable<T = any>({
   toolbarExtras,
   emptyMessage = 'No records found',
   emptySubtitle = 'Try adjusting your search query or filters.',
+  initialSortKey,
+  initialSortOrder = 'asc',
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortKey, setSortKey] = useState<string | null>(initialSortKey || null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(initialSortOrder);
   const [currentPage, setCurrentPage] = useState(1);
 
   const resolvedExportFilename = exportFilename || exportFileName;
@@ -76,9 +81,10 @@ export function DataTable<T = any>({
   // 2. Sorting
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
+    const sortCol = columns.find((c) => c.key === sortKey);
     const sorted = [...filteredData].sort((a, b) => {
-      const aVal = (a as Record<string, unknown>)[sortKey];
-      const bVal = (b as Record<string, unknown>)[sortKey];
+      const aVal = sortCol?.sortValue ? sortCol.sortValue(a) : (a as Record<string, unknown>)[sortKey];
+      const bVal = sortCol?.sortValue ? sortCol.sortValue(b) : (b as Record<string, unknown>)[sortKey];
       if (aVal === bVal) return 0;
       if (aVal === null || aVal === undefined) return 1;
       if (bVal === null || bVal === undefined) return -1;
@@ -90,7 +96,7 @@ export function DataTable<T = any>({
         : String(bVal).localeCompare(String(aVal));
     });
     return sorted;
-  }, [filteredData, sortKey, sortOrder]);
+  }, [filteredData, sortKey, sortOrder, columns]);
 
   // 3. Pagination
   const totalPages = Math.ceil(sortedData.length / pageSize) || 1;

@@ -15,6 +15,8 @@ interface AdminLayoutProps {
   bugReports?: BugReport[];
   auditLogs?: AuditLog[];
   notifications?: InAppNotification[];
+  onDismissNotification?: (id: string) => void;
+  onMarkAllNotificationsRead?: () => void;
   onSwitchToMobile?: () => void;
   onLogout?: () => void;
   isCloudLive?: boolean;
@@ -33,6 +35,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   bugReports = [],
   auditLogs = [],
   notifications = [],
+  onDismissNotification,
+  onMarkAllNotificationsRead,
   onSwitchToMobile,
   onLogout,
   isCloudLive = true,
@@ -89,6 +93,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           onLogout={onLogout}
           isCloudLive={isCloudLive}
           notifications={notifications}
+          onDismissNotification={onDismissNotification}
+          onMarkAllNotificationsRead={onMarkAllNotificationsRead}
         />
 
         {/* Dynamic Page Viewport */}

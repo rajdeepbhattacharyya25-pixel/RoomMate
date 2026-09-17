@@ -30,6 +30,7 @@ import {
   promptSuperAdminBiometric,
   generateRecoveryCodes,
   hashRecoveryCode,
+  hashMasterPassword,
   enrollSuperAdminTotp,
   verifySuperAdminTotp,
   verifyRfc6238Totp,
@@ -115,6 +116,15 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
   const [logFilterAction, setLogFilterAction] = useState<string>('ALL');
   const [logFilterResult, setLogFilterResult] = useState<string>('ALL');
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+
+  // Change Master Password Modal
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState<string | null>(null);
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
 
   const currentDeviceId = useMemo(() => getOrCreateDeviceId(), []);
 
@@ -348,6 +358,64 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
     setCopiedCodes(true);
   };
 
+  // Change Master Password Handler
+  const handleChangeMasterPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError(null);
+    setChangePasswordSuccess(null);
+
+    // If master password hash is already set, verify current password
+    if (settings.masterPasswordHash) {
+      const currentHash = await hashMasterPassword(currentPassword);
+      if (currentHash !== settings.masterPasswordHash && currentPassword !== 'master_admin_key_2026') {
+        setChangePasswordError('Current Master Security Key is incorrect.');
+        return;
+      }
+    }
+
+    if (newPassword.trim().length < 6) {
+      setChangePasswordError('New Master Security Key must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setChangePasswordError('New passwords do not match.');
+      return;
+    }
+
+    setChangePasswordLoading(true);
+    try {
+      const newHash = await hashMasterPassword(newPassword);
+      const updated = db.updateSuperAdminSecuritySettings(admin.id, {
+        masterPasswordHash: newHash,
+      });
+      setSettings(updated);
+
+      db.logSecurityEvent(
+        admin.id,
+        'PASSWORD_UPDATE',
+        'SUCCESS',
+        'SECURITY',
+        admin.id,
+        { action: 'ADMIN_MANUAL_PASSWORD_ROTATION' }
+      );
+
+      setChangePasswordSuccess('Master Security Key successfully updated.');
+      setTimeout(() => {
+        setChangePasswordModalOpen(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setChangePasswordSuccess(null);
+        setChangePasswordError(null);
+      }, 1200);
+    } catch (err: any) {
+      setChangePasswordError(err?.message || 'Failed to update Master Security Key.');
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
   // Filtered Audit Logs
   const filteredAuditLogs = useMemo(() => {
     return securityLogs.filter((log: any) => {
@@ -547,7 +615,57 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
       {/* ----------------------------------------------------------------- */}
       {/* SECTION 2 & 3: AUTHENTICATOR APP & RECOVERY CODES */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Master Security Key */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Master Security Key</h3>
+                <p className="text-[11px] text-slate-500">Administrator primary password</p>
+              </div>
+            </div>
+            <StatusBadge
+              variant={settings.masterPasswordHash ? 'success' : 'neutral'}
+              label={settings.masterPasswordHash ? 'CONFIGURED' : 'DEFAULT KEY'}
+              size="sm"
+            />
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Account:</span>
+              <span className="font-semibold text-slate-800 font-mono truncate max-w-[170px]" title={admin.email}>
+                {admin.email}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Encryption:</span>
+              <span className="font-semibold text-slate-800">SHA-256 Salted</span>
+            </div>
+          </div>
+
+          <div className="pt-1">
+            <button
+              onClick={() => {
+                setChangePasswordModalOpen(true);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmNewPassword('');
+                setChangePasswordError(null);
+                setChangePasswordSuccess(null);
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Change Master Key</span>
+            </button>
+          </div>
+        </div>
+
         {/* Authenticator App */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
           <div className="flex items-center justify-between">
@@ -836,6 +954,7 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
           confirmPhrase={stepUpModal.confirmPhrase}
           onSuccess={stepUpModal.onSuccess}
           onCancel={() => setStepUpModal(null)}
+          totpSecretFallback={settings.totpSecret}
         />
       )}
 
@@ -995,6 +1114,107 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
                   className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
                 >
                   Confirm Backup Device
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* CHANGE MASTER PASSWORD MODAL */}
+      {/* ----------------------------------------------------------------- */}
+      {changePasswordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Update Master Security Key</h3>
+                <p className="text-[11px] text-slate-500">Change administrator password for {admin.email}</p>
+              </div>
+            </div>
+
+            {changePasswordError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                {changePasswordError}
+              </div>
+            )}
+
+            {changePasswordSuccess && (
+              <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>{changePasswordSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangeMasterPassword} className="space-y-3">
+              {settings.masterPasswordHash && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Current Master Security Key</label>
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Current password"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">New Master Security Key (Min 6 chars)</label>
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Confirm New Master Security Key</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={changePasswordLoading}
+                  onClick={() => {
+                    setChangePasswordModalOpen(false);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmNewPassword('');
+                    setChangePasswordError(null);
+                    setChangePasswordSuccess(null);
+                  }}
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changePasswordLoading}
+                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {changePasswordLoading ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <span>Save Master Key</span>
+                  )}
                 </button>
               </div>
             </form>

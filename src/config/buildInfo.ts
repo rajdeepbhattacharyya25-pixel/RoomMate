@@ -14,11 +14,11 @@ export interface BuildMetadata {
 export const BUILD_INFO: BuildMetadata = {
   appName: 'RoomMate',
   version: '1.0.4',
-  buildNumber: 6,
+  buildNumber: 7,
   channel: 'staging' as 'staging' | 'production',
-  buildTimestamp: '2026-09-17T07:30:10.090Z',
-  buildDate: '17 Sept 2026',
-  buildTime: '13:00:10 IST',
+  buildTimestamp: '2026-09-17T19:02:09.857Z',
+  buildDate: '18 Sept 2026',
+  buildTime: '00:32:09 IST',
 };
 
 export default BUILD_INFO;

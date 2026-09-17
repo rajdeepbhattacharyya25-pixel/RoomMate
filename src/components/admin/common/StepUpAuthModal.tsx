@@ -214,9 +214,16 @@ export const StepUpAuthModal: React.FC<StepUpAuthModalProps> = ({
               )}
             </div>
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider block opacity-80">
-                {riskLevel === 3 ? 'Level 3 • Critical Security Step-Up' : 'Level 2 • Sensitive Operation Step-Up'}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <img
+                  src="/logo.png"
+                  alt="RoomMate"
+                  className="w-3.5 h-3.5 rounded-xs object-contain"
+                />
+                <span className="text-[11px] font-bold uppercase tracking-wider block opacity-80">
+                  {riskLevel === 3 ? 'RoomMate Level 3 • Critical Security Step-Up' : 'RoomMate Level 2 • Sensitive Operation Step-Up'}
+                </span>
+              </div>
               <h3 className="text-sm font-bold tracking-tight text-white">{actionTitle}</h3>
             </div>
           </div>

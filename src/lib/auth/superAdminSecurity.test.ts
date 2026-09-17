@@ -4,6 +4,8 @@ import {
   generateRecoveryCodes,
   hashRecoveryCode,
   verifyRfc6238Totp,
+  verifySuperAdminTotp,
+  hashMasterPassword,
   checkRateLimit,
   recordMfaFailure,
   resetMfaFailures,
@@ -456,6 +458,66 @@ describe('SuperAdmin Zero-Trust Security System — Adversarial Test Suite', () 
       for (const code of codes) {
         expect(code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
       }
+    });
+
+    it('resets SuperAdmin MFA settings cleanly with resetSuperAdminMfa', () => {
+      db.updateSuperAdminSecuritySettings(superAdminId, {
+        totpEnrolled: true,
+        totpFactorId: 'factor_abc123',
+        totpSecret: 'JBSWY3DPEHPK3PXP',
+        recoveryCodesRemaining: 4,
+      });
+
+      const reset = db.resetSuperAdminMfa(superAdminId);
+      expect(reset.totpEnrolled).toBe(false);
+      expect(reset.totpSecret).toBeUndefined();
+      expect(reset.totpFactorId).toBeUndefined();
+      expect(reset.recoveryCodesRemaining).toBe(0);
+    });
+
+    it('gracefully falls back to RFC 6238 when Supabase factor is offline or local', async () => {
+      const result = await verifySuperAdminTotp('factor_local_123', '000000', 'JBSWY3DPEHPK3PXP');
+      // Should reject wrong code without throwing uncaught Supabase session exceptions
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid authentication code');
+    });
+
+    it('allows storing recovery codes during initial enrollment without Level 3 step-up', () => {
+      const codes = generateRecoveryCodes(8);
+      const hashes = codes.map((c) => 'hash_' + c);
+
+      // Should succeed when isInitialEnrollment is true
+      expect(() => {
+        db.storeRecoveryCodes(superAdminId, hashes, trustedDeviceId, true);
+      }).not.toThrow();
+
+      // But should enforce Level 3 step-up when regenerating afterwards without step-up
+      (db as any).state.superAdminSecuritySettings[superAdminId].lastStepUpLevel = 1;
+      (db as any).state.superAdminSecuritySettings[superAdminId].lastStepUpAt = undefined;
+      expect(() => {
+        db.storeRecoveryCodes(superAdminId, hashes, trustedDeviceId, false);
+      }).toThrow(/STEP_UP_REQUIRED/);
+    });
+
+    it('hashes master password and preserves it during MFA reset', async () => {
+      const plainPassword = 'SuperSecurePassword2026!';
+      const hash = await hashMasterPassword(plainPassword);
+      expect(hash).toBeDefined();
+      expect(hash.length).toBeGreaterThan(16);
+
+      // Deterministic hashing
+      const hashAgain = await hashMasterPassword(plainPassword);
+      expect(hashAgain).toBe(hash);
+
+      // Store in DB settings
+      db.updateSuperAdminSecuritySettings(superAdminId, { masterPasswordHash: hash });
+      const settings = db.getSuperAdminSecuritySettings(superAdminId);
+      expect(settings.masterPasswordHash).toBe(hash);
+
+      // Reset MFA should preserve master password
+      const resetSettings = db.resetSuperAdminMfa(superAdminId);
+      expect(resetSettings.masterPasswordHash).toBe(hash);
+      expect(resetSettings.totpEnrolled).toBe(false);
     });
   });
 });

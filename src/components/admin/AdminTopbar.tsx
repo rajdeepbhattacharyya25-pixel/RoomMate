@@ -7,9 +7,12 @@ import {
   Settings,
   LogOut,
   Smartphone,
+  CheckCheck,
+  X,
 } from 'lucide-react';
 import { User, InAppNotification } from '../../types';
 import { AdminRoute } from './AdminSidebar';
+import { formatRelativeTime } from '../../lib/utils/currencyFormatter';
 
 interface AdminTopbarProps {
   currentUser: User;
@@ -19,6 +22,8 @@ interface AdminTopbarProps {
   onLogout?: () => void;
   isCloudLive?: boolean;
   notifications?: InAppNotification[];
+  onDismissNotification?: (id: string) => void;
+  onMarkAllNotificationsRead?: () => void;
 }
 
 export const AdminTopbar: React.FC<AdminTopbarProps> = ({
@@ -29,6 +34,8 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   onLogout,
   isCloudLive = true,
   notifications = [],
+  onDismissNotification,
+  onMarkAllNotificationsRead,
 }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -53,6 +60,16 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 px-6 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      {/* Mobile brand mark (visible on small screens when sidebar is collapsed/hidden) */}
+      <div className="flex items-center gap-2 lg:hidden mr-3 shrink-0">
+        <img
+          src="/logo.png"
+          alt="RoomMate"
+          className="w-7 h-7 rounded-lg object-contain shadow-2xs"
+        />
+        <span className="font-bold text-xs tracking-tight text-slate-900 hidden sm:inline">RoomMate</span>
+      </div>
+
       {/* Search Input Container -> Triggers Ctrl+K */}
       <div className="flex-1 max-w-lg cursor-pointer" onClick={onOpenCommandPalette}>
         <div className="relative flex items-center group">
@@ -110,21 +127,66 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 mt-2 w-84 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
               <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <span className="text-xs font-bold text-slate-900">System Notifications</span>
-                <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
-                  {unreadNotifs.length} new
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900">System Notifications</span>
+                  {unreadNotifs.length > 0 && (
+                    <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
+                      {unreadNotifs.length} new
+                    </span>
+                  )}
+                </div>
+                {unreadNotifs.length > 0 && onMarkAllNotificationsRead && (
+                  <button
+                    onClick={onMarkAllNotificationsRead}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                    title="Mark all notifications as read"
+                  >
+                    <CheckCheck className="w-3 h-3" />
+                    <span>Mark all read</span>
+                  </button>
+                )}
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400">No recent notifications</div>
                 ) : (
-                  notifications.slice(0, 5).map((n) => (
-                    <div key={n.id} className="p-3 hover:bg-slate-50 transition-colors">
-                      <p className="text-xs font-bold text-slate-900">{n.title}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{n.message}</p>
+                  notifications.slice(0, 8).map((n) => (
+                    <div
+                      key={n.id}
+                      className={`p-3 hover:bg-slate-50 transition-colors flex items-start justify-between gap-2.5 ${
+                        !n.isRead ? 'bg-indigo-50/20' : ''
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {!n.isRead && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />
+                          )}
+                          <p className="text-xs font-bold text-slate-900 truncate">{n.title}</p>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug break-words">
+                          {n.message}
+                        </p>
+                        {n.createdAt && (
+                          <span className="text-[10px] text-slate-400 mt-1 block">
+                            {formatRelativeTime(n.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                      {onDismissNotification && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDismissNotification(n.id);
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                          title="Dismiss notification"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
@@ -167,12 +229,19 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 
           {profileOpen && (
             <div className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="p-3 border-b border-slate-100 bg-slate-50">
-                <p className="text-xs font-bold text-slate-900">{currentUser.name || 'Superadmin'}</p>
-                <p className="text-[11px] text-slate-500 font-mono truncate">{currentUser.email}</p>
-                <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
-                  Platform Owner
-                </span>
+              <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-start gap-2.5">
+                <img
+                  src="/logo.png"
+                  alt="RoomMate"
+                  className="w-7 h-7 rounded-lg object-contain shadow-2xs shrink-0 mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name || 'Superadmin'}</p>
+                  <p className="text-[11px] text-slate-500 font-mono truncate">{currentUser.email}</p>
+                  <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                    Platform Owner
+                  </span>
+                </div>
               </div>
               <div className="p-1 space-y-0.5">
                 <button

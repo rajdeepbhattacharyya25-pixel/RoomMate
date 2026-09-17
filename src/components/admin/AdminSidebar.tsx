@@ -147,7 +147,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Brand Header */}
       <div className="h-16 flex items-center px-4 border-b border-slate-100 justify-between">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 flex items-center justify-center text-white shadow-sm shadow-indigo-200 shrink-0">
+          <img
+            src="/logo.png"
+            alt="RoomMate"
+            className="w-9 h-9 rounded-xl object-contain shadow-xs shrink-0 transform transition-transform hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.parentElement?.querySelector('.fallback-logo');
+              if (fallback) fallback.classList.remove('hidden');
+            }}
+          />
+          <div className="fallback-logo hidden w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 flex items-center justify-center text-white shadow-sm shadow-indigo-200 shrink-0">
             <Shield className="w-5 h-5" />
           </div>
           {!isCollapsed && (

@@ -166,6 +166,26 @@ if (rpcError) {
 
 const newRecord = rpcRes.record;
 
+// 8. If an APK is provided or detected in root, upload it as latest staging APK for direct sideload downloads
+const apkCandidate = getArg('--apk') || (fs.existsSync(`RoomMate-${channel}-v${version}-build${buildNumber}.apk`) ? `RoomMate-${channel}-v${version}-build${buildNumber}.apk` : null);
+if (apkCandidate && fs.existsSync(apkCandidate)) {
+  console.log(`\n📦 Uploading Native Sideload APK to Supabase Storage [${apkCandidate}]...`);
+  const apkBuffer = fs.readFileSync(apkCandidate);
+  const remoteApkPath = `releases/${channel}/RoomMate-${channel}-latest.apk`;
+  const { error: apkUploadErr } = await supabase.storage
+    .from('app-updates')
+    .upload(remoteApkPath, apkBuffer, {
+      contentType: 'application/vnd.android.package-archive',
+      upsert: true,
+    });
+  if (apkUploadErr) {
+    console.warn(`⚠️  Warning: APK upload to storage failed: ${apkUploadErr.message}`);
+  } else {
+    const { data: apkUrlData } = supabase.storage.from('app-updates').getPublicUrl(remoteApkPath);
+    console.log(`✅ Native APK Live URL: ${apkUrlData.publicUrl}`);
+  }
+}
+
 console.log('\n======================================================');
 console.log('🎉  OTA UPDATE PUBLISHED SUCCESSFULLY!');
 console.log('======================================================');

@@ -4,6 +4,7 @@ import { AdminLayout } from './AdminLayout';
 import { ToastMessage } from './common/Toast';
 import {
   User,
+  UserRole,
   Room,
   RoomMember,
   SharedExpense,
@@ -14,10 +15,12 @@ import {
   BugReport,
   BugStatus,
   FeatureSuggestion,
+  FeatureSuggestionStatus,
   ContactRequest,
   PlatformAnnouncement,
   PlatformSettings,
   SystemIncident,
+  InAppNotification,
 } from '../../types';
 import { db } from '../../lib/storage/mockStorage';
 import {
@@ -25,10 +28,25 @@ import {
   checkStepUpRequired,
 } from '../../lib/auth/superAdminSecurityService';
 import {
+  superAdminUpdateUserRoleCloud,
   superAdminToggleUserSuspensionCloud,
   superAdminToggleRoomFreezeCloud,
   superAdminArchiveRoomCloud,
   superAdminResetRoomCodeCloud,
+  resolveSystemIncidentCloud,
+  fetchBugReportsCloud,
+  updateBugReportStatusCloud,
+  subscribeToBugReportsRealtime,
+  fetchPlatformAnnouncementsCloud,
+  createPlatformAnnouncementCloud,
+  fetchSystemIncidentsCloud,
+  subscribeToSystemIncidentsRealtime,
+  fetchPlatformSettingsCloud,
+  updatePlatformSettingsCloud,
+  updateFeatureSuggestionStatusCloud,
+  updateContactRequestStatusCloud,
+  markAllNotificationsReadCloud,
+  IS_LIVE_SYNC_ENABLED,
 } from '../../lib/storage/cloudStorageAdapter';
 import { StepUpAuthModal } from './common/StepUpAuthModal';
 
@@ -115,6 +133,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
   const [systemIncidents, setSystemIncidents] = useState<SystemIncident[]>(
     () => (db as any).state?.systemIncidents || []
   );
+  const [notifications, setNotifications] = useState<InAppNotification[]>(() =>
+    db.getNotifications(currentUser.id)
+  );
 
   // Toast feedback
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -193,6 +214,82 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Initial Cloud Data Fetch & Realtime Listeners
+  useEffect(() => {
+    let isMounted = true;
+
+    if (IS_LIVE_SYNC_ENABLED) {
+      // 1. Fetch latest bug reports from Supabase Cloud
+      fetchBugReportsCloud()
+        .then((reports) => {
+          if (isMounted && reports && reports.length > 0) {
+            setBugReports(reports);
+          }
+        })
+        .catch((err) => console.warn('Cloud bug reports initial fetch error:', err));
+
+      // 2. Fetch latest platform announcements from Supabase Cloud
+      fetchPlatformAnnouncementsCloud()
+        .then((anns) => {
+          if (isMounted && anns && anns.length > 0) {
+            setAnnouncements(anns);
+          }
+        })
+        .catch((err) => console.warn('Cloud announcements initial fetch error:', err));
+
+      // 3. Fetch latest system incidents from Supabase Cloud
+      fetchSystemIncidentsCloud()
+        .then((incs) => {
+          if (isMounted && incs && incs.length > 0) {
+            setSystemIncidents(incs);
+          }
+        })
+        .catch((err) => console.warn('Cloud incidents initial fetch error:', err));
+
+      // 4. Fetch latest platform settings from Supabase Cloud
+      fetchPlatformSettingsCloud()
+        .then((settings) => {
+          if (isMounted && settings) {
+            setPlatformSettings(settings);
+          }
+        })
+        .catch((err) => console.warn('Cloud platform settings initial fetch error:', err));
+    }
+
+    // Realtime subscriptions
+    const bugSub = subscribeToBugReportsRealtime((newReport) => {
+      if (!isMounted) return;
+      setBugReports((prev) => {
+        const idx = prev.findIndex((b) => b.id === newReport.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = newReport;
+          return updated;
+        }
+        return [newReport, ...prev];
+      });
+    });
+
+    const incSub = subscribeToSystemIncidentsRealtime((newInc) => {
+      if (!isMounted) return;
+      setSystemIncidents((prev) => {
+        const idx = prev.findIndex((i) => i.id === newInc.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = newInc;
+          return updated;
+        }
+        return [newInc, ...prev];
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      bugSub.unsubscribe();
+      incSub.unsubscribe();
+    };
+  }, []);
+
   // Refresh DB state
   const refreshStorageData = useCallback(() => {
     setPlatformSettings(db.getPlatformSettings());
@@ -201,8 +298,25 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     setAnnouncements([...db.getAnnouncements()]);
     setContactRequests([...((db as any).state?.contactRequests || [])]);
     setSystemIncidents([...((db as any).state?.systemIncidents || [])]);
+    setNotifications([...db.getNotifications(currentUser.id)]);
+
+    if (IS_LIVE_SYNC_ENABLED) {
+      fetchBugReportsCloud().then((reports) => {
+        if (reports && reports.length > 0) setBugReports(reports);
+      });
+      fetchPlatformAnnouncementsCloud().then((anns) => {
+        if (anns && anns.length > 0) setAnnouncements(anns);
+      });
+      fetchSystemIncidentsCloud().then((incs) => {
+        if (incs && incs.length > 0) setSystemIncidents(incs);
+      });
+      fetchPlatformSettingsCloud().then((settings) => {
+        if (settings) setPlatformSettings(settings);
+      });
+    }
+
     if (onDataMutated) onDataMutated();
-  }, [onDataMutated]);
+  }, [currentUser.id, onDataMutated]);
 
   // Operational Mutations
   const handleSuspendUser = async (userId: string, reason: string) => {
@@ -316,6 +430,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
   const handleUpdateBugStatus = async (bugId: string, status: BugStatus, adminNotes?: string) => {
     try {
       db.updateBugReportStatus(currentUser.id, bugId, status, adminNotes);
+      await updateBugReportStatusCloud(bugId, status, adminNotes);
       refreshStorageData();
       addToast('success', `Ticket #${bugId.slice(-6)} marked as ${status}`, 'Status Updated');
     } catch (err: any) {
@@ -332,6 +447,12 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
         status: 'DELIVERED',
         recipientsCount: allUsers.length,
       });
+      await createPlatformAnnouncementCloud({
+        ...data,
+        status: 'DELIVERED',
+        recipientsCount: allUsers.length,
+        createdBy: currentUser.id,
+      });
       refreshStorageData();
       addToast('success', 'Announcement dispatched successfully!', 'Broadcast Sent');
     } catch (err: any) {
@@ -347,13 +468,85 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       async () => {
         try {
           db.updatePlatformSettings(currentUser.id, newSettings);
+          await updatePlatformSettingsCloud(newSettings, currentUser.id);
           refreshStorageData();
-          addToast('success', 'Global platform parameters updated.', 'Settings Saved');
+          addToast('success', 'Global platform parameters updated and synced to cloud.', 'Settings Saved');
         } catch (err: any) {
           addToast('error', err?.message || 'Failed to update settings.', 'Error');
         }
       }
     );
+  };
+
+  const handleUpdateUserRole = async (targetUserId: string, newRole: UserRole) => {
+    if (targetUserId === currentUser.id && newRole !== 'SUPER_ADMIN') {
+      addToast('error', 'Cannot demote your own active account.', 'Self-Demotion Blocked');
+      return;
+    }
+
+    const actionText = newRole === 'SUPER_ADMIN' ? 'Promote to SuperAdmin' : 'Demote to Student';
+    const desc =
+      newRole === 'SUPER_ADMIN'
+        ? 'Granting SuperAdmin role unlocks full administrative console access and elevated database authorities.'
+        : 'Demoting to Student revokes console access and restricts the account to standard room member capabilities.';
+
+    await executeWithStepUp(
+      2,
+      actionText,
+      desc,
+      async () => {
+        try {
+          db.updateUserRole(currentUser.id, targetUserId, newRole);
+          await superAdminUpdateUserRoleCloud(targetUserId, newRole);
+          refreshStorageData();
+          addToast('success', `User role successfully changed to ${newRole}.`, 'Role Updated');
+        } catch (err: any) {
+          addToast('error', err?.message || 'Failed to update user role.', 'Role Update Failed');
+        }
+      }
+    );
+  };
+
+  const handleUpdateFeatureStatus = async (
+    featureId: string,
+    status: FeatureSuggestionStatus,
+    adminNotes?: string
+  ) => {
+    try {
+      db.updateFeatureSuggestionStatus(currentUser.id, featureId, status, adminNotes);
+      await updateFeatureSuggestionStatusCloud(featureId, status, adminNotes);
+      refreshStorageData();
+      addToast('success', `Suggestion status updated to ${status}.`, 'Roadmap Updated');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to update feature suggestion.', 'Update Failed');
+    }
+  };
+
+  const handleUpdateContactStatus = async (
+    contactId: string,
+    status: 'NEW' | 'IN_REVIEW' | 'RESOLVED',
+    adminNotes?: string
+  ) => {
+    try {
+      db.updateContactRequestStatus(currentUser.id, contactId, status, adminNotes);
+      await updateContactRequestStatusCloud(contactId, status, adminNotes);
+      refreshStorageData();
+      addToast('success', `Inquiry status marked as ${status}.`, 'Inquiry Updated');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to update contact request.', 'Update Failed');
+    }
+  };
+
+  const handleDismissNotification = (notifId: string) => {
+    db.deleteNotification(notifId);
+    setNotifications(db.getNotifications(currentUser.id));
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    db.markAllNotificationsRead(currentUser.id);
+    await markAllNotificationsReadCloud(currentUser.id);
+    setNotifications(db.getNotifications(currentUser.id));
+    addToast('info', 'All notifications marked as read.', 'Notifications Cleared');
   };
 
   const handleRevokeUserSession = async (userId: string, reason: string) => {
@@ -434,6 +627,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       sharedExpenses={sharedExpenses}
       bugReports={bugReports}
       auditLogs={auditLogs}
+      notifications={notifications}
+      onDismissNotification={handleDismissNotification}
+      onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
       onSwitchToMobile={onSwitchToMobile}
       onLogout={onLogout}
       toasts={toasts}
@@ -444,6 +640,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
           currentUser={currentUser}
           allUsers={allUsers}
           rooms={rooms}
+          roomMembers={roomMembers}
           sharedExpenses={sharedExpenses}
           expenseSplits={splits}
           settlementPayments={settlementPayments}
@@ -458,12 +655,17 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
           users={allUsers}
           rooms={rooms}
           roomMembers={roomMembers}
+          sharedExpenses={sharedExpenses}
+          settlementPayments={settlementPayments}
+          auditLogs={auditLogs}
+          currentAdminUser={currentUser}
           onToggleSuspension={(userId, suspend, reason) => {
             if (suspend) handleSuspendUser(userId, reason || 'Administrative suspension');
             else handleUnsuspendUser(userId);
           }}
           onRevokeSessions={(userId) => handleRevokeUserSession(userId, 'Revoked by admin')}
           onSendNotification={handleSendNotification}
+          onUpdateUserRole={handleUpdateUserRole}
           initialSelectedUserId={selectedEntityId}
         />
       )}
@@ -499,6 +701,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
           sharedExpenses={sharedExpenses}
           rooms={rooms}
           allUsers={allUsers}
+          roomMembers={roomMembers}
           splits={splits}
           settlementPayments={settlementPayments}
           initialSelectedExpenseId={selectedEntityId}
@@ -523,6 +726,8 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
           contactRequests={contactRequests}
           allUsers={allUsers}
           onUpdateBugStatus={handleUpdateBugStatus}
+          onUpdateFeatureStatus={handleUpdateFeatureStatus}
+          onUpdateContactStatus={handleUpdateContactStatus}
           onSendNotification={handleSendNotification}
           initialSelectedTicketId={selectedEntityId}
         />
@@ -554,13 +759,13 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
         <AdminSystemHealth
           incidents={systemIncidents}
           onResolveIncident={async (id) => {
-            const inc = systemIncidents.find((i) => i.id === id);
-            if (inc) {
-              inc.status = 'RESOLVED';
-              inc.resolvedAt = new Date().toISOString();
-              setSystemIncidents([...systemIncidents]);
-              addToast('success', 'Incident marked resolved.', 'Resolved');
-            }
+            await resolveSystemIncidentCloud(id);
+            setSystemIncidents((prev) =>
+              prev.map((i) =>
+                i.id === id ? { ...i, status: 'RESOLVED', resolvedAt: new Date().toISOString() } : i
+              )
+            );
+            addToast('success', 'Incident marked resolved.', 'Resolved');
           }}
         />
       )}
@@ -587,6 +792,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
             await exec();
           }}
           onCancel={() => setStepUpConfig(null)}
+          totpSecretFallback={db.getSuperAdminSecuritySettings(currentUser.id)?.totpSecret}
         />
       )}
     </AdminLayout>
