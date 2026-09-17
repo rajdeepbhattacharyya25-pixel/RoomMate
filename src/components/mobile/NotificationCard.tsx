@@ -33,7 +33,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
   const startYRef = useRef<number>(0);
   const isHorizontalSwipeRef = useRef<boolean | null>(null);
 
-  const AUTO_TRIGGER_THRESHOLD = 130;
+  const AUTO_TRIGGER_THRESHOLD = 75;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     startXRef.current = e.touches[0].clientX;
@@ -84,6 +84,43 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
   const handleTouchCancel = () => {
     setIsSwiping(false);
     setSwipeOffset(0);
+  };
+
+  // Mouse Drag Handlers for Desktop Simulator
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    startXRef.current = e.clientX;
+    startYRef.current = e.clientY;
+    isHorizontalSwipeRef.current = null;
+    setIsSwiping(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isSwiping) return;
+
+    const diffX = e.clientX - startXRef.current;
+    const diffY = e.clientY - startYRef.current;
+
+    if (isHorizontalSwipeRef.current === null) {
+      if (Math.abs(diffX) > 8 || Math.abs(diffY) > 8) {
+        isHorizontalSwipeRef.current = Math.abs(diffX) > Math.abs(diffY);
+      }
+    }
+
+    if (isHorizontalSwipeRef.current) {
+      const damped = Math.sign(diffX) * Math.min(160, Math.pow(Math.abs(diffX), 0.9));
+      setSwipeOffset(damped);
+    }
+  };
+
+  const handleMouseUp = () => {
+    handleTouchEnd();
+  };
+
+  const handleMouseLeave = () => {
+    if (isSwiping) {
+      handleTouchCancel();
+    }
   };
 
   // Visual Priority Tokens
@@ -202,9 +239,14 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          cursor: isSwiping ? 'grabbing' : 'default',
         }}
         className={`relative z-10 p-3.5 rounded-xl border bg-white shadow-2xs transition-colors select-none ${
           config.border

@@ -1948,19 +1948,29 @@ export async function toggleNotificationReadCloud(
   }
 }
 
-export async function markAllNotificationsReadCloud(userId: string): Promise<void> {
-  db.markAllNotificationsRead(userId);
+export async function markAllNotificationsReadCloud(userId: string, ids?: string[]): Promise<void> {
+  db.markAllNotificationsRead(userId, ids);
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      await supabase
-        .from('in_app_notifications')
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-        .eq('is_read', false);
+      if (ids && ids.length > 0) {
+        await supabase
+          .from('in_app_notifications')
+          .update({
+            is_read: true,
+            read_at: new Date().toISOString(),
+          })
+          .in('id', ids);
+      } else {
+        await supabase
+          .from('in_app_notifications')
+          .update({
+            is_read: true,
+            read_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId)
+          .eq('is_read', false);
+      }
     } catch (err) {
       console.warn('markAllNotificationsReadCloud supabase error:', err);
     }
@@ -1982,16 +1992,23 @@ export async function deleteNotificationCloud(notificationId: string): Promise<v
   }
 }
 
-export async function clearReadNotificationsCloud(userId: string): Promise<void> {
-  db.clearReadNotifications(userId);
+export async function clearReadNotificationsCloud(userId: string, ids?: string[]): Promise<void> {
+  db.clearReadNotifications(userId, ids);
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      await supabase
-        .from('in_app_notifications')
-        .update({ is_deleted: true })
-        .eq('user_id', userId)
-        .eq('is_read', true);
+      if (ids && ids.length > 0) {
+        await supabase
+          .from('in_app_notifications')
+          .update({ is_deleted: true })
+          .in('id', ids);
+      } else {
+        await supabase
+          .from('in_app_notifications')
+          .update({ is_deleted: true })
+          .eq('user_id', userId)
+          .eq('is_read', true);
+      }
     } catch (err) {
       console.warn('clearReadNotificationsCloud supabase error:', err);
     }

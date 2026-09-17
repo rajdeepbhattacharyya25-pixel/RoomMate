@@ -22,9 +22,9 @@ interface NotificationCenterDrawerProps {
   notifications: InAppNotification[];
   onAction?: (notification: InAppNotification) => void;
   onToggleRead: (id: string, currentRead: boolean) => void;
-  onMarkAllRead: () => void;
+  onMarkAllRead: (ids?: string[]) => void;
   onDeleteNotification: (id: string) => void;
-  onClearReadNotifications: () => void;
+  onClearReadNotifications: (ids?: string[]) => void;
 }
 
 export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> = ({
@@ -68,15 +68,17 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
 
   const handleMarkAllRead = () => {
     if (unreadCount === 0) return;
+    const unreadIds = activeNotifications.filter((n) => !n.isRead).map((n) => n.id);
     hapticSuccess();
-    onMarkAllRead();
+    onMarkAllRead(unreadIds);
     setShowOverflowMenu(false);
   };
 
   const handleClearRead = () => {
     if (readCount === 0) return;
+    const readIds = activeNotifications.filter((n) => n.isRead).map((n) => n.id);
     hapticImpact('MEDIUM');
-    onClearReadNotifications();
+    onClearReadNotifications(readIds);
     setShowOverflowMenu(false);
   };
 
@@ -243,6 +245,9 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
                     key={notification.id}
                     notification={notification}
                     onAction={(notif) => {
+                      if (!notif.isRead) {
+                        onToggleRead(notif.id, false);
+                      }
                       onClose();
                       if (onAction) onAction(notif);
                     }}
@@ -263,7 +268,7 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
               }}
               className="text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
             >
-              <Settings className="w-3.5 h-3.5" />
+              <Settings className="w-3.5 h-3.5 text-slate-400" />
               <span>Settings</span>
             </button>
 
@@ -287,6 +292,9 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
         onClose={() => setShowHistoryModal(false)}
         notifications={notifications}
         onAction={(notif) => {
+          if (!notif.isRead) {
+            onToggleRead(notif.id, false);
+          }
           setShowHistoryModal(false);
           onClose();
           if (onAction) onAction(notif);
