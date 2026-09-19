@@ -85,9 +85,9 @@ export async function uploadImage(file: File, name?: string): Promise<ImageUploa
 
   const apiKey = getApiKey();
 
-  // No API key → local data URL fallback
+  // No API key configured → local data URL fallback (dev/local only, never production)
   if (!apiKey) {
-    console.warn('[ImageUpload] No ImgBB API key configured. Using local data URL fallback.');
+    console.warn('[ImageUpload] No ImgBB API key configured. Using local data URL fallback (not saved to cloud).');
     try {
       const dataUrl = await fileToDataUrl(file);
       return { url: dataUrl, thumbnailUrl: dataUrl, deleteUrl: '', success: true };
@@ -96,6 +96,8 @@ export async function uploadImage(file: File, name?: string): Promise<ImageUploa
     }
   }
 
+  // API key is configured → upload to ImgBB CDN. Do NOT fall back to base64 on failure
+  // because base64 data URLs would bloat Supabase rows (500KB–2MB per image).
   try {
     const base64 = await fileToBase64(file);
     const formData = new FormData();
@@ -108,12 +110,12 @@ export async function uploadImage(file: File, name?: string): Promise<ImageUploa
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed with status ${response.status}`);
+      throw new Error(`ImgBB upload failed (HTTP ${response.status}). Check your connection and retry.`);
     }
 
     const json = await response.json();
     if (!json.success) {
-      throw new Error(json.error?.message || 'ImgBB upload failed');
+      throw new Error(json.error?.message || 'ImgBB returned an unsuccessful response');
     }
 
     return {
@@ -124,21 +126,9 @@ export async function uploadImage(file: File, name?: string): Promise<ImageUploa
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown upload error';
-    console.error('[ImageUpload] Error:', message);
-
-    // Fallback to local data URL so the app still works
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      return {
-        url: dataUrl,
-        thumbnailUrl: dataUrl,
-        deleteUrl: '',
-        success: true,
-        error: `ImgBB failed (using local fallback): ${message}`,
-      };
-    } catch {
-      return { url: '', thumbnailUrl: '', deleteUrl: '', success: false, error: message };
-    }
+    console.error('[ImageUpload] ImgBB upload error:', message);
+    // Return failure — caller will show a retry toast. Never save base64 blobs to Supabase.
+    return { url: '', thumbnailUrl: '', deleteUrl: '', success: false, error: message };
   }
 }
 

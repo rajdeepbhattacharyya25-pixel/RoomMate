@@ -1749,9 +1749,18 @@ export async function joinRoomWithCodeCloud(userId: string, code: string): Promi
 
 // Update Profile Avatar (Cloud + Local)
 export async function updateProfileAvatar(userId: string, avatarUrl: string): Promise<boolean> {
+  // Guard: never save base64 data URLs to Supabase — they bloat the DB (500KB–2MB per row).
+  // Only CDN URLs (https://i.ibb.co/...) should be persisted to the cloud.
+  const isBase64 = avatarUrl.startsWith('data:');
+  
   const localUser = db.getState().users.find((u) => u.id === userId);
   if (localUser) {
     db.upsertUser({ ...localUser, avatarUrl });
+  }
+
+  if (isBase64) {
+    console.warn('[updateProfileAvatar] Blocked: base64 data URL will not be saved to Supabase.');
+    return false;
   }
 
   if (IS_LIVE_SYNC_ENABLED) {
@@ -1788,6 +1797,18 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string): Pr
 
 // Update UPI QR Code URL (Cloud + Local)
 export async function updateUpiQrUrl(userId: string, upiQrUrl: string): Promise<boolean> {
+  // Guard: never save base64 data URLs to Supabase.
+  const isBase64 = upiQrUrl.startsWith('data:');
+  if (isBase64) {
+    console.warn('[updateUpiQrUrl] Blocked: base64 data URL will not be saved to Supabase.');
+    // Still update local state so the UI preview works
+    const localUser = db.getState().users.find((u) => u.id === userId);
+    if (localUser) {
+      db.upsertUser({ ...localUser, upiQrUrl });
+    }
+    return false;
+  }
+
   // 1. Resolve canonical authenticated Supabase user ID if available
   let targetId = userId;
   if (IS_LIVE_SYNC_ENABLED) {
