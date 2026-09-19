@@ -82,22 +82,6 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
       setMatchedAdmin(null);
       setEnrollmentData(null);
     } else {
-      // Emergency unlock via URL param ?unlock_admin=1
-      // Clears both localStorage-based and memory-based lockouts.
-      // Navigate to /admin-login?unlock_admin=1 when locked out.
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('unlock_admin') === '1') {
-        clearIntrusionLockout();
-        resetMfaFailures();
-        setLockoutRemaining(null);
-        setError('Emergency lockout cleared. You may now attempt to log in.');
-        // Remove param from URL without reload
-        urlParams.delete('unlock_admin');
-        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-        window.history.replaceState({}, '', newUrl);
-        return;
-      }
-
       const intrusionCheck = checkIntrusionLockout();
       if (intrusionCheck.isLocked && intrusionCheck.remainingSeconds > 0) {
         setLockoutRemaining(intrusionCheck.remainingSeconds);
