@@ -58,12 +58,15 @@ Both production monitors have been provisioned and verified active via the Uptim
 
 | Parameter | Monitor 1: Production Web Frontend | Monitor 2: Backend & Database Health API |
 | :--- | :--- | :--- |
-| **Monitor ID** | **`804035441`** | **`804035442`** |
+| **Monitor ID** | **`804035441`** | **`804035777`** |
 | **Friendly Name** | `RoomMate - Production Web` | `RoomMate - Backend & Database Health` |
 | **Target URL** | `https://roommate26.vercel.app/` | `https://roommate26.vercel.app/api/health` |
-| **Monitor Type** | `HTTP` | `HTTP` |
+| **Monitor Type** | `HTTP` | `KEYWORD` |
+| **Keyword Value** | N/A | `{"status":"ok"}` |
+| **Keyword Rule** | N/A | `ALERT_NOT_EXISTS` (Triggers DOWN if keyword missing) |
+| **Keyword Case** | N/A | Case-sensitive (`0`) |
 | **Check Interval** | `300 seconds` (5 mins) | `300 seconds` (5 mins) |
-| **Request Timeout** | `30 seconds` | `15 seconds` |
+| **Request Timeout** | `30 seconds` | `30 seconds` |
 | **Success Statuses** | `2xx`, `3xx` (HTTP 200) | `2xx`, `3xx` (HTTP 200) |
 | **Current Status** | **`UP`** (Operational) | **`UP`** (Operational) |
 | **Alert Contact** | `rajdeep.bhattacharyya25@gmail.com` (`8829170`) | `rajdeep.bhattacharyya25@gmail.com` (`8829170`) |
@@ -71,7 +74,37 @@ Both production monitors have been provisioned and verified active via the Uptim
 
 ---
 
-## 4. MCP Operational Commands & Verification
+## 4. Free-Tier Assertion & Incident Synchronization Investigation
+
+### API Monitoring with JSON Assertions vs Keyword Monitoring
+* **API Assertion Investigation:** Testing `create-monitor` with `type: "API"` and JSONPath assertions (`$.status == "ok"`) via UptimeRobot MCP returned:
+  ```json
+  "You are not allowed to use some settings with your current plan."
+  ```
+  API response assertion monitoring is an UptimeRobot PRO/paid feature and is **not supported on the Free tier**.
+* **Keyword Monitoring Solution:** Configured Monitor 2 as `type: "KEYWORD"` with `keywordValue: "{\"status\":\"ok\"}"` and `keywordType: "ALERT_NOT_EXISTS"`. If the database probe fails, `/api/health` returns HTTP 503 and body `{"status":"error","message":"database connectivity probe failed"}`, which immediately trips the keyword check and alerts the administrator.
+
+### Incident Synchronization Investigation (`UptimeRobot` -> `system_incidents`)
+* **Webhook Alert Contacts (`type: 5`):** Tested creating a webhook contact via `newAlertContact` using the UptimeRobot API:
+  ```json
+  {
+    "stat": "fail",
+    "error": {
+      "type": "access_denied",
+      "message": "This integration is not available for current user."
+    }
+  }
+  ```
+  UptimeRobot strictly blocks webhook integrations on the Free plan.
+* **Constraints Evaluation:**
+  - **UptimeRobot Free:** Does not permit outgoing webhooks; only Email notifications (`type: 2`) to `rajdeep.bhattacharyya25@gmail.com`.
+  - **Vercel Hobby:** Strictly limits cron jobs to once per 24 hours (`0 0 * * *`); high-frequency cron polling is prohibited.
+  - **Supabase Free & RoomMate:** No paid middleware or Telegram bots allowed under zero-cost constraint.
+* **Verdict:** There is **no genuinely real-time, automated push synchronization** from UptimeRobot Free into `system_incidents` without a paid UptimeRobot plan or an external email-relay worker. On-demand lazy synchronization (fetching from UptimeRobot REST API when a SuperAdmin opens the incident dashboard) is the only native zero-cost mechanism available.
+
+---
+
+## 5. MCP Operational Commands & Verification
 
 You can query the live status of the monitoring infrastructure at any time through the MCP connection:
 
@@ -85,7 +118,7 @@ You can query the live status of the monitoring infrastructure at any time throu
   }
 }
 ```
-**Expected Response:** Returns both monitors (`804035441` and `804035442`) with `status: "UP"`.
+**Expected Response:** Returns both monitors (`804035441` and `804035777`) with `status: "UP"`.
 
 ### 2. Retrieve 7-Day Performance & Availability Stats
 ```json
@@ -116,7 +149,7 @@ You can query the live status of the monitoring infrastructure at any time throu
 
 ---
 
-## 5. Security & Isolation Guarantee
+## 6. Security & Isolation Guarantee
 
 1. **Zero Secret Leakage:** The public health endpoint `/api/health` strictly responds with `{"status":"ok"}` or `{"status":"error"}`. Connection strings, user records, and database secrets are never exposed.
 2. **Student Privacy:** Row Level Security (RLS) on Supabase prevents student accounts from accessing incident telemetry.
