@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   User,
   Room,
@@ -390,14 +390,30 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
     return roomJoinRequests.filter((r) => r.roomId === activeRoom.id && r.status === 'PENDING');
   }, [activeRoom, roomJoinRequests]);
 
-  // Initialize participants if empty
-  const [prevRoomIdForParticipants, setPrevRoomIdForParticipants] = useState<string | null>(activeRoom?.id || null);
-  if (activeRoom?.id !== prevRoomIdForParticipants) {
-    setPrevRoomIdForParticipants(activeRoom?.id || null);
-    if (activeUserObjects.length > 0) {
+  // Auto-select first room if user has rooms but none selected
+  useEffect(() => {
+    if (!activeRoom && rooms.length > 0 && onSelectRoom) {
+      onSelectRoom(rooms[0]);
+    }
+  }, [activeRoom, rooms, onSelectRoom]);
+
+  // Initialize participants reliably on mount and room switch
+  useEffect(() => {
+    if (activeUserObjects.length > 0 && selectedParticipants.length === 0) {
       setSelectedParticipants(activeUserObjects.map((u) => u.id));
     }
-  }
+  }, [activeUserObjects, selectedParticipants.length]);
+
+  useEffect(() => {
+    if (activeRoom?.id) {
+      const currentActiveIds = roomMembers
+        .filter((m) => m.roomId === activeRoom.id && m.status === 'ACTIVE')
+        .map((m) => m.userId);
+      if (currentActiveIds.length > 0) {
+        setSelectedParticipants(currentActiveIds);
+      }
+    }
+  }, [activeRoom?.id]);
 
   // Room Summary & Debts
   const summary = activeRoom
@@ -801,7 +817,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       </div>
 
       {/* 0-Rooms Empty State Card */}
-      {(!activeRoom || rooms.length === 0) && (
+      {rooms.length === 0 && (
         <div className="rounded-2xl bg-white border border-slate-200/90 p-6 text-center space-y-3.5 shadow-xs">
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
             <Home className="w-6 h-6" />
@@ -826,6 +842,29 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Join with Code</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Select Room State (rooms exist but none currently selected) */}
+      {rooms.length > 0 && !activeRoom && (
+        <div className="rounded-2xl bg-white border border-slate-200/90 p-6 text-center space-y-3.5 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
+            <Home className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-900">Choose a Room</h3>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              Select one of your rooms above to view expenses, split bills, and manage settlements.
+            </p>
+          </div>
+          <div className="flex gap-2 justify-center pt-1">
+            <button
+              onClick={() => onSelectRoom(rooms[0])}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <span>Open {rooms[0].name}</span>
             </button>
           </div>
         </div>

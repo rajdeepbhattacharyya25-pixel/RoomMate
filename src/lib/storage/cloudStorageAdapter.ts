@@ -253,7 +253,28 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       // fallback to local incidents if table not yet migrated or offline
     }
 
-    return {
+    // 10. Room Join Requests (Cloud sync)
+    let roomJoinRequests: RoomJoinRequest[] = localState.roomJoinRequests || [];
+    try {
+      const { data: rawJoinReqs } = await supabase
+        .from('room_join_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (rawJoinReqs && rawJoinReqs.length > 0) {
+        roomJoinRequests = rawJoinReqs.map((req) => ({
+          id: req.id,
+          roomId: req.room_id,
+          userId: req.user_id,
+          status: req.status as RoomJoinRequest['status'],
+          createdAt: req.created_at,
+        }));
+      }
+    } catch {
+      // fallback to local join requests
+    }
+
+    const cloudDatabaseState: DatabaseState = {
       users,
       rooms,
       roomMembers,
@@ -264,7 +285,7 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       personalExpenses,
       subscriptions: localState.subscriptions,
       subscriptionEvents: localState.subscriptionEvents,
-      roomJoinRequests: localState.roomJoinRequests || [],
+      roomJoinRequests,
       auditLogs: localState.auditLogs,
       notifications,
       bugReports: localState.bugReports || [],
@@ -274,6 +295,11 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       settings: localState.settings,
       systemIncidents,
     };
+
+    // Synchronize underlying storage state with verified cloud dataset
+    db.saveState(cloudDatabaseState);
+
+    return cloudDatabaseState;
   } catch (err) {
     console.error('Failed to sync state from Supabase Cloud:', err);
     return null;
@@ -1573,9 +1599,11 @@ export async function createRoomCloud(userId: string, name: string, description?
 
         // Add 6-character room invite code in cloud
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const token = 'rm_inv_' + Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
         await supabase.from('room_invitations').insert({
           room_id: cloudRoom.id,
           invite_code: code,
+          token,
           created_by: userId,
           expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         });
@@ -1589,7 +1617,37 @@ export async function createRoomCloud(userId: string, name: string, description?
           createdAt: cloudRoom.created_at,
           updatedAt: cloudRoom.updated_at,
         };
-        db.getState().rooms.unshift(syncedRoom);
+
+        const state = db.getState();
+        // Replace temporary localRoom with verified cloud room
+        state.rooms = state.rooms.filter((r) => r.id !== localRoom.id);
+        state.rooms.unshift(syncedRoom);
+
+        // Update local roomMembers for cloud room
+        state.roomMembers = state.roomMembers.filter((m) => m.roomId !== localRoom.id);
+        state.roomMembers.push({
+          id: 'rm-' + Math.random().toString(36).substr(2, 9),
+          roomId: cloudRoom.id,
+          userId,
+          role: 'ROOM_ADMIN',
+          status: 'ACTIVE',
+          joinedAt: new Date().toISOString(),
+        });
+
+        // Update local roomInvitations for cloud room
+        state.roomInvitations = state.roomInvitations.filter((i) => i.roomId !== localRoom.id);
+        state.roomInvitations.push({
+          id: 'inv-' + Math.random().toString(36).substr(2, 9),
+          roomId: cloudRoom.id,
+          token,
+          inviteCode: code,
+          createdBy: userId,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          isRevoked: false,
+          createdAt: new Date().toISOString(),
+        });
+
+        db.saveState(state);
         return syncedRoom;
       }
     } catch (err) {
@@ -1642,9 +1700,43 @@ export async function joinRoomWithCodeCloud(userId: string, code: string): Promi
           updatedAt: r.updated_at,
         };
 
-        if (!db.getState().rooms.some((rm) => rm.id === joinedRoom.id)) {
-          db.getState().rooms.unshift(joinedRoom);
+        const state = db.getState();
+        if (!state.rooms.some((rm) => rm.id === joinedRoom.id)) {
+          state.rooms.unshift(joinedRoom);
         }
+
+        const existingMember = state.roomMembers.find(
+          (m) => m.roomId === joinedRoom.id && m.userId === userId
+        );
+        if (existingMember) {
+          existingMember.status = 'ACTIVE';
+          existingMember.leftAt = undefined;
+        } else {
+          state.roomMembers.push({
+            id: 'rm-' + Math.random().toString(36).substr(2, 9),
+            roomId: joinedRoom.id,
+            userId,
+            role: 'MEMBER',
+            status: 'ACTIVE',
+            joinedAt: new Date().toISOString(),
+          });
+        }
+
+        // Cache the invite in local state if not present
+        if (!state.roomInvitations.some((i) => i.id === invite.id)) {
+          state.roomInvitations.push({
+            id: invite.id,
+            roomId: invite.room_id,
+            inviteCode: invite.invite_code,
+            token: invite.token || ('tok_' + invite.id),
+            createdBy: invite.created_by,
+            expiresAt: invite.expires_at || undefined,
+            isRevoked: invite.is_revoked ?? false,
+            createdAt: invite.created_at,
+          });
+        }
+
+        db.saveState(state);
         return joinedRoom;
       }
     } catch (err) {
@@ -2019,6 +2111,97 @@ export async function resolveInviteCloud(tokenOrCode: string): Promise<{
   adminName: string;
   invite: RoomInvitation;
 }> {
+  const clean = tokenOrCode.trim();
+  const cleanUpper = clean.toUpperCase();
+
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { data: inv, error } = await supabase
+        .from('room_invitations')
+        .select('*, rooms(*)')
+        .or(`token.eq.${clean},invite_code.eq.${cleanUpper}`)
+        .eq('is_revoked', false)
+        .maybeSingle();
+
+      if (!error && inv && inv.rooms) {
+        const r = inv.rooms as unknown as {
+          id: string;
+          name: string;
+          description: string | null;
+          created_by: string;
+          join_policy?: JoinPolicy;
+          invite_policy?: InvitePolicy;
+          is_archived: boolean | null;
+          created_at: string;
+          updated_at: string;
+        };
+
+        // Fetch active members count
+        const { count } = await supabase
+          .from('room_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('room_id', inv.room_id)
+          .eq('status', 'ACTIVE');
+
+        // Fetch admin name
+        let adminName = 'Room Admin';
+        const { data: adminMember } = await supabase
+          .from('room_members')
+          .select('user_id, profiles(name)')
+          .eq('room_id', inv.room_id)
+          .eq('role', 'ROOM_ADMIN')
+          .eq('status', 'ACTIVE')
+          .maybeSingle();
+
+        if ((adminMember as any)?.profiles?.name) {
+          adminName = (adminMember as any).profiles.name;
+        }
+
+        const resolved = {
+          room: {
+            id: r.id,
+            name: r.name,
+            description: r.description || undefined,
+            joinPolicy: (r.join_policy || 'APPROVAL_REQUIRED') as JoinPolicy,
+            invitePolicy: (r.invite_policy || 'ALL_MEMBERS') as InvitePolicy,
+          },
+          memberCount: count || 1,
+          adminName,
+          invite: {
+            id: inv.id,
+            roomId: inv.room_id,
+            inviteCode: inv.invite_code,
+            token: inv.token || ('tok_' + inv.id),
+            createdBy: inv.created_by,
+            expiresAt: inv.expires_at || undefined,
+            isRevoked: inv.is_revoked ?? false,
+            createdAt: inv.created_at,
+          },
+        };
+
+        // Cache room and invite into db.state
+        const state = db.getState();
+        if (!state.rooms.some((rm) => rm.id === resolved.room.id)) {
+          state.rooms.unshift({
+            ...resolved.room,
+            createdBy: inv.created_by,
+            isArchived: false,
+            createdAt: inv.created_at,
+            updatedAt: inv.created_at,
+          });
+        }
+        if (!state.roomInvitations.some((i) => i.id === resolved.invite.id)) {
+          state.roomInvitations.unshift(resolved.invite);
+        }
+        db.saveState(state);
+
+        return resolved;
+      }
+    } catch (err) {
+      console.warn('resolveInviteCloud cloud lookup warning:', err);
+    }
+  }
+
   return db.resolveInvite(tokenOrCode);
 }
 
@@ -2032,31 +2215,147 @@ export async function requestJoinRoomCloud(
   message?: string;
   requestId?: string;
 }> {
-  const result = db.requestJoinRoom(userId, tokenOrCode);
-
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      if (result.status === 'JOINED') {
+      const resolved = await resolveInviteCloud(tokenOrCode);
+      const roomId = resolved.room.id;
+
+      // 1. Check if user is already an active member in Supabase
+      const { data: existingMember } = await supabase
+        .from('room_members')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const state = db.getState();
+      const existingLocalMember = state.roomMembers.find(
+        (m) => m.roomId === roomId && m.userId === userId
+      );
+
+      const targetRoom: Room = {
+        id: resolved.room.id,
+        name: resolved.room.name,
+        description: resolved.room.description,
+        createdBy: resolved.invite.createdBy,
+        isArchived: false,
+        createdAt: resolved.invite.createdAt,
+        updatedAt: resolved.invite.createdAt,
+      };
+
+      if (!state.rooms.some((r) => r.id === targetRoom.id)) {
+        state.rooms.unshift(targetRoom);
+      }
+
+      if (existingMember?.status === 'ACTIVE' || (existingLocalMember && existingLocalMember.status === 'ACTIVE')) {
+        if (!existingLocalMember) {
+          state.roomMembers.push({
+            id: existingMember?.id || ('rm-' + Math.random().toString(36).substr(2, 9)),
+            roomId,
+            userId,
+            role: (existingMember?.role || 'MEMBER') as RoomMember['role'],
+            status: 'ACTIVE',
+            joinedAt: existingMember?.joined_at || new Date().toISOString(),
+          });
+          db.saveState(state);
+        }
+        return {
+          status: 'ALREADY_MEMBER',
+          room: targetRoom,
+          message: "You're already a member of this room.",
+        };
+      }
+
+      const policy = resolved.room.joinPolicy || 'APPROVAL_REQUIRED';
+
+      if (policy === 'INSTANT') {
         await supabase.from('room_members').upsert({
-          room_id: result.room.id,
+          room_id: roomId,
           user_id: userId,
           role: 'MEMBER',
           status: 'ACTIVE',
+          joined_at: new Date().toISOString(),
         });
-      } else if (result.status === 'PENDING') {
-        await supabase.from('room_join_requests').upsert({
-          id: result.requestId,
-          room_id: result.room.id,
-          user_id: userId,
-          status: 'PENDING',
-        });
+
+        if (existingLocalMember) {
+          existingLocalMember.status = 'ACTIVE';
+          existingLocalMember.leftAt = undefined;
+        } else {
+          state.roomMembers.push({
+            id: 'rm-' + Math.random().toString(36).substr(2, 9),
+            roomId,
+            userId,
+            role: 'MEMBER',
+            status: 'ACTIVE',
+            joinedAt: new Date().toISOString(),
+          });
+        }
+        db.saveState(state);
+
+        return {
+          status: 'JOINED',
+          room: targetRoom,
+          message: `Welcome to ${targetRoom.name}!`,
+        };
       }
+
+      // APPROVAL_REQUIRED: Check existing pending request in Supabase
+      const { data: existingReq } = await supabase
+        .from('room_join_requests')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .eq('status', 'PENDING')
+        .maybeSingle();
+
+      if (existingReq) {
+        if (!state.roomJoinRequests.some((r) => r.id === existingReq.id)) {
+          state.roomJoinRequests.unshift({
+            id: existingReq.id,
+            roomId,
+            userId,
+            status: 'PENDING',
+            createdAt: existingReq.created_at,
+          });
+          db.saveState(state);
+        }
+        return {
+          status: 'PENDING',
+          room: targetRoom,
+          message: `Your request to join ${targetRoom.name} is waiting for admin approval.`,
+          requestId: existingReq.id,
+        };
+      }
+
+      const newReqId = 'req-' + Math.random().toString(36).substr(2, 9);
+      await supabase.from('room_join_requests').insert({
+        id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newReqId) ? newReqId : undefined,
+        room_id: roomId,
+        user_id: userId,
+        status: 'PENDING',
+      });
+
+      state.roomJoinRequests.unshift({
+        id: newReqId,
+        roomId,
+        userId,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+      });
+      db.saveState(state);
+
+      return {
+        status: 'PENDING',
+        room: targetRoom,
+        message: `Your request to join ${targetRoom.name} is waiting for admin approval.`,
+        requestId: newReqId,
+      };
     } catch (err) {
-      console.warn('requestJoinRoomCloud cloud sync warning:', err);
+      console.warn('requestJoinRoomCloud cloud warning, falling back to local:', err);
     }
   }
 
-  return result;
+  return db.requestJoinRoom(userId, tokenOrCode);
 }
 
 // Check Join Request Status (Cloud + Local fallback)
@@ -2079,11 +2378,26 @@ export async function checkJoinRequestStatusCloud(requestId: string): Promise<{
         .maybeSingle();
 
       if (!error && data) {
-        const status = data.status as 'PENDING' | 'APPROVED' | 'DECLINED';
-        if (status === 'APPROVED') {
-          const room = db.getState().rooms.find((r) => r.id === data.room_id);
-          return { status: 'APPROVED', room, adminName: localRes.adminName };
-        } else if (status === 'DECLINED') {
+        if (data.status === 'APPROVED') {
+          const { data: roomData } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('id', data.room_id)
+            .single();
+
+          if (roomData) {
+            const mappedRoom: Room = {
+              id: roomData.id,
+              name: roomData.name,
+              description: roomData.description || undefined,
+              createdBy: roomData.created_by,
+              isArchived: roomData.is_archived ?? false,
+              createdAt: roomData.created_at,
+              updatedAt: roomData.updated_at,
+            };
+            return { status: 'APPROVED', room: mappedRoom, adminName: localRes.adminName };
+          }
+        } else if (data.status === 'DECLINED') {
           return { status: 'DECLINED', adminName: localRes.adminName };
         }
       }
@@ -2100,29 +2414,71 @@ export async function approveJoinRequestCloud(
   adminUserId: string,
   requestId: string
 ): Promise<{ success: boolean; room: Room; request?: RoomJoinRequest }> {
-  const result = db.approveJoinRequest(adminUserId, requestId);
-
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      await supabase
+      const { data: reqData } = await supabase
         .from('room_join_requests')
-        .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
-        .eq('id', requestId);
+        .select('*, rooms(*)')
+        .eq('id', requestId)
+        .maybeSingle();
 
-      const targetUserId = db.getState().roomJoinRequests.find((r) => r.id === requestId)?.userId;
-      if (targetUserId) {
+      if (reqData && reqData.rooms) {
+        const r = reqData.rooms as any;
+        await supabase
+          .from('room_join_requests')
+          .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
+          .eq('id', requestId);
+
         await supabase.from('room_members').upsert({
-          room_id: result.room.id,
-          user_id: targetUserId,
+          room_id: reqData.room_id,
+          user_id: reqData.user_id,
           role: 'MEMBER',
           status: 'ACTIVE',
+          joined_at: new Date().toISOString(),
         });
+
+        const state = db.getState();
+        const roomObj: Room = {
+          id: r.id,
+          name: r.name,
+          description: r.description || undefined,
+          createdBy: r.created_by,
+          isArchived: r.is_archived ?? false,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+        };
+
+        const existingMember = state.roomMembers.find(
+          (m) => m.roomId === reqData.room_id && m.userId === reqData.user_id
+        );
+        if (existingMember) {
+          existingMember.status = 'ACTIVE';
+          existingMember.leftAt = undefined;
+        } else {
+          state.roomMembers.push({
+            id: 'rm-' + Math.random().toString(36).substr(2, 9),
+            roomId: reqData.room_id,
+            userId: reqData.user_id,
+            role: 'MEMBER',
+            status: 'ACTIVE',
+            joinedAt: new Date().toISOString(),
+          });
+        }
+
+        const localReq = state.roomJoinRequests.find((rq) => rq.id === requestId);
+        if (localReq) {
+          localReq.status = 'APPROVED';
+        }
+
+        db.saveState(state);
+        return { success: true, room: roomObj, request: localReq };
       }
     } catch (err) {
-      console.warn('approveJoinRequestCloud cloud sync warning:', err);
+      console.warn('approveJoinRequestCloud cloud error, trying local fallback:', err);
     }
   }
 
+  const result = db.approveJoinRequest(adminUserId, requestId);
   return result;
 }
 
@@ -2131,20 +2487,26 @@ export async function declineJoinRequestCloud(
   adminUserId: string,
   requestId: string
 ): Promise<{ success: boolean }> {
-  const result = db.declineJoinRequest(adminUserId, requestId);
-
   if (IS_LIVE_SYNC_ENABLED) {
     try {
       await supabase
         .from('room_join_requests')
         .update({ status: 'DECLINED', updated_at: new Date().toISOString() })
         .eq('id', requestId);
+
+      const state = db.getState();
+      const localReq = state.roomJoinRequests.find((r) => r.id === requestId);
+      if (localReq) {
+        localReq.status = 'DECLINED';
+        db.saveState(state);
+      }
+      return { success: true };
     } catch (err) {
-      console.warn('declineJoinRequestCloud cloud sync warning:', err);
+      console.warn('declineJoinRequestCloud cloud warning:', err);
     }
   }
 
-  return result;
+  return db.declineJoinRequest(adminUserId, requestId);
 }
 
 // Transfer Room Ownership (Cloud + Local fallback)
@@ -2241,7 +2603,118 @@ export async function getRoomJoinRequestsCloud(
   adminUserId: string,
   roomId: string
 ): Promise<Array<RoomJoinRequest & { user: User }>> {
-  return db.getRoomJoinRequests(adminUserId, roomId);
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const state = db.getState();
+      const localAdmin = state.roomMembers.find(
+        (rm) => rm.roomId === roomId && rm.userId === adminUserId && rm.role === 'ROOM_ADMIN' && rm.status === 'ACTIVE'
+      );
+
+      let isAdmin = Boolean(localAdmin);
+      if (!isAdmin) {
+        const { data: memberData } = await supabase
+          .from('room_members')
+          .select('role, status')
+          .eq('room_id', roomId)
+          .eq('user_id', adminUserId)
+          .maybeSingle();
+
+        if (memberData && memberData.role === 'ROOM_ADMIN' && memberData.status === 'ACTIVE') {
+          isAdmin = true;
+        }
+      }
+
+      if (!isAdmin) {
+        return [];
+      }
+
+      const { data: rawRequests, error: reqErr } = await supabase
+        .from('room_join_requests')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('status', 'PENDING')
+        .order('created_at', { ascending: false });
+
+      if (!reqErr && rawRequests) {
+        const userIds = Array.from(new Set(rawRequests.map((r) => r.user_id)));
+        const profilesMap = new Map<string, any>();
+
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', userIds);
+
+          if (profilesData) {
+            profilesData.forEach((p) => profilesMap.set(p.id, p));
+          }
+        }
+
+        const mappedRequests: Array<RoomJoinRequest & { user: User }> = rawRequests.map((r) => {
+          const prof = profilesMap.get(r.user_id);
+          const localUser = state.users.find((u) => u.id === r.user_id);
+
+          const user: User = localUser || (prof ? {
+            id: prof.id,
+            email: prof.email,
+            name: prof.name,
+            phone: prof.phone || undefined,
+            avatarUrl: prof.avatar_url || undefined,
+            upiQrUrl: prof.upi_qr_url || undefined,
+            upiId: prof.upi_id || undefined,
+            role: (prof.role as User['role']) || 'STUDENT',
+            isSuspended: prof.is_suspended ?? false,
+            createdAt: prof.created_at,
+            updatedAt: prof.updated_at,
+          } : {
+            id: r.user_id,
+            name: 'New Roommate',
+            email: 'user@roommate.app',
+            role: 'STUDENT' as const,
+            isSuspended: false,
+            createdAt: r.created_at,
+            updatedAt: r.created_at,
+          });
+
+          return {
+            id: r.id,
+            roomId: r.room_id,
+            userId: r.user_id,
+            status: r.status as RoomJoinRequest['status'],
+            createdAt: r.created_at,
+            user,
+          };
+        });
+
+        let hasNewReq = false;
+        rawRequests.forEach((req) => {
+          if (!state.roomJoinRequests.some((lr) => lr.id === req.id)) {
+            state.roomJoinRequests.unshift({
+              id: req.id,
+              roomId: req.room_id,
+              userId: req.user_id,
+              status: req.status as RoomJoinRequest['status'],
+              createdAt: req.created_at,
+            });
+            hasNewReq = true;
+          }
+        });
+        if (hasNewReq) {
+          db.saveState(state);
+        }
+
+        return mappedRequests;
+      }
+    } catch (err) {
+      console.warn('getRoomJoinRequestsCloud cloud error, fallback to local:', err);
+    }
+  }
+
+  try {
+    return db.getRoomJoinRequests(adminUserId, roomId);
+  } catch {
+    return [];
+  }
 }
 
 // In-App Notification Functions (Cloud + Local fallback)

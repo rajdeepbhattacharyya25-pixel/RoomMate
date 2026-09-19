@@ -48,7 +48,15 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 
   // Compute dynamic invite link using token
   const token = invitation?.token || invitation?.inviteCode || 'code';
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://roommate.app';
+  const isCapacitorOrLocal =
+    typeof window !== 'undefined' &&
+    (window.location.origin.includes('localhost') ||
+      window.location.origin.includes('capacitor://') ||
+      window.location.origin.includes('127.0.0.1'));
+  const baseUrl =
+    isCapacitorOrLocal || typeof window === 'undefined'
+      ? 'https://roommate26.vercel.app'
+      : window.location.origin;
   const inviteLink = `${baseUrl}/join/${token}`;
 
   // QR Code URL via reliable high-res image service with fallback

@@ -325,13 +325,13 @@ export function AppContent() {
             setCurrentUser(matched);
           }
         }
-        if (cloudState.rooms.length > 0 && !activeRoom) {
-          setActiveRoom(cloudState.rooms[0]);
+        if (cloudState.rooms.length > 0) {
+          setActiveRoom((prev) => prev || cloudState.rooms[0]);
         }
         setIsRealtimeLive(true);
       }
     });
-  }, [isAuthenticated, currentUser.id, currentUser.email, activeRoom]);
+  }, [isAuthenticated, currentUser.id, currentUser.email]);
 
   // 2. Realtime Room Subscriptions (Multi-Device Broadcast Listener & Native Notifications)
   useEffect(() => {
