@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  */
 
 // Toggle for outage simulation: false = 200 OK {"status":"ok"}, true = 503 {"status":"error"}
-const SIMULATE_FAILURE = false;
+const SIMULATE_FAILURE = true;
 
 export default async function handler(
   req: IncomingMessage,
