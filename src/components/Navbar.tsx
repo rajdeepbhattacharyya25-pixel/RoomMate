@@ -118,18 +118,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>My Plan</span>
           </button>
 
-          {/* Super Admin Tab */}
-          <button
-            onClick={() => onSelectTab('admin')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'admin'
-                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                : 'text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span>Platform Admin</span>
-          </button>
+          {/* Super Admin Tab - strictly visible only to authenticated SUPER_ADMIN */}
+          {currentUser.role === 'SUPER_ADMIN' && (
+            <button
+              onClick={() => onSelectTab('admin')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === 'admin'
+                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                  : 'text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Platform Admin</span>
+            </button>
+          )}
         </nav>
 
         {/* Right Side: Supabase Hub, Security Auditor & Active User Switcher */}

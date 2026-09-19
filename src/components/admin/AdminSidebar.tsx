@@ -123,7 +123,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'system-health',
       label: 'System Health',
       icon: <Activity className="w-4 h-4 shrink-0 text-emerald-600" />,
-      badge: '99.98%',
+      badge: 'Live',
       pulseDot: true,
       section: 'admin',
     },
@@ -256,12 +256,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                       <span className="truncate">{item.label}</span>
                       {item.badge && (
                         <span
-                          className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
                             item.id === 'system-health'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-slate-100 text-slate-600'
                           }`}
                         >
+                          {item.pulseDot && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          )}
                           {item.badge}
                         </span>
                       )}

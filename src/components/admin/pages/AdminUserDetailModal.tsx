@@ -56,11 +56,9 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   const [notifMessage, setNotifMessage] = useState('');
   const [notifSuccess, setNotifSuccess] = useState(false);
 
-  if (!user) return null;
-
   // Rooms this user belongs to
-  const userRoomMemberships = roomMembers.filter((m) => m.userId === user.id);
-  const userRooms = rooms.filter((r) => userRoomMemberships.some((m) => m.roomId === r.id));
+  const userRoomMemberships = user ? roomMembers.filter((m) => m.userId === user.id) : [];
+  const userRooms = user ? rooms.filter((r) => userRoomMemberships.some((m) => m.roomId === r.id)) : [];
 
   // Synthesize real user activity stream
   const userActivity = useMemo(() => {
@@ -156,6 +154,8 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 15);
   }, [user, userRoomMemberships, rooms, sharedExpenses, settlementPayments, auditLogs]);
+
+  if (!user) return null;
 
   const handleSendDirectNotif = (e: React.FormEvent) => {
     e.preventDefault();

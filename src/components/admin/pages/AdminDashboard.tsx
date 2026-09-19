@@ -8,11 +8,8 @@ import {
   CheckCircle2,
   Headphones,
   UserPlus,
-  ArrowRight,
   Shield,
-  Activity,
   AlertCircle,
-  Wifi,
 } from 'lucide-react';
 import { User, Room, RoomMember, SharedExpense, ExpenseSplit, SettlementPayment, BugReport, AuditLog } from '../../../types';
 import { MetricCard } from '../common/MetricCard';

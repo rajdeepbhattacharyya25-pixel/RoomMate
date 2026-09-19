@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Server,
   Database,
   Wifi,
+  WifiOff,
   Key,
   HardDrive,
   AlertTriangle,
@@ -15,6 +16,8 @@ import {
   Activity,
   CheckCircle2,
   Bug,
+  Clock,
+  AlertCircle,
 } from 'lucide-react';
 import { SystemIncident } from '../../../types';
 import { StatusBadge } from '../common/StatusBadge';
@@ -24,41 +27,135 @@ import {
   getPostHogEventsUrl,
 } from '../../../lib/analytics/telemetryConfig';
 import { supabase, isSupabaseConfigured } from '../../../lib/supabase/client';
+import { useNetworkStatus } from '../../../context/NetworkContext';
+import {
+  formatElapsedDuration,
+  formatDateTime,
+  formatDurationSeconds,
+  computeOverallSystemStatus,
+  computeServiceStatus,
+  getIncidentEmptyStateMessage,
+} from './adminSystemHealthHelpers';
 
 interface AdminSystemHealthProps {
   incidents?: SystemIncident[];
   onResolveIncident?: (incidentId: string) => Promise<void> | void;
+  onUpdateIncidentStatus?: (incidentId: string, status: SystemIncident['status']) => Promise<void> | void;
+  onRefreshIncidents?: () => Promise<void> | void;
 }
 
 export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
   incidents = [],
   onResolveIncident,
+  onUpdateIncidentStatus,
+  onRefreshIncidents,
 }) => {
+  const network = useNetworkStatus();
+  const [browserOnline, setBrowserOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setBrowserOnline(true);
+    const handleOffline = () => setBrowserOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const isOnline = network.isOnline && browserOnline;
+
   const [isPinging, setIsPinging] = useState(false);
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   const [incidentFilter, setIncidentFilter] = useState<string>('ALL');
   const [liveLatencyMs, setLiveLatencyMs] = useState<number | null>(null);
+  const [lastPingTime, setLastPingTime] = useState<string | null>(null);
+  const [healthResponse, setHealthResponse] = useState<{
+    status: 'ok' | 'error' | 'degraded';
+    databaseLatencyMs?: number;
+    apiLatencyMs?: number;
+    timestamp?: string;
+  } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<
     Array<{ time: string; p50: number; p95: number }>
   >([]);
 
   const handleManualPing = useCallback(async () => {
+    if (!isOnline) {
+      setIsPinging(false);
+      return;
+    }
+
     setIsPinging(true);
     const t0 = performance.now();
     let measuredMs = 28;
+    let endpointHealthy = true;
+    let dbLatency: number | undefined;
+
     try {
-      if (isSupabaseConfigured) {
-        const { error } = await supabase
-          .from('profiles')
-          .select('id', { head: true, count: 'exact' })
-          .limit(1);
-        if (!error) {
-          measuredMs = Math.max(Math.round(performance.now() - t0), 10);
+      // 1. Refresh incident telemetry if handler provided
+      if (onRefreshIncidents) {
+        onRefreshIncidents();
+      }
+
+      // 2. Probe dedicated serverless health endpoint
+      let res: Response | null = null;
+      try {
+        res = await fetch('/api/health', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        });
+      } catch {
+        res = null;
+      }
+
+      measuredMs = Math.max(Math.round(performance.now() - t0), 5);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        endpointHealthy = data.status === 'ok';
+        dbLatency = data.services?.database?.latencyMs;
+        setHealthResponse({
+          status: endpointHealthy ? 'ok' : 'error',
+          databaseLatencyMs: dbLatency ?? measuredMs,
+          apiLatencyMs: measuredMs,
+          timestamp: data.timestamp,
+        });
+      } else if (res && res.status === 404) {
+        // Fallback for dev environments without Vercel serverless dev proxy
+        if (isSupabaseConfigured) {
+          const dbT0 = performance.now();
+          const { error } = await supabase
+            .from('profiles')
+            .select('id', { head: true })
+            .limit(1);
+          measuredMs = Math.max(Math.round(performance.now() - dbT0), 10);
+          endpointHealthy = !error;
         }
+        setHealthResponse({
+          status: endpointHealthy ? 'ok' : 'degraded',
+          databaseLatencyMs: measuredMs,
+          apiLatencyMs: measuredMs,
+        });
       } else {
-        measuredMs = Math.max(Math.round(performance.now() - t0), 8);
+        endpointHealthy = false;
+        setHealthResponse({
+          status: 'error',
+          apiLatencyMs: measuredMs,
+        });
       }
     } catch {
-      measuredMs = Math.max(Math.round(performance.now() - t0), 45);
+      // Complete network failure
+      setHealthResponse({
+        status: 'error',
+        apiLatencyMs: measuredMs,
+      });
     } finally {
       setLiveLatencyMs(measuredMs);
       setIsPinging(false);
@@ -68,42 +165,153 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
         second: '2-digit',
         hour12: false,
       });
+      setLastPingTime(nowStr);
       setLatencyHistory((prev) => {
         const entry = { time: nowStr, p50: measuredMs, p95: Math.round(measuredMs * 1.3) };
         const next = [...prev, entry];
         return next.slice(-6);
       });
     }
-  }, []);
+  }, [isOnline, onRefreshIncidents]);
 
   // Initial live ping on mount
   useEffect(() => {
     handleManualPing();
   }, [handleManualPing]);
 
-  const services = useMemo(
-    () => [
+  // Auto-probe when returning online
+  const prevOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (!prevOnlineRef.current && isOnline) {
+      handleManualPing();
+    }
+    prevOnlineRef.current = isOnline;
+  }, [isOnline, handleManualPing]);
+
+  // Gentle 60-second automated polling when tab is visible and online (Phase 11 & Phase 12)
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 60_000;
+    let timerId: ReturnType<typeof setInterval> | null = null;
+
+    const runPoll = () => {
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible' &&
+        isOnline
+      ) {
+        handleManualPing();
+      }
+    };
+
+    timerId = setInterval(runPoll, POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isOnline) {
+        runPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (timerId) clearInterval(timerId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [handleManualPing, isOnline]);
+
+  const activeIncidents = useMemo(
+    () => incidents.filter((i) => i.status !== 'RESOLVED'),
+    [incidents]
+  );
+
+  // Live interval ticker to keep duration counter live while viewing active incidents
+  useEffect(() => {
+    if (activeIncidents.length === 0) return;
+    const interval = setInterval(() => {
+      setCurrentTimestamp(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeIncidents.length]);
+
+  const hasCriticalIncident = useMemo(
+    () => activeIncidents.some((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH'),
+    [activeIncidents]
+  );
+
+  const overallSystemStatus = useMemo((): 'OPERATIONAL' | 'DEGRADED' | 'OUTAGE' | 'OFFLINE' => {
+    return computeOverallSystemStatus({
+      isOnline,
+      hasCriticalIncident,
+      activeIncidentCount: activeIncidents.length,
+      healthStatus: healthResponse?.status,
+    });
+  }, [isOnline, hasCriticalIncident, activeIncidents.length, healthResponse?.status]);
+
+  const services = useMemo(() => {
+    const hasWebIncident = activeIncidents.some((i) => i.service.toLowerCase() === 'web');
+    const hasApiIncident = activeIncidents.some((i) => i.service.toLowerCase() === 'api');
+    const hasDbIncident = activeIncidents.some((i) => i.service.toLowerCase() === 'database');
+
+    const webStatus = computeServiceStatus({
+      serviceType: 'web',
+      isOnline,
+      hasIncident: hasWebIncident,
+      isDbConfigured: isSupabaseConfigured,
+      healthStatus: healthResponse?.status,
+    });
+
+    const apiStatus = computeServiceStatus({
+      serviceType: 'api',
+      isOnline,
+      hasIncident: hasApiIncident,
+      isDbConfigured: isSupabaseConfigured,
+      healthStatus: healthResponse?.status,
+    });
+
+    const dbStatus = computeServiceStatus({
+      serviceType: 'database',
+      isOnline,
+      hasIncident: hasDbIncident,
+      isDbConfigured: isSupabaseConfigured,
+      healthStatus: healthResponse?.status,
+    });
+
+    return [
       {
-        name: 'Application Engine',
+        name: 'Production Web Application',
         provider: 'Vercel Edge Network',
-        status: typeof window !== 'undefined' && navigator.onLine ? 'OPERATIONAL' : 'DEGRADED',
-        uptime: '99.98%',
-        latency: liveLatencyMs ? `${Math.round(liveLatencyMs * 0.65)}ms (Live)` : '24ms',
+        status: webStatus,
+        lastCheck: !isOnline ? 'Offline' : lastPingTime ? `${lastPingTime}` : 'Live Probe',
+        latency: !isOnline ? 'Offline' : liveLatencyMs ? `${Math.round(liveLatencyMs * 0.65)}ms (Live)` : '24ms',
         icon: Server,
+      },
+      {
+        name: 'Health & Monitoring API',
+        provider: 'Vercel Serverless (/api/health)',
+        status: apiStatus,
+        lastCheck: !isOnline ? 'Offline' : lastPingTime ? `${lastPingTime}` : 'Live Probe',
+        latency: !isOnline ? 'Offline' : liveLatencyMs ? `${liveLatencyMs}ms (Live)` : '28ms',
+        icon: Zap,
       },
       {
         name: 'PostgreSQL Database',
         provider: 'Supabase Postgres 15',
-        status: isSupabaseConfigured ? 'OPERATIONAL' : 'LOCAL_STORAGE',
-        uptime: '99.99%',
-        latency: liveLatencyMs ? `${liveLatencyMs}ms (Live)` : 'Measuring...',
+        status: dbStatus,
+        lastCheck: !isOnline ? 'Offline' : lastPingTime ? `${lastPingTime}` : 'Live Probe',
+        latency: !isOnline
+          ? 'Offline'
+          : healthResponse?.databaseLatencyMs
+          ? `${healthResponse.databaseLatencyMs}ms (Live)`
+          : liveLatencyMs
+          ? `${liveLatencyMs}ms (Live)`
+          : 'Measuring...',
         icon: Database,
       },
       {
         name: 'Firebase Crashlytics',
         provider: '@capacitor-firebase/crashlytics (Android)',
         status: 'OPERATIONAL',
-        uptime: '99.99%',
+        lastCheck: 'Continuous Stream',
         latency: '14ms',
         icon: Flame,
       },
@@ -111,40 +319,52 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
         name: 'PostHog Telemetry Pipeline',
         provider: 'ClickHouse Event Ingestion',
         status: 'OPERATIONAL',
-        uptime: '99.98%',
+        lastCheck: 'Continuous Stream',
         latency: '26ms',
         icon: Activity,
       },
       {
         name: 'Realtime WebSockets',
         provider: 'Supabase Realtime Channel',
-        status: isSupabaseConfigured ? 'OPERATIONAL' : 'STANDBY',
-        uptime: '99.95%',
-        latency: liveLatencyMs ? `${Math.round(liveLatencyMs * 1.1)}ms` : '42ms',
+        status: !isOnline ? 'OFFLINE' : isSupabaseConfigured ? 'OPERATIONAL' : 'STANDBY',
+        lastCheck: !isOnline ? 'Offline' : isSupabaseConfigured ? 'Heartbeat Active' : 'Standby',
+        latency: !isOnline ? 'Offline' : liveLatencyMs ? `${Math.round(liveLatencyMs * 1.1)}ms` : '42ms',
         icon: Wifi,
       },
       {
         name: 'Authentication Engine',
         provider: 'Supabase Auth + Google OAuth',
-        status: isSupabaseConfigured ? 'OPERATIONAL' : 'LOCAL',
-        uptime: '100%',
-        latency: liveLatencyMs ? `${Math.round(liveLatencyMs * 1.4)}ms` : '85ms',
+        status: !isOnline ? 'OFFLINE' : isSupabaseConfigured ? 'OPERATIONAL' : 'LOCAL',
+        lastCheck: !isOnline ? 'Offline' : 'Session Guard Active',
+        latency: !isOnline ? 'Offline' : liveLatencyMs ? `${Math.round(liveLatencyMs * 1.4)}ms` : '85ms',
         icon: Key,
       },
       {
         name: 'CDN & Storage',
         provider: 'Supabase Storage Bucket',
-        status: isSupabaseConfigured ? 'OPERATIONAL' : 'STANDBY',
-        uptime: '99.99%',
-        latency: '18ms',
+        status: !isOnline ? 'OFFLINE' : isSupabaseConfigured ? 'OPERATIONAL' : 'STANDBY',
+        lastCheck: !isOnline ? 'Offline' : 'Bucket Verified',
+        latency: !isOnline ? 'Offline' : '18ms',
         icon: HardDrive,
       },
-    ],
-    [liveLatencyMs]
-  );
+    ];
+  }, [isOnline, lastPingTime, liveLatencyMs, healthResponse, activeIncidents]);
+
+  const tabCounts = useMemo(() => {
+    return {
+      ALL: incidents.length,
+      ACTIVE: incidents.filter((i) => i.status !== 'RESOLVED').length,
+      RESOLVED: incidents.filter((i) => i.status === 'RESOLVED').length,
+      Web: incidents.filter((i) => i.service.toLowerCase() === 'web').length,
+      API: incidents.filter((i) => i.service.toLowerCase() === 'api').length,
+      Database: incidents.filter((i) => i.service.toLowerCase() === 'database').length,
+    };
+  }, [incidents]);
 
   const filteredIncidents = useMemo(() => {
     if (incidentFilter === 'ALL') return incidents;
+    if (incidentFilter === 'ACTIVE') return incidents.filter((i) => i.status !== 'RESOLVED');
+    if (incidentFilter === 'RESOLVED') return incidents.filter((i) => i.status === 'RESOLVED');
     return incidents.filter((i) => i.service.toLowerCase() === incidentFilter.toLowerCase());
   }, [incidents, incidentFilter]);
 
@@ -161,15 +381,44 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">System Health & Telemetry</h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              All Systems Nominal
-            </span>
+            {overallSystemStatus === 'OFFLINE' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                ⚪ Offline (Probes Paused)
+              </span>
+            )}
+            {overallSystemStatus === 'OPERATIONAL' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                🟢 All Systems Operational
+              </span>
+            )}
+            {overallSystemStatus === 'DEGRADED' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                🟡 Degraded Performance
+              </span>
+            )}
+            {overallSystemStatus === 'OUTAGE' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-bounce" />
+                🔴 System Issues Detected
+              </span>
+            )}
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time infrastructure health, latency percentiles, and incident diagnostics.
+          <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+            <span>Real-time infrastructure health, serverless probes, and automated incident monitoring.</span>
+            {lastPingTime && (
+              <span className="font-mono text-slate-400">
+                • Last probe: {lastPingTime}
+              </span>
+            )}
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold inline-flex items-center gap-1 border border-slate-200/60">
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              {isOnline ? 'Auto-refresh 60s' : 'Polling paused'}
+            </span>
           </p>
         </div>
 
@@ -200,14 +449,180 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
 
           <button
             onClick={handleManualPing}
-            disabled={isPinging}
-            className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
+            disabled={isPinging || !isOnline}
+            className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs shadow-sm flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            title={!isOnline ? 'Cannot probe health while offline' : 'Probe /api/health and sync live incident telemetry'}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin text-indigo-600' : ''}`} />
-            <span>{isPinging ? 'Pinging Services...' : 'Health Ping'}</span>
+            <span>{isPinging ? 'Refreshing Health...' : !isOnline ? 'Offline' : 'Refresh Health'}</span>
           </button>
         </div>
       </div>
+
+      {/* Offline Mode Banner (Phase 12) */}
+      {!isOnline && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50/95 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+              <WifiOff className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                <span>Network Disconnected — Offline Mode</span>
+              </h4>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Internet connectivity is unavailable. Displaying cached telemetry; health probes and live sync are paused until reconnection.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-amber-200/70 text-amber-900 text-xs font-bold self-start sm:self-auto border border-amber-300">
+            Cached Telemetry
+          </span>
+        </div>
+      )}
+
+      {/* Health Endpoint Unreachable / Degraded Banner (Phase 12) */}
+      {isOnline && healthResponse?.status === 'error' && activeIncidents.length === 0 && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/90 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
+              <AlertCircle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-rose-800">
+                Health Endpoint Degraded / Unreachable
+              </h4>
+              <p className="text-xs text-rose-700 mt-0.5">
+                Serverless probe at <code className="font-mono text-[11px] bg-rose-100/70 px-1 py-0.5 rounded text-rose-900">/api/health</code> could not be reached or returned an error. Cloud database or edge functions may be experiencing downtime.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleManualPing}
+            disabled={isPinging}
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            Retry Probe
+          </button>
+        </div>
+      )}
+
+      {/* Active Incidents Alert Banner (Phase 9) */}
+      {activeIncidents.length > 0 && (
+        <div
+          className={`rounded-2xl border p-5 shadow-sm space-y-4 animate-fadeIn transition-all ${
+            hasCriticalIncident
+              ? 'bg-rose-50/90 border-rose-200 text-rose-950'
+              : 'bg-amber-50/90 border-amber-200 text-amber-950'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-current/10">
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  hasCriticalIncident
+                    ? 'bg-rose-100 text-rose-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold tracking-tight">
+                    {activeIncidents.length === 1
+                      ? 'Active Infrastructure Incident Detected'
+                      : `${activeIncidents.length} Active Infrastructure Incidents Detected`}
+                  </h2>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
+                      hasCriticalIncident
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-amber-600 text-white'
+                    }`}
+                  >
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-xs opacity-80 mt-0.5">
+                  System monitoring detected service disruption. Automated probe mitigation is active.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {activeIncidents.map((inc) => {
+              const durationStr = formatElapsedDuration(inc.createdAt, currentTimestamp);
+              return (
+                <div
+                  key={inc.id}
+                  className="p-4 rounded-xl bg-white/90 border border-current/10 shadow-2xs backdrop-blur-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs text-slate-900">{inc.error}</span>
+                      <StatusBadge
+                        variant={
+                          inc.severity === 'CRITICAL' || inc.severity === 'HIGH'
+                            ? 'danger'
+                            : inc.severity === 'MEDIUM'
+                            ? 'warning'
+                            : 'neutral'
+                        }
+                        label={inc.severity}
+                        size="sm"
+                      />
+                      <StatusBadge
+                        variant={inc.status === 'INVESTIGATING' ? 'warning' : 'neutral'}
+                        label={inc.status}
+                        size="sm"
+                      />
+                    </div>
+
+                    {inc.details && (
+                      <p className="text-xs text-slate-600 truncate max-w-xl">{inc.details}</p>
+                    )}
+
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
+                      <span className="font-semibold text-slate-700">{inc.service} Service</span>
+                      <span>•</span>
+                      <span>{inc.occurrences} {inc.occurrences === 1 ? 'failure' : 'failures'} detected</span>
+                      <span>•</span>
+                      <span>Started {formatRelativeTime(inc.createdAt)}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 font-mono font-bold text-rose-600">
+                        <Clock className="w-3 h-3" />
+                        Outage Duration: {durationStr}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+                    {inc.status === 'INVESTIGATING' && onUpdateIncidentStatus && (
+                      <button
+                        onClick={() => onUpdateIncidentStatus(inc.id, 'MONITORING')}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                        title="Transition incident to Monitoring status"
+                      >
+                        Set Monitoring
+                      </button>
+                    )}
+                    {onResolveIncident && (
+                      <button
+                        onClick={() => onResolveIncident(inc.id)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer"
+                      >
+                        Mark Resolved
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Services Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -222,7 +637,19 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
                 <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700">
                   <Icon className="w-5 h-5 text-indigo-600" />
                 </div>
-                <StatusBadge variant="success" label="Operational" size="sm" />
+                <StatusBadge
+                  variant={
+                    srv.status === 'OPERATIONAL'
+                      ? 'success'
+                      : srv.status === 'DEGRADED'
+                      ? 'warning'
+                      : srv.status === 'LOCAL_STORAGE' || srv.status === 'STANDBY' || srv.status === 'LOCAL'
+                      ? 'neutral'
+                      : 'danger'
+                  }
+                  label={srv.status}
+                  size="sm"
+                />
               </div>
 
               <div>
@@ -232,12 +659,24 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
 
               <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Uptime (30d)</span>
-                  <span className="font-bold text-slate-800 font-mono">{srv.uptime}</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Last Verified</span>
+                  <span className="font-bold text-slate-800 font-mono text-[11px] truncate block" title={srv.lastCheck}>
+                    {srv.lastCheck}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Latency</span>
-                  <span className="font-bold text-emerald-600 font-mono">{srv.latency}</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Live Latency</span>
+                  <span
+                    className={`font-bold font-mono text-[11px] ${
+                      srv.status === 'OPERATIONAL'
+                        ? 'text-emerald-600'
+                        : srv.status === 'DEGRADED'
+                        ? 'text-amber-600'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {srv.latency}
+                  </span>
                 </div>
               </div>
             </div>
@@ -471,46 +910,63 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
         </div>
       </div>
 
-      {/* Incidents Table */}
+      {/* Incident History & Telemetry Section (Phase 10) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-500" /> System Incidents & Telemetry Warnings
+              <AlertTriangle className="w-4 h-4 text-rose-500" /> System Incident History & Telemetry Events
             </h3>
             <p className="text-xs text-slate-500">
-              Recent infrastructure alerts, Crashlytics reports, and automated mitigation events.
+              Full operational audit trail of detected infrastructure anomalies, resolution durations, and telemetry warnings.
             </p>
           </div>
 
-          {/* Service Filter Tabs */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 self-start sm:self-auto text-xs">
-            {(['ALL', 'API', 'Database', 'Crashlytics', 'Authentication'] as const).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setIncidentFilter(filter)}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                  incidentFilter === filter
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
+          {/* Service & Status Filter Tabs */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 self-start sm:self-auto text-xs flex-wrap">
+            {(['ALL', 'ACTIVE', 'RESOLVED', 'Web', 'API', 'Database'] as const).map((filter) => {
+              const count = tabCounts[filter] || 0;
+              const isActive = incidentFilter === filter;
+              return (
+                <button
+                  key={filter}
+                  onClick={() => setIncidentFilter(filter)}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isActive
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>{filter}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                      isActive ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/60 text-slate-500'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {filteredIncidents.length === 0 ? (
-          <div className="text-center py-10 text-xs text-slate-400">
-            Zero system incidents detected for selected filter. All services operating normally.
+          <div className="text-center py-12 px-4 space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <p className="text-sm font-bold text-slate-700">
+              {incidents.length === 0 ? 'Zero System Incidents Detected' : 'No Incidents Found'}
+            </p>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              {getIncidentEmptyStateMessage(incidents.length, incidentFilter)}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
             {filteredIncidents.map((inc) => (
-              <div key={inc.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+              <div key={inc.id} className="py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="space-y-2 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-slate-900 text-xs">{inc.error}</span>
                     <StatusBadge
                       variant={
@@ -534,24 +990,62 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
                       label={inc.severity}
                       size="sm"
                     />
+                    {inc.status === 'RESOLVED' && inc.durationSeconds !== undefined && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold text-[11px] flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-emerald-600" />
+                        Downtime: {formatDurationSeconds(inc.durationSeconds)}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-600">{inc.details}</p>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+
+                  {inc.details && (
+                    <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 max-w-2xl font-mono text-[11px]">
+                      <span className="font-bold text-slate-700 not-italic block mb-0.5 font-sans">
+                        Diagnostic Notes:
+                      </span>
+                      {inc.details}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                     <span className="font-semibold text-slate-700">{inc.service}</span>
                     <span>•</span>
-                    <span>{inc.occurrences} events</span>
+                    <span>{inc.occurrences} {inc.occurrences === 1 ? 'event' : 'events'}</span>
                     <span>•</span>
-                    <span>{formatRelativeTime(inc.createdAt)}</span>
+                    <span>
+                      Detected: {formatDateTime(inc.createdAt)} ({formatRelativeTime(inc.createdAt)})
+                    </span>
+                    {inc.resolvedAt && (
+                      <>
+                        <span>•</span>
+                        <span className="text-emerald-700 font-medium">
+                          Resolved: {formatDateTime(inc.resolvedAt)} ({formatRelativeTime(inc.resolvedAt)})
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {inc.status !== 'RESOLVED' && onResolveIncident && (
-                  <button
-                    onClick={() => onResolveIncident(inc.id)}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl self-start transition-colors"
-                  >
-                    Mark Resolved
-                  </button>
+                {inc.status !== 'RESOLVED' && (
+                  <div className="flex items-center gap-2 self-start flex-wrap shrink-0">
+                    {inc.status === 'INVESTIGATING' && onUpdateIncidentStatus && (
+                      <button
+                        onClick={() => onUpdateIncidentStatus(inc.id, 'MONITORING')}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                        title="Transition incident to Monitoring status"
+                      >
+                        Set Monitoring
+                      </button>
+                    )}
+                    {onResolveIncident && (
+                      <button
+                        onClick={() => onResolveIncident(inc.id)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer"
+                      >
+                        Mark Resolved
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

@@ -1577,20 +1577,38 @@ export function AppContent() {
 
         {/* TAB 5: Super Admin Platform Audit Portal */}
         {activeTab === 'admin' && (
-          <AdminRouter
-            currentUser={currentUser}
-            allUsers={dbState.users}
-            rooms={dbState.rooms}
-            roomMembers={dbState.roomMembers}
-            sharedExpenses={dbState.sharedExpenses}
-            splits={dbState.expenseSplits}
-            settlementPayments={dbState.settlementPayments}
-            subscriptions={dbState.subscriptions}
-            auditLogs={dbState.auditLogs}
-            onSwitchToMobile={() => setViewMode('mobile')}
-            onLogout={handleLogout}
-            onDataMutated={refreshState}
-          />
+          currentUser.role === 'SUPER_ADMIN' ? (
+            <AdminRouter
+              currentUser={currentUser}
+              allUsers={dbState.users}
+              rooms={dbState.rooms}
+              roomMembers={dbState.roomMembers}
+              sharedExpenses={dbState.sharedExpenses}
+              splits={dbState.expenseSplits}
+              settlementPayments={dbState.settlementPayments}
+              subscriptions={dbState.subscriptions}
+              auditLogs={dbState.auditLogs}
+              onSwitchToMobile={() => setViewMode('mobile')}
+              onLogout={handleLogout}
+              onDataMutated={refreshState}
+            />
+          ) : (
+            <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-8 text-center max-w-lg mx-auto my-12 shadow-2xl">
+              <div className="w-14 h-14 bg-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-500/30">
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Access Denied: SuperAdmin Required</h2>
+              <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+                You are currently signed in as a student resident. The SuperAdmin platform portal and system health routes are strictly restricted.
+              </p>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30"
+              >
+                Return to Personal Dashboard
+              </button>
+            </div>
+          )
         )}
       </main>
 

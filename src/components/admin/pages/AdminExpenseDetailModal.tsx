@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Receipt } from 'lucide-react';
-import { SharedExpense, ExpenseSplit, SettlementPayment, User as UserType, Room } from '../../../types';
+import { SharedExpense, ExpenseSplit, SettlementPayment, User as UserType, Room, RoomMember } from '../../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatInr, formatFullDateTime } from '../../../lib/utils/currencyFormatter';
 

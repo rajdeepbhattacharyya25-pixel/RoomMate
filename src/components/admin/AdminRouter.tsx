@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import { AdminRoute } from './AdminSidebar';
 import { AdminLayout } from './AdminLayout';
 import { ToastMessage } from './common/Toast';
@@ -34,6 +35,7 @@ import {
   superAdminArchiveRoomCloud,
   superAdminResetRoomCodeCloud,
   resolveSystemIncidentCloud,
+  updateSystemIncidentStatusCloud,
   fetchBugReportsCloud,
   updateBugReportStatusCloud,
   subscribeToBugReportsRealtime,
@@ -218,6 +220,11 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
   useEffect(() => {
     let isMounted = true;
 
+    // Strict Authorization Guard: Non-superadmins never query admin cloud tables
+    if (currentUser.role !== 'SUPER_ADMIN') {
+      return;
+    }
+
     if (IS_LIVE_SYNC_ENABLED) {
       // 1. Fetch latest bug reports from Supabase Cloud
       fetchBugReportsCloud()
@@ -300,6 +307,10 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     setSystemIncidents([...((db as any).state?.systemIncidents || [])]);
     setNotifications([...db.getNotifications(currentUser.id)]);
 
+    if (currentUser.role !== 'SUPER_ADMIN') {
+      return;
+    }
+
     if (IS_LIVE_SYNC_ENABLED) {
       fetchBugReportsCloud().then((reports) => {
         if (reports && reports.length > 0) setBugReports(reports);
@@ -316,7 +327,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     }
 
     if (onDataMutated) onDataMutated();
-  }, [currentUser.id, onDataMutated]);
+  }, [currentUser.id, currentUser.role, onDataMutated]);
 
   // Operational Mutations
   const handleSuspendUser = async (userId: string, reason: string) => {
@@ -617,6 +628,32 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     }
   };
 
+  // Strict Authorization Guard: Non-superadmin users are strictly blocked from all admin views including /admin/system-health
+  if (currentUser.role !== 'SUPER_ADMIN') {
+    return (
+      <div className="min-h-screen bg-[#0a0e17] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 shadow-lg shadow-rose-500/10">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white mb-2">Access Denied: SuperAdmin Required</h2>
+        <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+          The route <code className="text-rose-300 font-mono bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">/admin/system-health</code> and the SuperAdmin platform portal are strictly restricted to authenticated platform administrators.
+        </p>
+        <button
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.history?.pushState) {
+              window.history.pushState({}, '', '/');
+            }
+            if (onSwitchToMobile) onSwitchToMobile();
+          }}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   return (
     <AdminLayout
       currentRoute={currentRoute}
@@ -766,6 +803,27 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
               )
             );
             addToast('success', 'Incident marked resolved.', 'Resolved');
+          }}
+          onUpdateIncidentStatus={async (id, status) => {
+            await updateSystemIncidentStatusCloud(id, status);
+            setSystemIncidents((prev) =>
+              prev.map((i) =>
+                i.id === id
+                  ? {
+                      ...i,
+                      status,
+                      resolvedAt: status === 'RESOLVED' ? new Date().toISOString() : undefined,
+                    }
+                  : i
+              )
+            );
+            addToast('info', `Incident status updated to ${status}.`, 'Status Updated');
+          }}
+          onRefreshIncidents={async () => {
+            const incs = await fetchSystemIncidentsCloud();
+            if (incs && incs.length > 0) {
+              setSystemIncidents(incs);
+            }
           }}
         />
       )}

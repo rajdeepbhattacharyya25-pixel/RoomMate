@@ -606,3 +606,25 @@ export function checkStepUpRequired(riskLevel: StepUpRiskLevel): boolean {
 export function recordStepUpSuccess(): void {
   inMemoryStepUpTimestamp = Date.now();
 }
+
+/**
+ * Phase 15: Role & Authorization Assertion for SuperAdmin Operations
+ * Ensures only active, non-suspended users with the SUPER_ADMIN role can access admin resources.
+ */
+export function isSuperAdminAuthorized(
+  user?: { role?: string; isSuspended?: boolean } | null
+): boolean {
+  return Boolean(user && user.role === 'SUPER_ADMIN' && !user.isSuspended);
+}
+
+/**
+ * Phase 15: RLS System Incidents Policy Simulation
+ * Evaluates whether a user's database profile satisfies the Supabase PostgreSQL RLS policy:
+ * profiles.role IN ('SUPER_ADMIN', 'SUPERADMIN')
+ */
+export function verifyRlsIncidentPolicy(
+  profile?: { role?: string } | null
+): boolean {
+  if (!profile || !profile.role) return false;
+  return profile.role === 'SUPER_ADMIN' || profile.role === 'SUPERADMIN';
+}
