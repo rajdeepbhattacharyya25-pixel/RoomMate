@@ -17,10 +17,14 @@ dist-ssr
 .env
 .env.*
 !.env.example
+.env.local
+.mcp.local.json
+*.local.json
 *.keystore
 *.jks
 google-services.json
 firebase-service-account*.json
+
 
 # Scratch and internal verification scripts containing credentials
 scratch/
