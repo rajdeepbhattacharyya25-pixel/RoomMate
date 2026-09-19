@@ -186,10 +186,9 @@ For real-time push alerting without paying for UptimeRobot PRO, RoomMate include
        "timestamp": "2026-09-19T18:00:00Z"
      }
      ```
-   - Secured with `x-webhook-secret: roommate-uptime-secret-2026`.
+   - Secured with `x-webhook-secret: <UPTIME_WEBHOOK_SECRET>`.
    - On `DOWN`: logs critical incident into `system_incidents`.
    - On `UP`: resolves active incident in `system_incidents`.
 2. **Cloudflare Email Worker:** [`scripts/email-to-webhook-worker.js`](file:///c:/Users/ASUS/Downloads/student%20expense%20app/scripts/email-to-webhook-worker.js)
    - Zero-cost Cloudflare Worker listening to incoming UptimeRobot email notifications.
    - Parses the alert subject (`"is DOWN"` / `"is UP"`), extracts the service name, and forwards the event directly to `https://roommate26.vercel.app/api/uptime-webhook`.
-

@@ -336,7 +336,7 @@ The objective was to implement a rock-solid, production-grade **Uptime Monitorin
 ### Phase 22: Zero-Cost Email-to-Webhook Bridge
 - **Objective:** Establish real-time push incident alerting into `public.system_incidents` without paying for UptimeRobot PRO webhooks.
 - **Inbound Webhook Receiver (`/api/uptime-webhook.ts`):**
-  - Accepts authenticated JSON payloads signed with `x-webhook-secret: roommate-uptime-secret-2026`.
+  - Accepts authenticated JSON payloads signed with `x-webhook-secret: <UPTIME_WEBHOOK_SECRET>`.
   - On `DOWN`: automatically creates a critical system incident in `public.system_incidents`.
   - On `UP`: resolves active incidents in `public.system_incidents` and logs duration.
   - Tested and verified live in production (rejects unauthenticated requests with HTTP 401, accepts authenticated payloads with HTTP 200).

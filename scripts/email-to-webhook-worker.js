@@ -12,7 +12,7 @@
  * 2. Paste this file into the Cloudflare Worker editor.
  * 3. In Worker Settings -> Variables -> Environment Variables:
  *    - Add `ROOMMATE_WEBHOOK_URL` = "https://roommate26.vercel.app/api/uptime-webhook"
- *    - Add `UPTIME_WEBHOOK_SECRET` = "roommate-uptime-secret-2026"
+ *    - Add `UPTIME_WEBHOOK_SECRET` = "<your-configured-webhook-secret>"
  * 4. Go to Cloudflare Dashboard -> Email Routing -> Routing Rules:
  *    - Create an address (e.g. `alerts@yourdomain.com`).
  *    - Set Action: "Send to a Worker" -> Select this Worker.
@@ -44,7 +44,12 @@ export default {
       }
 
       const webhookUrl = env.ROOMMATE_WEBHOOK_URL || 'https://roommate26.vercel.app/api/uptime-webhook';
-      const secret = env.UPTIME_WEBHOOK_SECRET || 'roommate-uptime-secret-2026';
+      const secret = env.UPTIME_WEBHOOK_SECRET;
+
+      if (!secret) {
+        console.error('UPTIME_WEBHOOK_SECRET environment variable is not configured');
+        return;
+      }
 
       const payload = {
         event,

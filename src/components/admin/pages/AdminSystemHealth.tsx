@@ -96,12 +96,29 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
     if (!isOnline) return;
     setIsSyncingUptime(true);
     try {
+      let token = '';
+      try {
+        const { data } = await supabase.auth.getSession();
+        token = data.session?.access_token || '';
+      } catch {
+        // Supabase session lookup fallback
+      }
+
+      if (!token) {
+        token = localStorage.getItem('roommate_jwt_resident_token') || '';
+      }
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch('/api/uptime-sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setUptimeSyncToast({
           type: data.downCount > 0 ? 'warning' : 'success',
           message: data.message || `Synced with UptimeRobot (${data.monitorsChecked} monitors checked).`,

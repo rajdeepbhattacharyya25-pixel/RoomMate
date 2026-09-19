@@ -24,12 +24,11 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiemFhc2tmdHJtbnZvY2N6aGF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4ODgyNTAsImV4cCI6MjEwNDQ2NDI1MH0.1mGzxSIrCNa8fsRYNn8-rGJW-li5EYvLyBfa38f5OAs';
 
-const WEBHOOK_SECRET = process.env.UPTIME_WEBHOOK_SECRET || 'roommate-uptime-secret-2026';
-
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse
 ): Promise<void> {
+  const WEBHOOK_SECRET = process.env.UPTIME_WEBHOOK_SECRET;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-webhook-secret');
@@ -48,43 +47,69 @@ export default async function handler(
     return;
   }
 
-  // Security Check: Validate Secret Header or Bearer Token
+  // 1. Server Configuration Guard: Require secret to be set
+  if (!WEBHOOK_SECRET) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: 'Server configuration error: Webhook secret not configured' }));
+    return;
+  }
+
+  // 2. Security Check: Validate Secret Header or Bearer Token
   const authHeader = req.headers['authorization'] || '';
   const secretHeader = req.headers['x-webhook-secret'] || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-  if (secretHeader !== WEBHOOK_SECRET && token !== WEBHOOK_SECRET) {
+  if (!secretHeader && !token) {
+    res.statusCode = 401;
+    res.end(JSON.stringify({ error: 'Unauthorized: Missing webhook secret' }));
+    return;
+  }
+
+  const providedSecret = (secretHeader || token) as string;
+  if (providedSecret !== WEBHOOK_SECRET) {
     res.statusCode = 401;
     res.end(JSON.stringify({ error: 'Unauthorized: Invalid webhook secret' }));
     return;
   }
 
-  // Parse Body Stream
+  // 3. Parse and Validate Body Stream
   let rawBody = '';
   for await (const chunk of req) {
     rawBody += chunk;
   }
 
-  let body: {
-    event?: 'DOWN' | 'UP' | string;
-    monitorName?: string;
-    url?: string;
-    reason?: string;
-    timestamp?: string;
-  } = {};
+  if (!rawBody || !rawBody.trim()) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: 'Bad Request: Empty request body' }));
+    return;
+  }
 
+  let body: Record<string, unknown>;
   try {
-    body = JSON.parse(rawBody || '{}');
+    body = JSON.parse(rawBody);
   } catch {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
     return;
   }
 
-  const event = (body.event || 'DOWN').toUpperCase();
-  const monitorName = body.monitorName || 'RoomMate Service';
-  const url = body.url || 'https://roommate26.vercel.app';
-  const reason = body.reason || 'Reported by monitoring telemetry';
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !body.event) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: 'Bad Request: Missing required event property' }));
+    return;
+  }
+
+  const event = String(body.event).trim().toUpperCase();
+  if (event !== 'DOWN' && event !== 'UP') {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: 'Bad Request: Event must be DOWN or UP' }));
+    return;
+  }
+
+  const monitorName = String(body.monitorName || 'RoomMate Service');
+  const url = String(body.url || 'https://roommate26.vercel.app');
+  const reason = String(body.reason || 'Reported by monitoring telemetry');
+  const timestamp = body.timestamp ? String(body.timestamp) : new Date().toISOString();
 
   const isApi = url.includes('/api/') || monitorName.toLowerCase().includes('backend') || monitorName.toLowerCase().includes('database');
   const service = isApi ? 'API' : 'Web';
@@ -124,7 +149,7 @@ export default async function handler(
           severity: 'CRITICAL',
           status: 'INVESTIGATING',
           impact: 'OUTAGE',
-          started_at: body.timestamp || new Date().toISOString(),
+          started_at: timestamp,
         })
         .select('id')
         .single();

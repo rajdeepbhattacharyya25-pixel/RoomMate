@@ -24,14 +24,11 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiemFhc2tmdHJtbnZvY2N6aGF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4ODgyNTAsImV4cCI6MjEwNDQ2NDI1MH0.1mGzxSIrCNa8fsRYNn8-rGJW-li5EYvLyBfa38f5OAs';
 
-const UPTIMEROBOT_API_KEY = 
-  process.env.UPTIMEROBOT_API_KEY || 
-  'u3785250-0613c9cba96218221ce70b73';
-
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse
 ): Promise<void> {
+  const UPTIMEROBOT_API_KEY = process.env.UPTIMEROBOT_API_KEY;
   // CORS & Security Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -47,8 +44,68 @@ export default async function handler(
 
   req.resume();
 
+  // 1. Server Configuration Guard: Require API key
+  if (!UPTIMEROBOT_API_KEY) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({
+      success: false,
+      error: 'Server configuration error: UPTIMEROBOT_API_KEY is not configured',
+    }));
+    return;
+  }
+
+  // 2. Authentication & Authorization Guard: Require valid SuperAdmin session token or secret
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) {
+    res.statusCode = 401;
+    res.end(JSON.stringify({
+      success: false,
+      error: 'Unauthorized: Missing authorization header',
+    }));
+    return;
+  }
+
+  const syncSecret = process.env.UPTIME_SYNC_SECRET || process.env.UPTIME_WEBHOOK_SECRET;
+  let isAuthorized = Boolean(syncSecret && token === syncSecret);
+
+  if (!isAuthorized) {
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false },
+    });
+
+    const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token);
+
+    if (authError || !userData?.user) {
+      res.statusCode = 401;
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Unauthorized: Invalid or expired authentication token',
+      }));
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabaseAuth
+      .from('profiles')
+      .select('role')
+      .eq('id', userData.user.id)
+      .single();
+
+    if (profileError || !profile || (profile.role !== 'SUPER_ADMIN' && profile.role !== 'SUPERADMIN')) {
+      res.statusCode = 403;
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Forbidden: SuperAdmin platform authorization required',
+      }));
+      return;
+    }
+
+    isAuthorized = true;
+  }
+
   try {
-    // 1. Fetch monitors from UptimeRobot REST API
+    // 3. Fetch monitors from UptimeRobot REST API
     const params = new URLSearchParams();
     params.append('api_key', UPTIMEROBOT_API_KEY);
     params.append('format', 'json');
@@ -182,11 +239,11 @@ export default async function handler(
     res.setHeader('Content-Length', Buffer.byteLength(payload).toString());
     res.end(payload);
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Uptime sync error:', err instanceof Error ? err.message : 'Unknown error');
     res.statusCode = 500;
     const errPayload = JSON.stringify({
       success: false,
-      error: errorMsg,
+      error: 'Internal server error during UptimeRobot synchronization',
     });
     res.setHeader('Content-Length', Buffer.byteLength(errPayload).toString());
     res.end(errPayload);
