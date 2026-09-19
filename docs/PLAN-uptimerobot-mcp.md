@@ -122,19 +122,24 @@ The user requested:
 
 ## 5. Verification Checklist
 
-- [ ] `.mcp.json` contains valid `uptimerobot` configuration with Bearer authorization header.
-- [ ] Direct MCP JSON-RPC call confirms tools are operable.
-- [ ] Monitor 1 (`RoomMate - Production Web`) is created with 5-minute interval.
-- [ ] Monitor 2 (`RoomMate - Backend & Database Health`) is created with 5-minute interval.
-- [ ] Email contact `rajdeep.bhattacharyya25@gmail.com` (ID: `8829170`) is linked to both monitors.
-- [ ] `docs/UPTIMEROBOT_INTEGRATION.md` updated with exact monitor IDs and MCP connection details.
-- [ ] `docs/UPTIME_MONITORING_PHASE_BY_PHASE_EXECUTION.md` updated with MCP integration status.
-- [ ] Full regression test suite passes (344 tests, 0 lint errors, 0 tsc errors, 0 build errors).
+- [x] `.mcp.json` contains valid `uptimerobot` configuration with Bearer authorization header.
+- [x] Direct MCP JSON-RPC call confirms tools are operable.
+- [x] Monitor 1 (`RoomMate - Production Web`, ID `804035441`) is created with 5-minute interval.
+- [x] Monitor 2 (`RoomMate - Backend & Database Health`, ID `804035777`) is created with KEYWORD assertion `{"status":"ok"}` and 5-minute interval.
+- [x] Email contact `rajdeep.bhattacharyya25@gmail.com` (ID: `8829170`) is linked to both monitors.
+- [x] `docs/UPTIMEROBOT_INTEGRATION.md` updated with exact monitor IDs and MCP connection details.
+- [x] `docs/UPTIME_MONITORING_PHASE_BY_PHASE_EXECUTION.md` updated with MCP integration status.
+- [x] Safe failure & recovery simulation executed on staging with full email alert & resolution verification.
+- [x] On-Demand SuperAdmin Sync implemented (`api/uptime-sync.ts`) and tested live in production.
+- [x] Email-to-Webhook Bridge implemented (`api/uptime-webhook.ts` + Cloudflare Worker script).
+- [x] Full regression test suite passes (345 tests, 0 lint errors, 0 tsc errors, 0 build errors).
 
 ---
 
-## 6. Open Questions for User Confirmation
+## 6. Resolved Decisions
 
 1. **Target Production Domain:**
-   - The default URL configured in `monitoringConfig.ts` is `https://roommate-production.vercel.app`.
-   - If your production deployment is hosted on a different Vercel URL (e.g. `https://roommate-xxx.vercel.app`) or a custom domain, please confirm before monitor creation so we register the exact live URL.
+   - Confirmed live URL: `https://roommate26.vercel.app`
+   - Health endpoint: `https://roommate26.vercel.app/api/health` returning `200 OK` (`{"status":"ok"}`).
+   - All monitors point to `https://roommate26.vercel.app`.
+

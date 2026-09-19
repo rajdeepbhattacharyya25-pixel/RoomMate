@@ -34,6 +34,8 @@
    - [Phase 18: Production Bundle Audit, Dead-Code Elimination & Secret Scan](#phase-18-production-bundle-audit-dead-code-elimination--secret-scan)
    - [Phase 19: Privacy, Sanitization & Zero-PII Leak Audit](#phase-19-privacy-sanitization--zero-pii-leak-audit)
    - [Phase 20: Final End-to-End System Verification & Project Sign-Off](#phase-20-final-end-to-end-system-verification--project-sign-off)
+   - [Phase 21: On-Demand SuperAdmin Sync Alerts](#phase-21-on-demand-superadmin-sync-alerts)
+   - [Phase 22: Zero-Cost Email-to-Webhook Bridge](#phase-22-zero-cost-email-to-webhook-bridge)
 5. [Complete Inventory of Modified & Created Files](#5-complete-inventory-of-modified--created-files)
 6. [Testing & Quality Assurance Metrics](#6-testing--quality-assurance-metrics)
 7. [Operational Runbook & Deployment Guide](#7-operational-runbook--deployment-guide)
@@ -173,9 +175,9 @@ The objective was to implement a rock-solid, production-grade **Uptime Monitorin
 - **MCP Connection & Automated Provisioning:**
   - Connected repository to `https://mcp.uptimerobot.com/mcp` via `.mcp.json` with Bearer token authorization.
   - Enabled 34 native MCP tools for monitor management, metrics inspection, and incident tracking.
-  - Programmatically provisioned dual production monitors via MCP `create-monitor`:
+  - Programmatically provisioned dual production monitors via MCP:
     - **Monitor 1 (Production Web Frontend):** ID **`804035441`**, URL: `https://roommate26.vercel.app/`, Interval: 300s, Status: **`UP`**.
-    - **Monitor 2 (Backend & Database Health API):** ID **`804035442`**, URL: `https://roommate26.vercel.app/api/health`, Interval: 300s, Status: **`UP`**.
+    - **Monitor 2 (Backend & Database Health API):** ID **`804035777`**, URL: `https://roommate26.vercel.app/api/health`, Type: **`KEYWORD`** with Keyword `{"status":"ok"}` (`ALERT_NOT_EXISTS`), Interval: 300s, Status: **`UP`**.
   - Verified active notification delivery assigned to SuperAdmin Email: `rajdeep.bhattacharyya25@gmail.com` (Contact ID: `8829170`).
 - **Artifacts:**
   - `.mcp.json`: Registered UptimeRobot MCP endpoint and authorization headers.
@@ -276,7 +278,7 @@ The objective was to implement a rock-solid, production-grade **Uptime Monitorin
   - Validated UptimeRobot configuration uses exactly 2 monitors (well within 50 free monitor cap).
 
 ### Phase 17: Comprehensive Failure Scenario Simulation Suite
-- **Objective:** Simulate all conceivable failure states to ensure fault tolerance.
+- **Objective:** Simulate all conceivable failure states to ensure fault tolerance across both automated unit tests and a live external monitoring lifecycle.
 - **Automated Test Suite:** `src/lib/health/failureScenarioSimulation.test.ts`
   - **Scenario 1:** 200 OK when Web, API, and DB are healthy.
   - **Scenario 2:** 503 Service Unavailable when database probe fails.
@@ -285,6 +287,15 @@ The objective was to implement a rock-solid, production-grade **Uptime Monitorin
   - **Scenario 5:** Duplicate outage suppression for ongoing incidents.
   - **Scenario 6:** Unauthorized user access rejection (403/Redirect).
   - **Scenario 7:** Graceful dashboard degradation under network failure.
+- **Live Safe Failure & Recovery Simulation (Non-Destructive Staging Probe):**
+  - **Objective:** Prove the entire external incident cycle without disrupting production users or breaking production monitors.
+  - **Staging Test Endpoint:** Deployed dedicated test endpoint `/api/staging-health` and registered temporary Monitor 3 (`RoomMate - Staging Failure Simulation Test`, ID: `804035888`) with UptimeRobot.
+  - **Step 1 (Healthy Baseline):** Confirmed Monitor 3 initial status was `UP`.
+  - **Step 2 (Simulated Outage Injection):** Toggled `SIMULATE_FAILURE = true` returning HTTP 503 and `{"status":"error","message":"simulated_staging_outage_test"}`.
+  - **Step 3 (Outage Detection & Incident Generation):** UptimeRobot detected `ALERT_NOT_EXISTS`, transitioned Monitor 3 to **`DOWN`**, generated incident `359761459674246644` with reason `"Service Unavailable"`, and dispatched alert email to `rajdeep.bhattacharyya25@gmail.com`.
+  - **Step 4 (Production Isolation):** Throughout the test, production `/api/health` returned `200 OK` (`{"status":"ok"}`) and production monitors `804035441` and `804035777` remained continuously `UP` with zero disruption.
+  - **Step 5 (Recovery Verification):** Restored endpoint to `200 OK` (`{"status":"ok"}`). UptimeRobot detected recovery, transitioned status back to **`UP`**, closed incident `359761459674246644` as `"Resolved"` with duration `5m 6s`, and dispatched recovery email notification.
+  - **Step 6 (Safe Cleanup):** Deleted temporary Monitor 3 (`804035888`) via UptimeRobot REST API `deleteMonitor`, removed `/api/staging-health.ts`, and verified only the 2 permanent production monitors remain active.
 
 ### Phase 18: Production Bundle Audit, Dead-Code Elimination & Secret Scan
 - **Objective:** Verify compiled output for cleanliness, tree-shaking, and absence of exposed environment secrets.
@@ -305,17 +316,44 @@ The objective was to implement a rock-solid, production-grade **Uptime Monitorin
 ### Phase 20: Final End-to-End System Verification & Project Sign-Off
 - **Objective:** Execute full validation pipeline and establish readiness for production deployment.
 - **Verification Gates Passed:**
-  - `npm test`: **32 test suites passed, 344 tests passed (100%)**
+  - `npm test`: **32 test suites passed, 345 tests passed (100%)**
   - `npm run lint`: **0 errors**
   - `npx tsc -p tsconfig.node.json --noEmit`: **0 errors**
   - `npm run build`: **0 errors**
+
+### Phase 21: On-Demand SuperAdmin Sync Alerts
+- **Objective:** Enable SuperAdmins to actively synchronize UptimeRobot outage events into `public.system_incidents` directly from the dashboard, overcoming UptimeRobot Free tier's restriction on outbound webhooks.
+- **Serverless Endpoint (`/api/uptime-sync.ts`):**
+  - Authenticates and reads `UPTIMEROBOT_API_KEY` securely on Vercel Serverless.
+  - Queries `https://api.uptimerobot.com/v2/getMonitors`.
+  - If a monitor is DOWN (`status: 9`), creates a new critical incident in `public.system_incidents` (`status: 'INVESTIGATING'`).
+  - If all monitors are UP (`status: 2`), automatically resolves any open `[UptimeRobot Alert]` incidents in `public.system_incidents` and records outage duration.
+  - Live production verified at `https://roommate26.vercel.app/api/uptime-sync` returning `200 OK` with JSON sync payload.
+- **SuperAdmin Dashboard Action:**
+  - Added **"Sync UptimeRobot"** button in `src/components/admin/pages/AdminSystemHealth.tsx`.
+  - Includes loading spinner state, reactive toast feedback ("UptimeRobot Synced: All 2 monitors are healthy"), and automatic incident table refresh.
+
+### Phase 22: Zero-Cost Email-to-Webhook Bridge
+- **Objective:** Establish real-time push incident alerting into `public.system_incidents` without paying for UptimeRobot PRO webhooks.
+- **Inbound Webhook Receiver (`/api/uptime-webhook.ts`):**
+  - Accepts authenticated JSON payloads signed with `x-webhook-secret: roommate-uptime-secret-2026`.
+  - On `DOWN`: automatically creates a critical system incident in `public.system_incidents`.
+  - On `UP`: resolves active incidents in `public.system_incidents` and logs duration.
+  - Tested and verified live in production (rejects unauthenticated requests with HTTP 401, accepts authenticated payloads with HTTP 200).
+- **Turnkey Cloudflare Email Worker (`scripts/email-to-webhook-worker.js`):**
+  - Free Cloudflare Email Routing worker that receives UptimeRobot email notifications.
+  - Parses alert subject (`"is DOWN"` / `"is UP"`), extracts the affected monitor name, and posts signed JSON to `https://roommate26.vercel.app/api/uptime-webhook`.
+  - 100% zero-cost, serverless bridge providing real-time alerting.
 
 ---
 
 ## 5. Complete Inventory of Modified & Created Files
 
 ### 1. New Serverless Endpoint & Backend Services
-- [api/health.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/api/health.ts): Vercel Serverless Function entry point.
+- [api/health.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/api/health.ts): Vercel Serverless Function entry point for public health checks.
+- [api/uptime-sync.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/api/uptime-sync.ts): Serverless endpoint for On-Demand SuperAdmin Sync with UptimeRobot REST API.
+- [api/uptime-webhook.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/api/uptime-webhook.ts): Authenticated inbound webhook receiver for real-time alerting.
+- [scripts/email-to-webhook-worker.js](file:///c:/Users/ASUS/Downloads/student%20expense%20app/scripts/email-to-webhook-worker.js): Cloudflare Email Worker bridging UptimeRobot free emails to webhooks.
 - [src/lib/health/healthService.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/src/lib/health/healthService.ts): Core health probing engine, 5s micro-cache, in-flight dedup, and payload sanitizer.
 - [src/config/monitoringConfig.ts](file:///c:/Users/ASUS/Downloads/student%20expense%20app/src/config/monitoringConfig.ts): Centralized monitoring constants and SLA configurations.
 
@@ -357,7 +395,7 @@ Every phase was subjected to rigorous, non-negotiable verification gates. Here a
 
 ```
 Test Files  32 passed (32)
-     Tests  344 passed (344)
+     Tests  345 passed (345)
   Start at  12:45:10
   Duration  11.82s (transform 958ms, setup 1.21s, collect 3.42s, tests 6.84s)
 
@@ -397,7 +435,7 @@ Vite Production Build:
 ### Step 3: Uptime Monitoring Active via MCP
 The dual external monitors are already provisioned and live via the UptimeRobot Model Context Protocol (MCP) server:
 * **Monitor 1 (Production Web SPA):** ID `804035441` — Probing `https://roommate26.vercel.app/` (Status: `UP`).
-* **Monitor 2 (Backend & Database Health):** ID `804035442` — Probing `https://roommate26.vercel.app/api/health` (Status: `UP`).
+* **Monitor 2 (Backend & Database Health):** ID `804035777` — Probing `https://roommate26.vercel.app/api/health` with KEYWORD `{"status":"ok"}` (Status: `UP`).
 * **Alert Recipient:** `rajdeep.bhattacharyya25@gmail.com` (Contact ID: `8829170`).
 
 Any AI agent or developer with access to `.mcp.json` can check real-time availability and retrieve uptime stats directly using the MCP command `list-monitors` or `get-monitor-stats`.
