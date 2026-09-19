@@ -18,6 +18,8 @@ import {
   recordMfaFailure,
   resetMfaFailures,
   verifySuperAdminTotp,
+  verifyRfc6238Totp,
+  enrollSuperAdminTotp,
   hashMasterPassword,
   getOrCreateDeviceId,
   getDeviceMetadata,
@@ -48,7 +50,8 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
   onLoginSuccess,
   allUsers,
 }) => {
-  const [step, setStep] = useState<'CREDENTIALS' | 'MFA' | 'RECOVERY'>('CREDENTIALS');
+  const [step, setStep] = useState<'CREDENTIALS' | 'MFA' | 'MFA_ENROLLMENT' | 'RECOVERY'>('CREDENTIALS');
+  const [enrollmentData, setEnrollmentData] = useState<{ factorId: string; qrCodeSvg: string; secret: string; uri: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -77,7 +80,24 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
       setRecoveryCode('');
       setError(null);
       setMatchedAdmin(null);
+      setEnrollmentData(null);
     } else {
+      // Emergency unlock via URL param ?unlock_admin=1
+      // Clears both localStorage-based and memory-based lockouts.
+      // Navigate to /admin-login?unlock_admin=1 when locked out.
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('unlock_admin') === '1') {
+        clearIntrusionLockout();
+        resetMfaFailures();
+        setLockoutRemaining(null);
+        setError('Emergency lockout cleared. You may now attempt to log in.');
+        // Remove param from URL without reload
+        urlParams.delete('unlock_admin');
+        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, '', newUrl);
+        return;
+      }
+
       const intrusionCheck = checkIntrusionLockout();
       if (intrusionCheck.isLocked && intrusionCheck.remainingSeconds > 0) {
         setLockoutRemaining(intrusionCheck.remainingSeconds);
@@ -267,7 +287,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
       // Recover the Supabase factorId from server-side when localStorage is empty
       // (happens on Vercel where each deployment starts with fresh localStorage)
       let settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
-      if (!settings.totpFactorId) {
+      if (!settings.totpFactorId && !settings.totpSecret) {
         const factors = await getSuperAdminFactors();
         if (factors.hasTotp) {
           const verifiedFactor = factors.all.find(
@@ -280,6 +300,19 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
             });
             settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
           }
+        } else {
+          // No Supabase factor AND no local secret — the TOTP secret is lost (enrolled on
+          // a different browser/origin). Must re-enroll to regain access.
+          const enrollResult = await enrollSuperAdminTotp('RoomMate Console');
+          setEnrollmentData(enrollResult);
+          setMfaCode('');
+          setError(
+            'Your previous authenticator setup was tied to a different browser session and cannot be recovered. ' +
+            'Please scan the new QR code below to re-enroll your authenticator app.'
+          );
+          setStep('MFA_ENROLLMENT');
+          setIsLoading(false);
+          return;
         }
       }
 
@@ -436,11 +469,13 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
               <h2 className="text-xl font-bold text-slate-900 tracking-tight mt-1">
                 {step === 'CREDENTIALS' && 'Super Admin Access'}
                 {step === 'MFA' && 'Two-Factor Challenge'}
+                {step === 'MFA_ENROLLMENT' && 'Re-Enroll Authenticator'}
                 {step === 'RECOVERY' && 'Emergency Recovery'}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 {step === 'CREDENTIALS' && 'Zero-Trust server-side authentication with cryptographic MFA.'}
                 {step === 'MFA' && 'Enter the 6-digit TOTP token from your authenticator app.'}
+                {step === 'MFA_ENROLLMENT' && 'Scan the QR code with your authenticator app, then confirm.'}
                 {step === 'RECOVERY' && 'Enter an unused one-time backup recovery code.'}
               </p>
             </div>
@@ -616,6 +651,83 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                 </button>
               </div>
             </form>
+          )}
+
+          {/* Step 2B: Re-Enrollment (TOTP secret lost — e.g. fresh Vercel deployment) */}
+          {step === 'MFA_ENROLLMENT' && enrollmentData && (
+            <div className="space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                <p className="font-bold">Scan the new QR code with Google Authenticator, then enter the 6-digit code below to confirm.</p>
+              </div>
+              <div className="flex justify-center">
+                {enrollmentData.qrCodeSvg.startsWith('http') ? (
+                  <img src={enrollmentData.qrCodeSvg} alt="TOTP QR Code" className="w-44 h-44 rounded-lg border border-slate-200" />
+                ) : (
+                  <div
+                    className="w-44 h-44"
+                    dangerouslySetInnerHTML={{ __html: enrollmentData.qrCodeSvg }}
+                  />
+                )}
+              </div>
+              <p className="text-center text-[10px] text-slate-500 font-mono break-all">{enrollmentData.secret}</p>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!matchedAdmin || !enrollmentData) return;
+                  setError(null);
+                  setIsLoading(true);
+                  try {
+                    let isValid = false;
+                    if (enrollmentData.factorId && !enrollmentData.factorId.startsWith('factor_')) {
+                      const res = await verifySuperAdminTotp(enrollmentData.factorId, mfaCode.trim(), enrollmentData.secret);
+                      isValid = res.success;
+                    } else {
+                      isValid = await verifyRfc6238Totp(enrollmentData.secret, mfaCode.trim());
+                    }
+                    if (!isValid) {
+                      setError('Invalid code. Please try again.');
+                      setIsLoading(false);
+                      return;
+                    }
+                    // Save newly enrolled TOTP
+                    db.updateSuperAdminSecuritySettings(matchedAdmin.id, {
+                      totpEnrolled: true,
+                      totpFactorId: enrollmentData.factorId,
+                      totpSecret: enrollmentData.secret,
+                    });
+                    clearIntrusionLockout();
+                    resetMfaFailures();
+                    await finalizeLogin(matchedAdmin);
+                  } catch (err: any) {
+                    setError(err?.message || 'Enrollment failed.');
+                    setIsLoading(false);
+                  }
+                }}
+                className="space-y-3"
+              >
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter 6-digit code"
+                  autoFocus
+                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <><span>Confirm &amp; Launch Console</span><ArrowRight className="w-4 h-4" /></>
+                  )}
+                </button>
+              </form>
+            </div>
           )}
 
           {/* Step 3: Emergency Recovery Form */}
