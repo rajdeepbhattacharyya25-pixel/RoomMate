@@ -22,6 +22,7 @@ import {
   getOrCreateDeviceId,
   getDeviceMetadata,
   hashRecoveryCode,
+  getSuperAdminFactors,
 } from '../../lib/auth/superAdminSecurityService';
 import {
   checkIntrusionLockout,
@@ -263,7 +264,24 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
+      // Recover the Supabase factorId from server-side when localStorage is empty
+      // (happens on Vercel where each deployment starts with fresh localStorage)
+      let settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
+      if (!settings.totpFactorId) {
+        const factors = await getSuperAdminFactors();
+        if (factors.hasTotp) {
+          const verifiedFactor = factors.all.find(
+            (f) => f.factorType === 'totp' && f.status === 'verified'
+          );
+          if (verifiedFactor) {
+            db.updateSuperAdminSecuritySettings(matchedAdmin.id, {
+              totpEnrolled: true,
+              totpFactorId: verifiedFactor.id,
+            });
+            settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
+          }
+        }
+      }
 
       const res = await verifySuperAdminTotp(
         settings.totpFactorId || '',

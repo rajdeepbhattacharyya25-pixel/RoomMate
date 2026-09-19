@@ -202,9 +202,28 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
       setMatchedAdmin(matched);
 
       // Check MFA configuration status for this superadmin
+      // IMPORTANT: factors.hasTotp is the server-side (Supabase) source of truth.
+      // On a fresh Vercel deployment localStorage is empty, so updatedSettings.totpEnrolled
+      // will always be false even though the admin previously enrolled on localhost.
+      // We must treat a verified Supabase MFA factor as "configured".
       const factors = await getSuperAdminFactors();
       const updatedSettings = db.getSuperAdminSecuritySettings(matched.id);
-      const isConfigured = updatedSettings.totpEnrolled && Boolean(updatedSettings.totpSecret || factors.hasTotp);
+
+      // Recover missing factorId from Supabase into localStorage so the challenge works
+      if (factors.hasTotp && !updatedSettings.totpFactorId) {
+        const verifiedFactor = factors.all.find(
+          (f) => f.factorType === 'totp' && f.status === 'verified'
+        );
+        if (verifiedFactor) {
+          db.updateSuperAdminSecuritySettings(matched.id, {
+            totpEnrolled: true,
+            totpFactorId: verifiedFactor.id,
+          });
+        }
+      }
+
+      // isConfigured = true if Supabase has a verified TOTP factor OR localStorage says enrolled
+      const isConfigured = factors.hasTotp || (updatedSettings.totpEnrolled && Boolean(updatedSettings.totpSecret));
 
       if (!isConfigured) {
         // Enforce mandatory TOTP enrollment before allowing dashboard access
