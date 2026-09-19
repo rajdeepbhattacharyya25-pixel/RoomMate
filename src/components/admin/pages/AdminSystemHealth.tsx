@@ -85,6 +85,48 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
     Array<{ time: string; p50: number; p95: number }>
   >([]);
 
+  // On-Demand UptimeRobot Sync State
+  const [isSyncingUptime, setIsSyncingUptime] = useState(false);
+  const [uptimeSyncToast, setUptimeSyncToast] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
+
+  const handleSyncUptimeRobot = useCallback(async () => {
+    if (!isOnline) return;
+    setIsSyncingUptime(true);
+    try {
+      const res = await fetch('/api/uptime-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUptimeSyncToast({
+          type: data.downCount > 0 ? 'warning' : 'success',
+          message: data.message || `Synced with UptimeRobot (${data.monitorsChecked} monitors checked).`,
+        });
+        if (onRefreshIncidents) {
+          onRefreshIncidents();
+        }
+      } else {
+        setUptimeSyncToast({
+          type: 'error',
+          message: data.error || 'Failed to sync with UptimeRobot.',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error';
+      setUptimeSyncToast({
+        type: 'error',
+        message: `Sync error: ${msg}`,
+      });
+    } finally {
+      setIsSyncingUptime(false);
+      setTimeout(() => setUptimeSyncToast(null), 5000);
+    }
+  }, [isOnline, onRefreshIncidents]);
+
   const handleManualPing = useCallback(async () => {
     if (!isOnline) {
       setIsPinging(false);
@@ -448,6 +490,16 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
           </a>
 
           <button
+            onClick={handleSyncUptimeRobot}
+            disabled={isSyncingUptime || !isOnline}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-xs flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            title={!isOnline ? 'Cannot sync while offline' : 'Sync live outages and incident status directly from UptimeRobot'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingUptime ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
+            <span>{isSyncingUptime ? 'Syncing...' : 'Sync UptimeRobot'}</span>
+          </button>
+
+          <button
             onClick={handleManualPing}
             disabled={isPinging || !isOnline}
             className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs shadow-sm flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
@@ -458,6 +510,47 @@ export const AdminSystemHealth: React.FC<AdminSystemHealthProps> = ({
           </button>
         </div>
       </div>
+
+      {/* UptimeRobot On-Demand Sync Toast Banner */}
+      {uptimeSyncToast && (
+        <div className={`rounded-2xl border p-4 shadow-xs flex items-center justify-between gap-3 animate-fadeIn ${
+          uptimeSyncToast.type === 'success' 
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-950' 
+            : uptimeSyncToast.type === 'warning'
+            ? 'border-amber-200 bg-amber-50 text-amber-950'
+            : 'border-rose-200 bg-rose-50 text-rose-950'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+              uptimeSyncToast.type === 'success'
+                ? 'bg-emerald-100 border-emerald-200 text-emerald-700'
+                : uptimeSyncToast.type === 'warning'
+                ? 'bg-amber-100 border-amber-200 text-amber-700'
+                : 'bg-rose-100 border-rose-200 text-rose-700'
+            }`}>
+              {uptimeSyncToast.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              )}
+            </div>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider">
+                UptimeRobot Telemetry Sync
+              </h4>
+              <p className="text-xs mt-0.5 opacity-90">
+                {uptimeSyncToast.message}
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setUptimeSyncToast(null)}
+            className="text-xs opacity-60 hover:opacity-100 font-bold px-2 py-1 rounded"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Offline Mode Banner (Phase 12) */}
       {!isOnline && (

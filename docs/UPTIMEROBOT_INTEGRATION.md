@@ -154,3 +154,42 @@ You can query the live status of the monitoring infrastructure at any time throu
 1. **Zero Secret Leakage:** The public health endpoint `/api/health` strictly responds with `{"status":"ok"}` or `{"status":"error"}`. Connection strings, user records, and database secrets are never exposed.
 2. **Student Privacy:** Row Level Security (RLS) on Supabase prevents student accounts from accessing incident telemetry.
 3. **Zero Financial Impact:** Health checks run on isolated serverless routes and never touch ledger calculation loops, debt graphs, or local mutation queues.
+
+---
+
+## 7. On-Demand SuperAdmin Sync
+
+To synchronize UptimeRobot outage events into RoomMate's `system_incidents` table without requiring paid UptimeRobot webhooks, RoomMate provides **On-Demand SuperAdmin Sync**:
+
+* **Serverless Endpoint:** `/api/uptime-sync`
+  - Authenticates and securely reads `UPTIMEROBOT_API_KEY` on the server.
+  - Queries `https://api.uptimerobot.com/v2/getMonitors`.
+  - If a monitor is DOWN (`status: 9`), creates a new critical incident in `public.system_incidents` (`status: 'INVESTIGATING'`).
+  - If all monitors are UP (`status: 2`), automatically resolves any open `[UptimeRobot Alert]` incidents.
+* **SuperAdmin UI Trigger:**
+  - Located in SuperAdmin portal -> **System Health** -> **"Sync UptimeRobot"** button.
+  - Clicking the button executes the synchronization, updates the live ticking downtime banner, and displays a reactive feedback toast.
+
+---
+
+## 8. Zero-Cost Email-to-Webhook Architecture
+
+For real-time push alerting without paying for UptimeRobot PRO, RoomMate includes an **Email-to-Webhook Bridge** via Cloudflare Email Routing:
+
+1. **Inbound Receiver:** `/api/uptime-webhook`
+   - Accepts authenticated JSON payloads:
+     ```json
+     {
+       "event": "DOWN",
+       "monitorName": "RoomMate - Backend & Database Health",
+       "reason": "Keyword {\"status\":\"ok\"} missing",
+       "timestamp": "2026-09-19T18:00:00Z"
+     }
+     ```
+   - Secured with `x-webhook-secret: roommate-uptime-secret-2026`.
+   - On `DOWN`: logs critical incident into `system_incidents`.
+   - On `UP`: resolves active incident in `system_incidents`.
+2. **Cloudflare Email Worker:** [`scripts/email-to-webhook-worker.js`](file:///c:/Users/ASUS/Downloads/student%20expense%20app/scripts/email-to-webhook-worker.js)
+   - Zero-cost Cloudflare Worker listening to incoming UptimeRobot email notifications.
+   - Parses the alert subject (`"is DOWN"` / `"is UP"`), extracts the service name, and forwards the event directly to `https://roommate26.vercel.app/api/uptime-webhook`.
+
