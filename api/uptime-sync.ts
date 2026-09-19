@@ -64,7 +64,20 @@ export default async function handler(
       signal: AbortSignal.timeout(6000),
     });
 
-    const urData = await urResponse.json();
+    interface UptimeRobotMonitor {
+      id: number;
+      friendly_name: string;
+      url: string;
+      status: number;
+    }
+
+    interface UptimeRobotResponse {
+      stat: string;
+      error?: { message?: string };
+      monitors?: UptimeRobotMonitor[];
+    }
+
+    const urData = (await urResponse.json()) as UptimeRobotResponse;
 
     if (urData.stat !== 'ok' || !Array.isArray(urData.monitors)) {
       res.statusCode = 502;
