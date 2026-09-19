@@ -1,12 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../../types/supabase';
+import type { Database } from '../../types/supabase.ts';
 
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as unknown as { env?: Record<string, string> }).env : undefined;
 const processEnv = typeof globalThis !== 'undefined' ? (globalThis as unknown as { process?: { env?: Record<string, string> } }).process?.env : undefined;
 const env = metaEnv || processEnv || {};
 
-const supabaseUrl = (env.VITE_SUPABASE_URL as string) || '';
-const supabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string) || '';
+const supabaseUrl = (env.VITE_SUPABASE_URL as string) || (env.SUPABASE_URL as string) || '';
+const supabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string) || (env.SUPABASE_ANON_KEY as string) || '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
@@ -65,3 +65,30 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
     };
   }
 }
+
+/**
+ * Lightweight database health check for uptime monitoring.
+ * Performs a minimal HEAD request without retrieving any user records.
+ */
+export async function checkDatabaseHealth(): Promise<boolean> {
+  if (!isSupabaseConfigured) {
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .select('id', { head: true })
+      .limit(1);
+
+    if (error) {
+      console.error('[SupabaseHealth] Database health probe returned error:', error.message || error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[SupabaseHealth] Database connection failed:', err instanceof Error ? err.message : 'Unknown error');
+    return false;
+  }
+}
+

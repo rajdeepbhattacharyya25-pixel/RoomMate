@@ -1927,50 +1927,6 @@ class MockDatabase {
     return req;
   }
 
-  public updateUserRole(
-    superAdminId: string,
-    targetUserId: string,
-    newRole: UserRole,
-    deviceId?: string
-  ): boolean {
-    const admin = this.state.users.find((u) => u.id === superAdminId);
-    if (!admin || admin.role !== 'SUPER_ADMIN') {
-      throw new Error('FORBIDDEN: Caller lacks SUPER_ADMIN platform authorization');
-    }
-
-    if (superAdminId === targetUserId && newRole !== 'SUPER_ADMIN') {
-      throw new Error('INVALID_ACTION: SuperAdmin cannot demote their own account');
-    }
-
-    const user = this.state.users.find((u) => u.id === targetUserId);
-    if (!user) {
-      return false;
-    }
-
-    const previousRole = user.role;
-    user.role = newRole;
-    user.updatedAt = new Date().toISOString();
-
-    this.state.auditLogs.unshift({
-      id: 'log-' + Math.random().toString(36).substr(2, 9),
-      userId: superAdminId,
-      action: 'USER_ROLE_CHANGED',
-      resourceType: 'USER',
-      resourceId: targetUserId,
-      metadata: {
-        targetUserName: user.name,
-        targetUserEmail: user.email,
-        previousRole,
-        newRole,
-        deviceId: deviceId || null,
-      },
-      createdAt: new Date().toISOString(),
-    });
-
-    this.save(this.state);
-    return true;
-  }
-
   public getAnnouncements(): PlatformAnnouncement[] {
     return this.state.announcements || [];
   }
@@ -2120,6 +2076,95 @@ class MockDatabase {
     });
 
     this.save(this.state);
+  }
+
+  public getSystemIncidents(callerId?: string): SystemIncident[] {
+    if (callerId) {
+      this.assertSuperAdminAccess(callerId, 1);
+    }
+    return this.state.systemIncidents || [];
+  }
+
+  public createSystemIncident(
+    incident: Omit<SystemIncident, 'id' | 'createdAt'>,
+    callerId?: string
+  ): SystemIncident {
+    if (callerId) {
+      this.assertSuperAdminAccess(callerId, 1);
+    }
+    if (!this.state.systemIncidents) this.state.systemIncidents = [];
+
+    // Idempotency / Duplicate Suppression:
+    // If an active (unresolved) incident already exists for this service, update it rather than duplicating
+    const existingActive = this.state.systemIncidents.find(
+      (i) => i.service === incident.service && i.status !== 'RESOLVED'
+    );
+
+    if (existingActive) {
+      existingActive.occurrences = (existingActive.occurrences || 1) + 1;
+      existingActive.error = incident.error;
+      existingActive.severity = incident.severity;
+      if (incident.details !== undefined) {
+        existingActive.details = incident.details;
+      }
+      this.save(this.state);
+      return existingActive;
+    }
+
+    const newInc: SystemIncident = {
+      ...incident,
+      id: 'inc-' + Math.random().toString(36).substring(2, 9),
+      createdAt: new Date().toISOString(),
+    };
+    this.state.systemIncidents.unshift(newInc);
+    this.save(this.state);
+    return newInc;
+  }
+
+  public updateSystemIncidentStatus(
+    incidentId: string,
+    newStatus: SystemIncident['status'],
+    callerId?: string
+  ): boolean {
+    if (callerId) {
+      this.assertSuperAdminAccess(callerId, 1);
+    }
+    if (!this.state.systemIncidents) return false;
+    const inc = this.state.systemIncidents.find((i) => i.id === incidentId);
+    if (!inc) return false;
+
+    if (newStatus === 'RESOLVED') {
+      return this.resolveSystemIncident(incidentId, callerId);
+    }
+
+    inc.status = newStatus;
+    if (inc.resolvedAt) {
+      delete inc.resolvedAt;
+      delete inc.durationSeconds;
+    }
+    this.save(this.state);
+    return true;
+  }
+
+  public resolveSystemIncident(incidentId: string, callerId?: string): boolean {
+    if (callerId) {
+      this.assertSuperAdminAccess(callerId, 1);
+    }
+    if (!this.state.systemIncidents) return false;
+    const inc = this.state.systemIncidents.find((i) => i.id === incidentId);
+    if (!inc) return false;
+
+    const resolvedAt = new Date().toISOString();
+    const durationSeconds = Math.max(
+      0,
+      Math.round((new Date(resolvedAt).getTime() - new Date(inc.createdAt).getTime()) / 1000)
+    );
+
+    inc.status = 'RESOLVED';
+    inc.resolvedAt = resolvedAt;
+    inc.durationSeconds = durationSeconds;
+    this.save(this.state);
+    return true;
   }
 }
 

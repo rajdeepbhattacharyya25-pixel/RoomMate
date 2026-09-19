@@ -21,7 +21,6 @@ import {
   PlatformAnnouncement,
   PlatformSettings,
   FeatureSuggestionStatus,
-  ContactRequest,
 } from '../../types';
 import { enqueueOfflineItem } from './offlineQueue';
 import { validateStrict4DigitPin, hashPin, clearResidentSession, createResidentToken } from '../auth/jwtService';
@@ -245,6 +244,7 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
           status: inc.status,
           occurrences: inc.occurrences,
           details: inc.details || undefined,
+          durationSeconds: inc.duration_seconds || (inc.resolved_at && inc.created_at ? Math.max(0, Math.round((new Date(inc.resolved_at).getTime() - new Date(inc.created_at).getTime()) / 1000)) : undefined),
           createdAt: inc.created_at,
           resolvedAt: inc.resolved_at || undefined,
         }));
@@ -2959,24 +2959,40 @@ export async function deleteUserAccountCloud(userId: string): Promise<{ success:
 }
 
 /**
- * Resolves a system incident on Supabase Cloud and local state
+ * Resolves a system incident on Supabase Cloud and local state with outage duration
  */
 export async function resolveSystemIncidentCloud(incidentId: string): Promise<boolean> {
-  const localIncidents = (db as any).state?.systemIncidents || [];
-  const target = localIncidents.find((i: any) => i.id === incidentId);
-  if (target) {
-    target.status = 'RESOLVED';
-    target.resolvedAt = new Date().toISOString();
-    db.saveState((db as any).state);
-  }
+  const localResolved = db.resolveSystemIncident(incidentId);
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      const resolvedAt = new Date().toISOString();
+      let durationSeconds: number | undefined;
+
+      const localInc = (db as any).state?.systemIncidents?.find((i: any) => i.id === incidentId);
+      if (localInc?.durationSeconds !== undefined) {
+        durationSeconds = localInc.durationSeconds;
+      } else {
+        const { data: remoteRow } = await (supabase as any)
+          .from('system_incidents')
+          .select('created_at')
+          .eq('id', incidentId)
+          .maybeSingle();
+
+        if (remoteRow?.created_at) {
+          durationSeconds = Math.max(
+            0,
+            Math.round((new Date(resolvedAt).getTime() - new Date(remoteRow.created_at).getTime()) / 1000)
+          );
+        }
+      }
+
       const { error } = await (supabase as any)
         .from('system_incidents')
         .update({
           status: 'RESOLVED',
-          resolved_at: new Date().toISOString(),
+          resolved_at: resolvedAt,
+          duration_seconds: durationSeconds ?? null,
         })
         .eq('id', incidentId);
 
@@ -2990,7 +3006,44 @@ export async function resolveSystemIncidentCloud(incidentId: string): Promise<bo
       return false;
     }
   }
-  return true;
+  return localResolved;
+}
+
+/**
+ * Transitions the status of a system incident (INVESTIGATING -> MONITORING -> RESOLVED)
+ */
+export async function updateSystemIncidentStatusCloud(
+  incidentId: string,
+  newStatus: SystemIncident['status']
+): Promise<boolean> {
+  if (newStatus === 'RESOLVED') {
+    return resolveSystemIncidentCloud(incidentId);
+  }
+
+  const localUpdated = db.updateSystemIncidentStatus(incidentId, newStatus);
+
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const { error } = await (supabase as any)
+        .from('system_incidents')
+        .update({
+          status: newStatus,
+          resolved_at: null,
+          duration_seconds: null,
+        })
+        .eq('id', incidentId);
+
+      if (error) {
+        console.warn('Could not update incident status on Supabase Cloud:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('Cloud update incident status error:', err);
+      return false;
+    }
+  }
+  return localUpdated;
 }
 
 /**
@@ -3093,6 +3146,7 @@ export async function fetchSystemIncidentsCloud(): Promise<SystemIncident[]> {
       status: i.status,
       occurrences: i.occurrences || 1,
       details: i.details || undefined,
+      durationSeconds: i.duration_seconds || (i.resolved_at && i.created_at ? Math.max(0, Math.round((new Date(i.resolved_at).getTime() - new Date(i.created_at).getTime()) / 1000)) : undefined),
       createdAt: i.created_at,
       resolvedAt: i.resolved_at || undefined,
     }));
@@ -3103,13 +3157,56 @@ export async function fetchSystemIncidentsCloud(): Promise<SystemIncident[]> {
 }
 
 /**
- * Creates a system incident in Supabase Cloud
+ * Creates or updates an active system incident in Supabase Cloud with duplicate suppression
  */
 export async function createSystemIncidentCloud(
   incident: Omit<SystemIncident, 'id' | 'createdAt'>
 ): Promise<SystemIncident | null> {
+  const localInc = db.createSystemIncident(incident);
+
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      // Idempotency: Check if an active (unresolved) incident already exists for this service in Cloud
+      const { data: existingActive } = await (supabase as any)
+        .from('system_incidents')
+        .select('*')
+        .eq('service', incident.service)
+        .neq('status', 'RESOLVED')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingActive) {
+        const nextOccurrences = (existingActive.occurrences || 1) + 1;
+        const { data: updated, error } = await (supabase as any)
+          .from('system_incidents')
+          .update({
+            occurrences: nextOccurrences,
+            error: incident.error,
+            severity: incident.severity,
+            details: incident.details !== undefined ? incident.details : existingActive.details,
+          })
+          .eq('id', existingActive.id)
+          .select()
+          .single();
+
+        if (!error && updated) {
+          return {
+            id: updated.id,
+            service: updated.service,
+            error: updated.error,
+            severity: updated.severity,
+            status: updated.status,
+            occurrences: updated.occurrences,
+            details: updated.details || undefined,
+            createdAt: updated.created_at,
+            resolvedAt: updated.resolved_at || undefined,
+            durationSeconds: updated.duration_seconds || undefined,
+          };
+        }
+      }
+
+      // No active incident exists for this service, create a new row
       const { data, error } = await (supabase as any)
         .from('system_incidents')
         .insert({
@@ -3134,13 +3231,14 @@ export async function createSystemIncidentCloud(
           details: data.details || undefined,
           createdAt: data.created_at,
           resolvedAt: data.resolved_at || undefined,
+          durationSeconds: data.duration_seconds || undefined,
         };
       }
     } catch (err: any) {
       console.warn('Create system incident cloud error:', err?.message || err);
     }
   }
-  return null;
+  return localInc;
 }
 
 /**
@@ -3169,6 +3267,7 @@ export function subscribeToSystemIncidentsRealtime(
             status: row.status,
             occurrences: row.occurrences || 1,
             details: row.details || undefined,
+            durationSeconds: row.duration_seconds || (row.resolved_at && row.created_at ? Math.max(0, Math.round((new Date(row.resolved_at).getTime() - new Date(row.created_at).getTime()) / 1000)) : undefined),
             createdAt: row.created_at,
             resolvedAt: row.resolved_at || undefined,
           });
@@ -3194,7 +3293,7 @@ export async function fetchPlatformSettingsCloud(): Promise<PlatformSettings | n
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('platform_settings')
       .select('*')
       .eq('id', 'global_settings')
@@ -3267,7 +3366,7 @@ export async function updatePlatformSettingsCloud(
     if (settings.maintenanceMessage !== undefined) payload.maintenance_message = settings.maintenanceMessage;
     if (updatedByUserId) payload.updated_by = updatedByUserId;
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('platform_settings')
       .update(payload)
       .eq('id', 'global_settings');
@@ -3299,7 +3398,7 @@ export async function updateFeatureSuggestionStatusCloud(
     };
     if (adminNotes !== undefined) payload.admin_notes = adminNotes;
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('support_tickets')
       .update(payload)
       .eq('id', id);
@@ -3332,7 +3431,7 @@ export async function updateContactRequestStatusCloud(
     if (adminNotes !== undefined) payload.admin_notes = adminNotes;
     if (status === 'RESOLVED') payload.resolved_at = new Date().toISOString();
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('support_tickets')
       .update(payload)
       .eq('id', id);

@@ -404,12 +404,13 @@ export type IncidentStatus = 'OPERATIONAL' | 'INVESTIGATING' | 'MONITORING' | 'R
 
 export interface SystemIncident {
   id: string;
-  service: 'Application' | 'Database' | 'Authentication' | 'API' | 'Notifications' | 'Crashlytics' | 'PostHog' | (string & {});
+  service: 'Web' | 'API' | 'Database' | 'Authentication' | 'Notifications' | 'Crashlytics' | 'PostHog' | (string & {});
   error: string;
   severity: IncidentSeverity;
   status: IncidentStatus;
   occurrences: number;
   details?: string;
+  durationSeconds?: number;
   createdAt: string;
   resolvedAt?: string;
 }
