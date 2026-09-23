@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -66,7 +67,11 @@ export default async function handler(
   }
 
   const providedSecret = (secretHeader || token) as string;
-  if (providedSecret !== WEBHOOK_SECRET) {
+  const providedBuf = Buffer.from(providedSecret);
+  const expectedBuf = Buffer.from(WEBHOOK_SECRET);
+  const isValidSecret = providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+
+  if (!isValidSecret) {
     res.statusCode = 401;
     res.end(JSON.stringify({ error: 'Unauthorized: Invalid webhook secret' }));
     return;

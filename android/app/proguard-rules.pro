@@ -58,3 +58,15 @@
 -keep class io.capawesome.capacitorjs.plugins.firebase.crashlytics.** { *; }
 -dontwarn io.capawesome.capacitorjs.plugins.firebase.crashlytics.**
 
+# 9. Kotlin Coroutines & Jetpack DataStore
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-dontwarn kotlinx.coroutines.**
+-keep class androidx.datastore.** { *; }
+-dontwarn androidx.datastore.**
+
+# 10. AndroidX WorkManager
+-keep class androidx.work.** { *; }
+-dontwarn androidx.work.**
+
+

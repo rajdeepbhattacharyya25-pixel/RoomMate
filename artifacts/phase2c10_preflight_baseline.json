@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-09-23T13:03:25.480Z",
+  "supabaseUrl": "https://pbzaaskftrmnvocczhat.supabase.co",
+  "baselineResults": {
+    "profiles": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "user_subscriptions": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "rooms": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "room_members": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "shared_expenses": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "expense_splits": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "settlement_payments": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "personal_expenses": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "app_versions": {
+      "exists": true,
+      "count": 1,
+      "error": null
+    },
+    "bug_reports": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "in_app_notifications": {
+      "exists": true,
+      "count": 0,
+      "error": null
+    },
+    "system_incidents": {
+      "absent": null,
+      "code": "EXISTS"
+    },
+    "user_devices": {
+      "absent": null,
+      "code": "EXISTS"
+    },
+    "platform_announcements": {
+      "absent": null,
+      "code": "EXISTS"
+    },
+    "support_tickets": {
+      "absent": null,
+      "code": "EXISTS"
+    },
+    "platform_settings": {
+      "absent": null,
+      "code": "EXISTS"
+    },
+    "room_join_requests": {
+      "absent": null,
+      "code": "EXISTS"
+    }
+  },
+  "profiles": [],
+  "user_subscriptions": [],
+  "app_versions": [
+    {
+      "id": "d1b0493f-1e11-4ecc-abfa-d9a3894a7b8c",
+      "version": "1.0.4",
+      "channel": "staging",
+      "is_active": true,
+      "min_native_version": "1.0.1"
+    }
+  ],
+  "health": {
+    "statusCode": 200,
+    "data": "{\"status\":\"ok\"}"
+  },
+  "rootStatusCode": 200,
+  "assetLinks": {
+    "statusCode": 200,
+    "data": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <!-- RoomMate Favicon — actual logo PNG -->\n    <link rel=\"icon\" type=\"image/png\" sizes=\"512x512\" href=\"./favicon.png\" />\n   "
+  }
+}

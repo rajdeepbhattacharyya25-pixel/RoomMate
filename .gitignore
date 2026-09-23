@@ -24,6 +24,11 @@ dist-ssr
 *.jks
 google-services.json
 firebase-service-account*.json
+backups/
+*.dump
+*.sql.gz
+artifacts/**/*.sql
+artifacts/**/*.sql.sha256
 
 
 # Scratch and internal verification scripts containing credentials
@@ -49,6 +54,8 @@ android/.externalNativeBuild/
 # Compiled binaries, AAB bundles, and local APK builds
 *.apk
 *.aab
+*.exe
+snyk.exe
 
 # Supabase CLI temporary directory
 supabase/.temp/

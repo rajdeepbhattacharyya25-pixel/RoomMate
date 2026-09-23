@@ -1,0 +1,70 @@
+name: Supabase Database Backup (Free Tier Alternative)
+
+on:
+  schedule:
+    # Runs daily at 03:00 UTC (8:30 AM IST)
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+
+jobs:
+  backup:
+    name: Backup Supabase PostgreSQL
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 Client
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install --no-install-recommends -y postgresql-client-17
+
+      - name: Take Database Dump
+        env:
+          # Secret configured in GitHub Repo Settings -> Secrets and variables -> Actions
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # 1. Strictly enforce masking of the URL and prevent shell command tracing
+          set +x
+          echo "::add-mask::$SUPABASE_DB_URL"
+          
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not configured in repository secrets."
+            exit 1
+          fi
+
+          # 2. Extract and mask password component specifically
+          DB_PASS=$(echo "$SUPABASE_DB_URL" | sed -n 's/.*:\([^@]*\)@.*/\1/p')
+          if [ -n "$DB_PASS" ]; then
+            echo "::add-mask::$DB_PASS"
+          fi
+
+          mkdir -p backups
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          BACKUP_FILE="backups/supabase_backup_${TIMESTAMP}.sql.gz"
+
+          echo "Initiating secure pg_dump against Supabase PostgreSQL 17..."
+
+          # 3. Execute pg_dump directly with standard URL argument (masked)
+          pg_dump "$SUPABASE_DB_URL" \
+            --clean \
+            --if-exists \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            | gzip -9 > "$BACKUP_FILE"
+
+          echo "Backup created successfully: $BACKUP_FILE"
+          ls -lh "$BACKUP_FILE"
+          sha256sum "$BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+
+      - name: Upload Backup Artifact to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-database-backup
+          path: backups/
+          retention-days: 90

@@ -1658,92 +1658,81 @@ export async function createRoomCloud(userId: string, name: string, description?
   return localRoom;
 }
 
-// Join Room With Code in Cloud + Local
+// Join Room With Code in Cloud + Local (Phase 2B.3/2B.4 hardened via join_room_with_code RPC)
 export async function joinRoomWithCodeCloud(userId: string, code: string): Promise<Room> {
   const cleanCode = code.trim().toUpperCase();
 
   if (IS_LIVE_SYNC_ENABLED) {
-    try {
-      const { data: invite, error: invErr } = await supabase
-        .from('room_invitations')
-        .select('*, rooms(*)')
-        .eq('invite_code', cleanCode)
-        .eq('is_revoked', false)
-        .single();
+    const { data, error } = await (supabase.rpc as any)('join_room_with_code', {
+      p_invite_code: cleanCode,
+    });
 
-      if (!invErr && invite && invite.rooms) {
-        // Add member in Supabase
-        await supabase.from('room_members').upsert({
-          room_id: invite.room_id,
-          user_id: userId,
-          role: 'MEMBER',
-          status: 'ACTIVE',
-        });
+    if (error) {
+      console.warn('[joinRoomWithCodeCloud] RPC join error:', error.message);
+      throw new Error(error.message);
+    }
 
-        const r = invite.rooms as unknown as {
-          id: string;
-          name: string;
-          description: string | null;
-          created_by: string;
-          is_archived: boolean | null;
-          created_at: string;
-          updated_at: string;
-        };
+    if (data) {
+      const rpcRes = data as unknown as {
+        status: 'JOINED' | 'PENDING' | 'ALREADY_MEMBER';
+        room_id: string;
+        room_name: string;
+        message?: string;
+      };
 
-        const joinedRoom: Room = {
-          id: r.id,
-          name: r.name,
-          description: r.description || undefined,
-          createdBy: r.created_by,
-          isArchived: r.is_archived ?? false,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-        };
+      const { data: cloudRoom } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', rpcRes.room_id)
+        .maybeSingle();
 
-        const state = db.getState();
-        if (!state.rooms.some((rm) => rm.id === joinedRoom.id)) {
-          state.rooms.unshift(joinedRoom);
-        }
+      const joinedRoom: Room = cloudRoom
+        ? {
+            id: cloudRoom.id,
+            name: cloudRoom.name,
+            description: cloudRoom.description || undefined,
+            createdBy: cloudRoom.created_by,
+            isArchived: cloudRoom.is_archived ?? false,
+            createdAt: cloudRoom.created_at,
+            updatedAt: cloudRoom.updated_at,
+          }
+        : {
+            id: rpcRes.room_id,
+            name: rpcRes.room_name,
+            createdBy: userId,
+            isArchived: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
 
-        const existingMember = state.roomMembers.find(
-          (m) => m.roomId === joinedRoom.id && m.userId === userId
-        );
-        if (existingMember) {
-          existingMember.status = 'ACTIVE';
-          existingMember.leftAt = undefined;
-        } else {
-          state.roomMembers.push({
-            id: 'rm-' + Math.random().toString(36).substr(2, 9),
-            roomId: joinedRoom.id,
-            userId,
-            role: 'MEMBER',
-            status: 'ACTIVE',
-            joinedAt: new Date().toISOString(),
-          });
-        }
-
-        // Cache the invite in local state if not present
-        if (!state.roomInvitations.some((i) => i.id === invite.id)) {
-          state.roomInvitations.push({
-            id: invite.id,
-            roomId: invite.room_id,
-            inviteCode: invite.invite_code,
-            token: invite.token || ('tok_' + invite.id),
-            createdBy: invite.created_by,
-            expiresAt: invite.expires_at || undefined,
-            isRevoked: invite.is_revoked ?? false,
-            createdAt: invite.created_at,
-          });
-        }
-
-        db.saveState(state);
-        return joinedRoom;
+      const state = db.getState();
+      if (!state.rooms.some((rm) => rm.id === joinedRoom.id)) {
+        state.rooms.unshift(joinedRoom);
       }
-    } catch (err) {
-      console.warn('joinRoomWithCodeCloud fallback to local:', err);
+
+      const existingMember = state.roomMembers.find(
+        (m) => m.roomId === joinedRoom.id && m.userId === userId
+      );
+      if (existingMember) {
+        existingMember.status = rpcRes.status === 'PENDING' ? ('PENDING' as any) : 'ACTIVE';
+        existingMember.leftAt = undefined;
+      } else {
+        state.roomMembers.push({
+          id: 'rm-' + Math.random().toString(36).substr(2, 9),
+          roomId: joinedRoom.id,
+          userId,
+          role: 'MEMBER',
+          status: rpcRes.status === 'PENDING' ? ('PENDING' as any) : 'ACTIVE',
+          joinedAt: new Date().toISOString(),
+        });
+      }
+
+      db.saveState(state);
+      return joinedRoom;
     }
   }
 
+  // Pure local/offline fallback only when live sync is disabled
   return db.joinRoomWithCode(userId, cleanCode);
 }
 
@@ -1865,36 +1854,25 @@ export async function updateFcmTokenCloud(
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      // 1. Multi-device tracking in user_devices (if deviceId provided)
-      if (deviceId) {
-        try {
-          await supabase.from('user_devices').upsert(
-            {
-              user_id: userId,
-              device_id: deviceId,
-              fcm_token: fcmToken,
-              platform: platform || 'android',
-              is_active: true,
-              last_seen_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id,device_id' }
-          );
-        } catch (devErr) {
-          console.warn('user_devices upsert notice (non-fatal):', devErr);
-        }
+      // 1. Canonical multi-device tracking in user_devices (Phase 2C.2)
+      const effectiveDeviceId = deviceId || `device_${platform || 'web'}`;
+      try {
+        await supabase.from('user_devices').upsert(
+          {
+            user_id: userId,
+            device_id: effectiveDeviceId,
+            fcm_token: fcmToken,
+            platform: platform || 'android',
+            is_active: true,
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,device_id' }
+        );
+      } catch (devErr) {
+        console.warn('user_devices upsert notice (non-fatal):', devErr);
       }
 
-      // 2. Backward compatibility: update profiles.fcm_token
-      const { error } = await supabase
-        .from('profiles')
-        .update({ fcm_token: fcmToken, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-
-      if (error) {
-        console.warn('updateFcmTokenCloud cloud error:', error.message);
-        return false;
-      }
       return true;
     } catch (err) {
       console.warn('updateFcmTokenCloud exception:', err);
@@ -1909,21 +1887,15 @@ export async function updateFcmTokenCloud(
 export async function deactivateFcmTokenCloud(userId: string, deviceId?: string): Promise<boolean> {
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      if (deviceId) {
-        try {
-          await supabase
-            .from('user_devices')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
-            .match({ user_id: userId, device_id: deviceId });
-        } catch {
-          // non-fatal if table pending migration
-        }
+      const effectiveDeviceId = deviceId || 'device_android';
+      try {
+        await supabase
+          .from('user_devices')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .match({ user_id: userId, device_id: effectiveDeviceId });
+      } catch {
+        // non-fatal if table pending migration
       }
-
-      await supabase
-        .from('profiles')
-        .update({ fcm_token: null, updated_at: new Date().toISOString() })
-        .eq('id', userId);
 
       return true;
     } catch (err) {
@@ -2226,7 +2198,7 @@ export async function resolveInviteCloud(tokenOrCode: string): Promise<{
   return db.resolveInvite(tokenOrCode);
 }
 
-// Request to Join Room (Cloud + Local fallback)
+// Request to Join Room (Cloud + Local fallback, Phase 2B.3 hardened via join_room_with_code RPC)
 export async function requestJoinRoomCloud(
   userId: string,
   tokenOrCode: string
@@ -2236,148 +2208,105 @@ export async function requestJoinRoomCloud(
   message?: string;
   requestId?: string;
 }> {
+  const cleanCode = tokenOrCode.trim();
+
   if (IS_LIVE_SYNC_ENABLED) {
-    try {
-      const resolved = await resolveInviteCloud(tokenOrCode);
-      const roomId = resolved.room.id;
+    const { data, error } = await (supabase.rpc as any)('join_room_with_code', {
+      p_invite_code: cleanCode,
+    });
 
-      // 1. Check if user is already an active member in Supabase
-      const { data: existingMember } = await supabase
-        .from('room_members')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    if (error) {
+      console.warn('[requestJoinRoomCloud] RPC error:', error.message);
+      throw new Error(error.message);
+    }
 
-      const state = db.getState();
-      const existingLocalMember = state.roomMembers.find(
-        (m) => m.roomId === roomId && m.userId === userId
-      );
-
-      const targetRoom: Room = {
-        id: resolved.room.id,
-        name: resolved.room.name,
-        description: resolved.room.description,
-        createdBy: resolved.invite.createdBy,
-        isArchived: false,
-        createdAt: resolved.invite.createdAt,
-        updatedAt: resolved.invite.createdAt,
+    if (data) {
+      const rpcRes = data as unknown as {
+        status: 'JOINED' | 'PENDING' | 'ALREADY_MEMBER';
+        room_id: string;
+        room_name: string;
+        message?: string;
       };
 
+      const { data: cloudRoom } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', rpcRes.room_id)
+        .maybeSingle();
+
+      const targetRoom: Room = cloudRoom
+        ? {
+            id: cloudRoom.id,
+            name: cloudRoom.name,
+            description: cloudRoom.description || undefined,
+            createdBy: cloudRoom.created_by,
+            isArchived: cloudRoom.is_archived ?? false,
+            createdAt: cloudRoom.created_at,
+            updatedAt: cloudRoom.updated_at,
+          }
+        : {
+            id: rpcRes.room_id,
+            name: rpcRes.room_name,
+            createdBy: userId,
+            isArchived: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+      const state = db.getState();
       if (!state.rooms.some((r) => r.id === targetRoom.id)) {
         state.rooms.unshift(targetRoom);
       }
 
-      if (existingMember?.status === 'ACTIVE' || (existingLocalMember && existingLocalMember.status === 'ACTIVE')) {
-        if (!existingLocalMember) {
-          state.roomMembers.push({
-            id: existingMember?.id || ('rm-' + Math.random().toString(36).substr(2, 9)),
-            roomId,
-            userId,
-            role: (existingMember?.role || 'MEMBER') as RoomMember['role'],
-            status: 'ACTIVE',
-            joinedAt: existingMember?.joined_at || new Date().toISOString(),
-          });
-          db.saveState(state);
-        }
-        return {
-          status: 'ALREADY_MEMBER',
-          room: targetRoom,
-          message: "You're already a member of this room.",
-        };
-      }
-
-      const policy = resolved.room.joinPolicy || 'APPROVAL_REQUIRED';
-
-      if (policy === 'INSTANT') {
-        await supabase.from('room_members').upsert({
-          room_id: roomId,
-          user_id: userId,
+      const existingLocalMember = state.roomMembers.find(
+        (m) => m.roomId === targetRoom.id && m.userId === userId
+      );
+      if (existingLocalMember) {
+        existingLocalMember.status = rpcRes.status === 'PENDING' ? ('PENDING' as any) : 'ACTIVE';
+        existingLocalMember.leftAt = undefined;
+      } else {
+        state.roomMembers.push({
+          id: 'rm-' + Math.random().toString(36).substr(2, 9),
+          roomId: targetRoom.id,
+          userId,
           role: 'MEMBER',
-          status: 'ACTIVE',
-          joined_at: new Date().toISOString(),
+          status: rpcRes.status === 'PENDING' ? ('PENDING' as any) : 'ACTIVE',
+          joinedAt: new Date().toISOString(),
         });
-
-        if (existingLocalMember) {
-          existingLocalMember.status = 'ACTIVE';
-          existingLocalMember.leftAt = undefined;
-        } else {
-          state.roomMembers.push({
-            id: 'rm-' + Math.random().toString(36).substr(2, 9),
-            roomId,
-            userId,
-            role: 'MEMBER',
-            status: 'ACTIVE',
-            joinedAt: new Date().toISOString(),
-          });
-        }
-        db.saveState(state);
-
-        return {
-          status: 'JOINED',
-          room: targetRoom,
-          message: `Welcome to ${targetRoom.name}!`,
-        };
       }
 
-      // APPROVAL_REQUIRED: Check existing pending request in Supabase
-      const { data: existingReq } = await supabase
-        .from('room_join_requests')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('user_id', userId)
-        .eq('status', 'PENDING')
-        .maybeSingle();
-
-      if (existingReq) {
-        if (!state.roomJoinRequests.some((r) => r.id === existingReq.id)) {
+      if (rpcRes.status === 'PENDING') {
+        // Track pending request locally
+        const existingReq = state.roomJoinRequests.find(
+          (r) => r.roomId === targetRoom.id && r.userId === userId && r.status === 'PENDING'
+        );
+        if (!existingReq) {
           state.roomJoinRequests.unshift({
-            id: existingReq.id,
-            roomId,
+            id: 'req-' + Math.random().toString(36).substr(2, 9),
+            roomId: targetRoom.id,
             userId,
             status: 'PENDING',
-            createdAt: existingReq.created_at,
+            createdAt: new Date().toISOString(),
           });
-          db.saveState(state);
         }
-        return {
-          status: 'PENDING',
-          room: targetRoom,
-          message: `Your request to join ${targetRoom.name} is waiting for admin approval.`,
-          requestId: existingReq.id,
-        };
       }
 
-      const newReqId = 'req-' + Math.random().toString(36).substr(2, 9);
-      await supabase.from('room_join_requests').insert({
-        id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newReqId) ? newReqId : undefined,
-        room_id: roomId,
-        user_id: userId,
-        status: 'PENDING',
-      });
-
-      state.roomJoinRequests.unshift({
-        id: newReqId,
-        roomId,
-        userId,
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-      });
       db.saveState(state);
 
       return {
-        status: 'PENDING',
+        status: rpcRes.status,
         room: targetRoom,
-        message: `Your request to join ${targetRoom.name} is waiting for admin approval.`,
-        requestId: newReqId,
+        message: rpcRes.message || (rpcRes.status === 'JOINED' ? `Welcome to ${targetRoom.name}!` : `Request sent to ${targetRoom.name}`),
       };
-    } catch (err) {
-      console.warn('requestJoinRoomCloud cloud warning, falling back to local:', err);
     }
   }
 
+  // Pure local/offline fallback only when live sync is disabled
   return db.requestJoinRoom(userId, tokenOrCode);
 }
+
+// Alias for explicit Phase 2B nomenclature
+export const joinRoomByInviteCloud = requestJoinRoomCloud;
 
 // Check Join Request Status (Cloud + Local fallback)
 export async function checkJoinRequestStatusCloud(requestId: string): Promise<{

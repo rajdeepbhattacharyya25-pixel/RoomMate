@@ -1,0 +1,66 @@
+{
+  "tables": {
+    "status": "EXACT_MATCH",
+    "count": 18
+  },
+  "columns": {
+    "status": "EXACT_MATCH",
+    "count": 185
+  },
+  "primaryKeys": {
+    "status": "EXACT_MATCH",
+    "count": 18
+  },
+  "foreignKeys": {
+    "status": "EXACT_MATCH",
+    "count": 22
+  },
+  "uniqueConstraints": {
+    "status": "EXACT_MATCH",
+    "count": 5
+  },
+  "checkConstraints": {
+    "status": "EXACT_MATCH",
+    "count": 153
+  },
+  "indexes": {
+    "status": "EXACT_MATCH",
+    "count": 63
+  },
+  "functions": {
+    "status": "EXACT_MATCH",
+    "count": 75
+  },
+  "triggers": {
+    "status": "EXACT_MATCH",
+    "count": 6
+  },
+  "rlsState": {
+    "status": "EXACT_MATCH",
+    "count": 18
+  },
+  "rlsPolicies": {
+    "status": "EXACT_MATCH",
+    "count": 37
+  },
+  "tableGrants": {
+    "status": "EXACT_MATCH",
+    "count": 378
+  },
+  "sequences": {
+    "status": "EXACT_MATCH",
+    "count": 0
+  },
+  "views": {
+    "status": "EXACT_MATCH",
+    "count": 0
+  },
+  "migrationHistory": {
+    "status": "EXACT_MATCH",
+    "count": 2
+  },
+  "overallResult": "EXACT MATCH",
+  "baselineSha256": "b3fbeddd1ed4878d73909b4fe5e285bf4ad1163a69c2bdbd0557d76945e93b57",
+  "postRollbackSha256": "b3fbeddd1ed4878d73909b4fe5e285bf4ad1163a69c2bdbd0557d76945e93b57",
+  "hashesMatch": true
+}

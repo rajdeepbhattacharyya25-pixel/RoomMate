@@ -20,7 +20,9 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [redeemSuccess, setRedeemSuccess] = useState(false);
 
-  const redirectUri = 'https://pbzaaskftrmnvocczhat.supabase.co/auth/v1/callback';
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const projectId = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || '';
+  const redirectUri = `${supabaseUrl}/auth/v1/callback`;
 
   if (!isOpen) return null;
 
@@ -149,7 +151,7 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">2. Supabase Google Provider</span>
               <a
-                href="https://supabase.com/dashboard/project/pbzaaskftrmnvocczhat/auth/providers"
+                href={`https://supabase.com/dashboard/project/${projectId}/auth/providers`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
@@ -167,7 +169,7 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">3. Supabase URL Configuration</span>
               <a
-                href="https://supabase.com/dashboard/project/pbzaaskftrmnvocczhat/auth/url-configuration"
+                href={`https://supabase.com/dashboard/project/${projectId}/auth/url-configuration`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"

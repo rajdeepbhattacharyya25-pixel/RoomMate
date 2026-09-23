@@ -1,17 +1,20 @@
 // Supabase Edge Function: send-push
 // Dispatches Firebase Cloud Messaging (FCM) push notifications using FCM HTTP v1 API.
-// Triggered on shared expense creation, debt settlements, and room join events.
+// Hardened in Phase 2C.2 for Notification Authenticity, Recipient Authorization & Payload Validation.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 
 interface PushPayload {
+  roomId?: string;
   userIds?: string[];
   recipientUserIds?: string[];
   title: string;
   body: string;
   channelId?: string;
-  data?: Record<string, string>;
+  type?: string;
+  priority?: string;
+  data?: Record<string, unknown>;
 }
 
 interface ServiceAccountKey {
@@ -19,6 +22,18 @@ interface ServiceAccountKey {
   client_email: string;
   private_key: string;
 }
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(uuid: string): boolean {
+  return typeof uuid === 'string' && UUID_REGEX.test(uuid.trim());
+}
+
+// Forbidden notification types for non-system/regular client callers
+const FORBIDDEN_CLIENT_TYPES = new Set([
+  'ACCOUNT_SECURITY',
+  'SYSTEM_INFO',
+  'ADMIN_APPROVAL_REQUIRED',
+]);
 
 // Convert PEM string to ArrayBuffer for Web Crypto
 function pemToArrayBuffer(pem: string): ArrayBuffer {
@@ -94,14 +109,14 @@ async function getGoogleAccessToken(sa: ServiceAccountKey): Promise<string> {
 }
 
 serve(async (req) => {
-  // CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
+  // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -109,12 +124,12 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Enforce caller authentication
+    // 1. Caller Authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized: Missing Authorization header' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -128,48 +143,164 @@ serve(async (req) => {
       if (userErr || !userData?.user) {
         return new Response(JSON.stringify({ error: 'Unauthorized: Invalid authentication session' }), {
           status: 401,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       callerUserId = userData.user.id;
     }
 
-    const payload = (await req.json()) as PushPayload;
-    const targetUserIds = payload.recipientUserIds || payload.userIds || [];
-    const { title, body, channelId = 'roommate_expenses_channel', data } = payload;
-
-    if (!targetUserIds || targetUserIds.length === 0) {
-      return new Response(JSON.stringify({ error: 'No recipient userIds provided' }), {
+    // 2. Parse & Validate Payload
+    let payload: PushPayload;
+    try {
+      payload = (await req.json()) as PushPayload;
+    } catch {
+      return new Response(JSON.stringify({ error: 'Bad Request: Malformed JSON payload' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Destination authorization check: if roomId is provided and caller is not service_role,
-    // verify caller is an authorized member of that room
-    if (callerUserId !== 'service_role' && data?.roomId) {
-      const { data: membership, error: memErr } = await supabase
-        .from('room_members')
-        .select('id')
-        .eq('room_id', data.roomId)
-        .eq('user_id', callerUserId)
-        .maybeSingle();
+    const targetUserIds = payload.recipientUserIds || payload.userIds || [];
+    const { title, body, channelId = 'roommate_expenses_channel', data } = payload;
+    const effectiveRoomId = payload.roomId || (data?.roomId as string | undefined);
 
-      if (memErr || !membership) {
+    // Common Payload Validation:
+    if (!Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+      return new Response(JSON.stringify({ error: 'Validation Error: recipientUserIds must be a non-empty array' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!title || typeof title !== 'string' || title.trim().length === 0 || title.length > 100) {
+      return new Response(
+        JSON.stringify({ error: 'Validation Error: title must be a non-empty string of max 100 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!body || typeof body !== 'string' || body.trim().length === 0 || body.length > 500) {
+      return new Response(
+        JSON.stringify({ error: 'Validation Error: body must be a non-empty string of max 500 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate recipient UUID formats
+    for (const uid of targetUserIds) {
+      if (!isValidUUID(uid)) {
         return new Response(
-          JSON.stringify({ error: 'Forbidden: Caller is not an authorized member of this room' }),
-          {
-            status: 403,
-            headers: { 'Content-Type': 'application/json' },
-          }
+          JSON.stringify({ error: `Validation Error: Invalid recipient UUID format: ${uid}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
-    // 1. Query active FCM tokens across multiple devices for recipient users
+    // 3. Strict Authorization Boundaries
+    if (callerUserId !== 'service_role') {
+      // Rule 1: roomId is MANDATORY for regular users
+      if (!effectiveRoomId || !isValidUUID(effectiveRoomId)) {
+        return new Response(
+          JSON.stringify({ error: 'Validation Error: roomId is mandatory and must be a valid UUID' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Rule 2: Limit recipient count for client requests (anti-spam)
+      if (targetUserIds.length > 50) {
+        return new Response(
+          JSON.stringify({ error: 'Validation Error: Recipient count exceeds maximum limit of 50' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Rule 3: Reject forbidden system notification types
+      const notifType = ((data?.type as string) || payload.type || '').toUpperCase();
+      if (FORBIDDEN_CLIENT_TYPES.has(notifType)) {
+        return new Response(
+          JSON.stringify({ error: `Forbidden: Client cannot dispatch system-level notification type '${notifType}'` }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Rule 4: Data payload size limit
+      if (data) {
+        const dataBytes = new TextEncoder().encode(JSON.stringify(data)).length;
+        if (dataBytes > 4096) {
+          return new Response(
+            JSON.stringify({ error: 'Validation Error: data payload exceeds 4KB limit' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Rule 5: Verify Caller is an ACTIVE member of effectiveRoomId
+      const { data: callerMember, error: callerMemErr } = await supabase
+        .from('room_members')
+        .select('id')
+        .eq('room_id', effectiveRoomId)
+        .eq('user_id', callerUserId)
+        .eq('status', 'ACTIVE')
+        .maybeSingle();
+
+      if (callerMemErr || !callerMember) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: Caller is not an active member of this room' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Rule 6: Verify EVERY recipient is an ACTIVE member of effectiveRoomId
+      const distinctRecipients = Array.from(new Set(targetUserIds));
+      const { data: recipientMembers, error: recMemErr } = await supabase
+        .from('room_members')
+        .select('user_id')
+        .eq('room_id', effectiveRoomId)
+        .eq('status', 'ACTIVE')
+        .in('user_id', distinctRecipients);
+
+      if (recMemErr || !recipientMembers) {
+        return new Response(
+          JSON.stringify({ error: 'Internal Error: Failed to verify recipient room memberships' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const activeMemberSet = new Set(recipientMembers.map((m) => m.user_id));
+      const foreignRecipients = distinctRecipients.filter((uid) => !activeMemberSet.has(uid));
+
+      if (foreignRecipients.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: 'Forbidden: One or more recipients are not active members of this room',
+            unauthorizedUserIds: foreignRecipients,
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Rule 7: Enforce authentic caller sender identity in data; strip spoofed claims
+      if (data) {
+        delete (data as Record<string, unknown>).is_system_verified;
+        delete (data as Record<string, unknown>).verified_by;
+        delete (data as Record<string, unknown>).system_source;
+        (data as Record<string, unknown>).senderId = callerUserId;
+        (data as Record<string, unknown>).roomId = effectiveRoomId;
+      }
+    } else {
+      // Service Role caller: Validate max limit
+      if (targetUserIds.length > 500) {
+        return new Response(
+          JSON.stringify({ error: 'Validation Error: Service role recipient count exceeds 500' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // 4. Query active FCM tokens for recipient users
     const allTokens = new Set<string>();
 
-    // A. Query multi-device user_devices table
+    // A. Query multi-device user_devices table (canonical token store)
     try {
       const { data: devices } = await supabase
         .from('user_devices')
@@ -183,21 +314,21 @@ serve(async (req) => {
         }
       }
     } catch (devErr) {
-      console.warn('user_devices table query warning (falling back to profiles):', devErr);
+      console.warn('user_devices table query warning:', devErr);
     }
 
-    // B. Query profiles table (backward compatibility fallback)
-    const { data: profiles, error: profErr } = await supabase
-      .from('profiles')
-      .select('id, fcm_token')
-      .in('id', targetUserIds)
-      .not('fcm_token', 'is', null);
+    // B. Query profiles table (backward compatibility fallback for un-migrated users)
+    if (allTokens.size === 0) {
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, fcm_token')
+        .in('id', targetUserIds)
+        .not('fcm_token', 'is', null);
 
-    if (profErr) {
-      console.warn('profiles table query error:', profErr.message);
-    } else if (profiles) {
-      for (const p of profiles) {
-        if (p.fcm_token) allTokens.add(p.fcm_token);
+      if (!profErr && profiles) {
+        for (const p of profiles) {
+          if (p.fcm_token) allTokens.add(p.fcm_token);
+        }
       }
     }
 
@@ -205,15 +336,12 @@ serve(async (req) => {
 
     if (tokens.length === 0) {
       return new Response(
-        JSON.stringify({ message: 'No registered FCM tokens found for recipients' }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ message: 'No registered active FCM tokens found for recipients' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 2. Resolve FCM Credentials (HTTP v1 with Service Account or OAuth Token)
+    // 5. Resolve FCM Credentials (HTTP v1 with Service Account or OAuth Token)
     const rawSaKey = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_KEY') || Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY');
     let accessToken: string | null = null;
     let projectId: string | null = null;
@@ -228,7 +356,6 @@ serve(async (req) => {
       }
     }
 
-    // Fallback direct access token or project ID
     if (!accessToken) {
       accessToken = Deno.env.get('FCM_ACCESS_TOKEN') || null;
     }
@@ -236,10 +363,9 @@ serve(async (req) => {
       projectId = Deno.env.get('FIREBASE_PROJECT_ID') || 'roommate-eb1d3';
     }
 
-    // Check if credentials are present
     if (!accessToken) {
       console.warn(
-        '[FCM v1] No Google Service Account key or access token configured in Supabase secrets. Logged payload only.'
+        '[FCM v1] No Google Service Account key or access token configured in Supabase secrets. Payload logged.'
       );
       return new Response(
         JSON.stringify({
@@ -248,14 +374,11 @@ serve(async (req) => {
           title,
           body,
         }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 3. Dispatch notifications using modern FCM HTTP v1 API
+    // 6. Dispatch notifications using FCM HTTP v1 API
     const stringData: Record<string, string> = {};
     if (data) {
       for (const [k, v] of Object.entries(data)) {
@@ -294,6 +417,19 @@ serve(async (req) => {
 
         if (!res.ok) {
           const errText = await res.text();
+          // Stale token cleanup: If FCM returns unregistered or invalid token, clean up database
+          if (
+            res.status === 404 ||
+            errText.includes('UNREGISTERED') ||
+            errText.includes('INVALID_ARGUMENT') ||
+            errText.includes('registration-token-not-registered')
+          ) {
+            try {
+              await supabase.from('user_devices').delete().eq('fcm_token', token);
+            } catch (cleanErr) {
+              console.warn('Failed to clean up stale token:', cleanErr);
+            }
+          }
           throw new Error(`FCM v1 send error (${res.status}): ${errText}`);
         }
 
@@ -312,14 +448,15 @@ serve(async (req) => {
         failed: failedDispatches,
       }),
       {
-        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });

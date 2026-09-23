@@ -7,7 +7,7 @@ android {
         applicationId "io.campusflow.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
+        versionCode 9
         versionName "1.0.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -16,11 +16,47 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.apk'
         }
     }
-    buildTypes {
+    signingConfigs {
+        debug {
+            // Standard Android debug keystore
+        }
+        staging {
+            initWith(signingConfigs.debug)
+        }
         release {
+            def prodStorePath = System.getenv('ROOMMATE_PROD_KEYSTORE_PATH') ?: (project.hasProperty('ROOMMATE_PROD_KEYSTORE_PATH') ? project.property('ROOMMATE_PROD_KEYSTORE_PATH') : null)
+            if (prodStorePath && file(prodStorePath).exists()) {
+                storeFile file(prodStorePath)
+                storePassword System.getenv('ROOMMATE_PROD_KEYSTORE_PASSWORD') ?: project.property('ROOMMATE_PROD_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ROOMMATE_PROD_KEY_ALIAS') ?: project.property('ROOMMATE_PROD_KEY_ALIAS')
+                keyPassword System.getenv('ROOMMATE_PROD_KEY_PASSWORD') ?: project.property('ROOMMATE_PROD_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug {
             signingConfig signingConfigs.debug
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        staging {
+            initWith(buildTypes.release)
+            matchingFallbacks = ['release', 'debug']
+            signingConfig signingConfigs.staging
+            debuggable false
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    if (taskGraph.hasTask(':app:packageRelease') || taskGraph.hasTask(':app:assembleRelease')) {
+        if (!android.signingConfigs.release.storeFile || !android.signingConfigs.release.storeFile.exists()) {
+            throw new GradleException("PRODUCTION RELEASE SIGNING ERROR: An explicit production keystore is mandatory for ':app:assembleRelease' (provide ROOMMATE_PROD_KEYSTORE_PATH, ROOMMATE_PROD_KEYSTORE_PASSWORD, ROOMMATE_PROD_KEY_ALIAS, ROOMMATE_PROD_KEY_PASSWORD). Production builds must never silently fall back to debug signing. For staging builds intentionally signed with the debug/staging key, use ':app:assembleStaging'.")
         }
     }
 }

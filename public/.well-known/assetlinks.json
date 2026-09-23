@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.campusflow.app",
+      "sha256_cert_fingerprints": [
+        "EE:30:F8:EE:08:3B:F9:68:A2:2E:0E:4F:17:7A:CC:09:7C:78:B8:76:0B:25:D8:86:1E:98:8D:27:9C:A3:E7:78"
+      ]
+    }
+  }
+]

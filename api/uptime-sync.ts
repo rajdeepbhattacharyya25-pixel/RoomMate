@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -68,7 +69,14 @@ export default async function handler(
   }
 
   const syncSecret = process.env.UPTIME_SYNC_SECRET || process.env.UPTIME_WEBHOOK_SECRET;
-  let isAuthorized = Boolean(syncSecret && token === syncSecret);
+  let isAuthorized = false;
+  if (syncSecret) {
+    const tokenBuf = Buffer.from(token);
+    const secretBuf = Buffer.from(syncSecret);
+    if (tokenBuf.length === secretBuf.length && timingSafeEqual(tokenBuf, secretBuf)) {
+      isAuthorized = true;
+    }
+  }
 
   if (!isAuthorized) {
     const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

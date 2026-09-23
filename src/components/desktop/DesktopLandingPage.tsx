@@ -31,8 +31,8 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
   const [showGuideModal, setShowGuideModal] = useState(false);
 
   const handleDownloadApk = () => {
-    // Direct link to staging APK binary hosted on Supabase Storage release CDN
-    const APK_DOWNLOAD_URL = 'https://pbzaaskftrmnvocczhat.supabase.co/storage/v1/object/public/app-updates/releases/staging/RoomMate-staging-latest.apk';
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const APK_DOWNLOAD_URL = `${supabaseUrl}/storage/v1/object/public/app-updates/releases/staging/RoomMate-staging-latest.apk`;
     const link = document.createElement('a');
     link.href = APK_DOWNLOAD_URL;
     link.download = 'RoomMate-staging-v1.0.4.apk';

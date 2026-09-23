@@ -25,8 +25,8 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
 
-  const projectUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pbzaaskftrmnvocczhat.supabase.co';
-  const projectId = 'pbzaaskftrmnvocczhat';
+  const projectUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const projectId = projectUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || '';
 
   const handleTestConnection = useCallback(async () => {
     setTesting(true);

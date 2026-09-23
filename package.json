@@ -21,7 +21,10 @@
     "cap:ios": "npx cap open ios",
     "ota:publish": "node scripts/ota-publish.js",
     "ota:promote": "node scripts/ota-promote.js",
-    "ota:rollback": "node scripts/ota-rollback.js"
+    "ota:rollback": "node scripts/ota-rollback.js",
+    "snyk:test": ".\\snyk.exe test",
+    "snyk:code": ".\\snyk.exe code test",
+    "db:backup": "node scripts/backup_production_db.js"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
