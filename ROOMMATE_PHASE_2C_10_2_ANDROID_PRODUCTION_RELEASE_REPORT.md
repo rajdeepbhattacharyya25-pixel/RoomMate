@@ -123,8 +123,8 @@ Production AAB contains pbzaaskftrmnvocczhat (prod):   TRUE
 * **Live Target URL:** `https://pbzaaskftrmnvocczhat.supabase.co`
 * **Production Live Anon Key:** Present and correctly scoped (`role: anon`).
 * **Service Role Key:** **ABSENT (0 matches)**
-* **Database Password (`i0GAICdm51ZPJEdb`):** **ABSENT (0 matches)**
-* **Old Rotated Password (`pUQK3BsMjrCRPqC5`):** **ABSENT (0 matches)**
+* **Database Password (`[REDACTED]`):** **ABSENT (0 matches)**
+* **Old Rotated Password (`[REDACTED]`):** **ABSENT (0 matches)**
 * **GitHub Secret Literals:** **ABSENT (0 matches)**
 
 ---
