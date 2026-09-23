@@ -13,11 +13,11 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install PostgreSQL 17 Client
         run: |
-          set -e
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install --no-install-recommends -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
@@ -29,6 +29,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           # 1. Strictly enforce masking of the URL and prevent shell command tracing
+          set -euo pipefail
           set +x
           echo "::add-mask::$SUPABASE_DB_URL"
           
@@ -45,25 +46,43 @@ jobs:
 
           mkdir -p backups
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          SQL_FILE="backups/supabase_backup_${TIMESTAMP}.sql"
           BACKUP_FILE="backups/supabase_backup_${TIMESTAMP}.sql.gz"
 
           echo "Initiating secure pg_dump against Supabase PostgreSQL 17..."
 
-          # 3. Execute pg_dump directly with standard URL argument (masked)
+          # 3. Execute pg_dump directly to uncompressed SQL file
           pg_dump "$SUPABASE_DB_URL" \
             --clean \
             --if-exists \
             --no-owner \
             --no-privileges \
             --schema=public \
-            | gzip -9 > "$BACKUP_FILE"
+            -f "$SQL_FILE"
 
-          echo "Backup created successfully: $BACKUP_FILE"
-          ls -lh "$BACKUP_FILE"
+          # 4. Strict health and size verification (minimum 500 KB expected)
+          FILE_SIZE=$(wc -c < "$SQL_FILE" | tr -d ' ')
+          echo "Raw SQL dump file size: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 500000 ]; then
+            echo "::error::Backup failed: dump size (${FILE_SIZE} bytes) is below minimum threshold (500000 bytes)."
+            exit 1
+          fi
+
+          # 5. Compress and calculate SHA-256 checksums
+          gzip -9 -c "$SQL_FILE" > "$BACKUP_FILE"
+          GZ_SIZE=$(wc -c < "$BACKUP_FILE" | tr -d ' ')
+          echo "Compressed backup file: ${BACKUP_FILE} (${GZ_SIZE} bytes)"
+
           sha256sum "$BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+          sha256sum "$SQL_FILE" > "${SQL_FILE}.sha256"
+
+          # Clean up uncompressed SQL file to save runner disk and artifact bandwidth
+          rm -f "$SQL_FILE"
+
+          echo "✓ Backup and checksum generated successfully."
 
       - name: Upload Backup Artifact to GitHub
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: supabase-database-backup
           path: backups/
