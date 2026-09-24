@@ -35,16 +35,22 @@ export const isAdminSubdomain = (): boolean => {
 export const getInitialDeviceMode = (): 'mobile' | 'desktop' => {
   if (typeof window === 'undefined') return 'mobile';
 
-  // Explicit URL query override for previewing (e.g. ?view=desktop or ?view=mobile)
+  // Explicit URL query override for previewing and download flows (e.g. ?action=download, ?download=apk, ?view=landing, ?view=desktop)
   const params = new URLSearchParams(window.location.search);
   const viewParam = params.get('view');
-  if (viewParam === 'desktop') return 'desktop';
-  if (viewParam === 'mobile') return 'mobile';
+  const actionParam = params.get('action');
+  const downloadParam = params.get('download');
 
   // If running inside Capacitor Android/iOS APK, ALWAYS mobile
   if (isNativeApp()) {
     return 'mobile';
   }
+
+  // QR scan download triggers or landing view overrides should always display the landing page
+  if (actionParam === 'download' || downloadParam === 'apk' || viewParam === 'landing' || viewParam === 'desktop') {
+    return 'desktop';
+  }
+  if (viewParam === 'mobile') return 'mobile';
 
   // If on desktop screen width (>= 1024px) or on admin subdomain
   if (isAdminSubdomain() || window.innerWidth >= 1024) {

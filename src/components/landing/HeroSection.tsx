@@ -141,7 +141,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <span className="text-xs font-bold text-brand-charcoal">
                     {activeTab === 'personal' ? 'RoomMate Personal Vault' : 'RoomMate Flat 402 Ledger'}
                   </span>
-                  <span className="text-[11px] text-brand-slate font-mono">v1.0.4 Verified</span>
+                  <span className="text-[11px] text-brand-slate font-mono">v1.0.4 (Build 10) Verified</span>
                 </div>
               </div>
 

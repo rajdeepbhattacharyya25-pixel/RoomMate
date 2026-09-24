@@ -29,6 +29,12 @@ import { isNativeApp } from '../platform/deviceDetector';
 export const IS_LIVE_SYNC_ENABLED =
   isSupabaseConfigured && import.meta.env.VITE_USE_LIVE_SUPABASE === 'true';
 
+// UUID validation helper to prevent Postgres 22P02 "invalid input syntax for type uuid" errors
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (val: unknown): val is string => {
+  return typeof val === 'string' && UUID_REGEX.test(val);
+};
+
 // Helper to verify user has an active Supabase Auth session
 export async function authenticateResidentWithSupabase(email: string): Promise<boolean> {
   if (!IS_LIVE_SYNC_ENABLED || !email) return false;
@@ -45,11 +51,19 @@ export async function authenticateResidentWithSupabase(email: string): Promise<b
   }
 }
 
+// Single-flight in-memory promise cache to deduplicate concurrent cloud state fetches
+let activeCloudFetchPromise: Promise<DatabaseState | null> | null = null;
+
 // Fetch complete state from Supabase Cloud
 export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
   if (!IS_LIVE_SYNC_ENABLED) return null;
 
-  try {
+  if (activeCloudFetchPromise) {
+    return activeCloudFetchPromise;
+  }
+
+  activeCloudFetchPromise = (async () => {
+    try {
     // 1. Profiles
     const { data: profiles, error: profErr } = await supabase.from('profiles').select('*');
     if (profErr || !profiles || profiles.length === 0) {
@@ -303,11 +317,17 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
   } catch (err) {
     console.error('Failed to sync state from Supabase Cloud:', err);
     return null;
+  } finally {
+    activeCloudFetchPromise = null;
   }
+  })();
+
+  return activeCloudFetchPromise;
 }
 
 // Add Shared Expense to Cloud + Local
 export async function addSharedExpenseCloud(data: {
+  id?: string;
   roomId: string;
   paidBy: string;
   createdBy: string;
@@ -320,17 +340,50 @@ export async function addSharedExpenseCloud(data: {
   notes?: string;
   expenseDate?: string;
 }): Promise<{ expense: SharedExpense; splits: ExpenseSplit[] }> {
-  // 1. Always write locally first (optimistic UI & offline protection)
-  const localExpense = db.createSharedExpense(data.createdBy, data);
+  // 1. Always write locally first if not already present (optimistic UI & offline protection)
+  const existing = data.id
+    ? db.getState().sharedExpenses.find((e) => e.id === data.id)
+    : null;
+  const localExpense = existing || db.createSharedExpense(data.createdBy, data);
   const localSplits = db.getState().expenseSplits.filter((s) => s.sharedExpenseId === localExpense.id);
 
   // 2. If live sync is enabled, mirror to Supabase Cloud
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      // Attempt atomic transactional RPC first
+      const rpcPayloadExpense = {
+        id: localExpense.id,
+        room_id: data.roomId,
+        created_by: data.createdBy,
+        paid_by: data.paidBy,
+        title: data.title,
+        total_amount: data.totalAmount,
+        category: data.category,
+        split_method: data.splitMethod || 'EQUAL',
+        notes: data.notes || null,
+        expense_date: data.expenseDate || new Date().toISOString().split('T')[0],
+      };
+
+      const rpcPayloadSplits = localSplits.map((s) => ({
+        id: s.id,
+        user_id: s.userId,
+        share_amount: s.shareAmount,
+      }));
+
+      const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('create_shared_expense_with_splits', {
+        p_expense: rpcPayloadExpense,
+        p_splits: rpcPayloadSplits,
+      });
+
+      if (!rpcErr && (rpcRes?.success || rpcRes?.expense_id)) {
+        return { expense: localExpense, splits: localSplits };
+      }
+
+      // Fallback: direct table insert with UUID
       const { data: cloudExpense, error: expError } = await supabase
         .from('shared_expenses')
         .insert({
-          id: localExpense.id.length === 36 ? localExpense.id : undefined,
+          id: localExpense.id,
           room_id: data.roomId,
           created_by: data.createdBy,
           paid_by: data.paidBy,
@@ -345,14 +398,19 @@ export async function addSharedExpenseCloud(data: {
         .single();
 
       if (expError) {
-        console.warn('Cloud insert expense warning, queued offline:', expError.message);
-        enqueueOfflineItem('ADD_SHARED_EXPENSE', {
-          ...data,
-          localExpenseId: localExpense.id,
-        });
+        if (expError.code === '23505') {
+          console.log('[Idempotency] Shared expense already in cloud:', localExpense.id);
+        } else {
+          console.warn('Cloud insert expense warning, queued offline:', expError.message);
+          enqueueOfflineItem('ADD_SHARED_EXPENSE', {
+            ...data,
+            localExpenseId: localExpense.id,
+          });
+        }
       } else if (cloudExpense) {
         // Insert splits into cloud
         const splitsToInsert = localSplits.map((s) => ({
+          id: s.id,
           shared_expense_id: cloudExpense.id,
           user_id: s.userId,
           share_amount: s.shareAmount,
@@ -362,7 +420,7 @@ export async function addSharedExpenseCloud(data: {
           .from('expense_splits')
           .insert(splitsToInsert);
 
-        if (splitError) {
+        if (splitError && splitError.code !== '23505') {
           console.warn('Cloud insert splits warning:', splitError.message);
         }
       }
@@ -488,6 +546,7 @@ export async function removeMemberCloud(
 
 // Add Personal Expense to Cloud + Local
 export async function addPersonalExpenseCloud(data: {
+  id?: string;
   userId: string;
   title: string;
   amount: number;
@@ -496,7 +555,13 @@ export async function addPersonalExpenseCloud(data: {
   expenseDate?: string;
 }): Promise<PersonalExpense> {
   const expenseDate = data.expenseDate || new Date().toISOString().split('T')[0];
-  const localExp = db.createPersonalExpense(data.userId, {
+  
+  // If already created locally via optimistic UI, reuse that instance
+  const existingLocal = data.id 
+    ? db.getPersonalExpenses(data.userId).find(p => p.id === data.id) 
+    : undefined;
+
+  const localExp = existingLocal || db.createPersonalExpense(data.userId, {
     title: data.title,
     amount: data.amount,
     category: data.category,
@@ -517,6 +582,10 @@ export async function addPersonalExpenseCloud(data: {
       });
 
       if (error) {
+        if ((error as any).code === '23505') {
+          // Idempotent duplicate insert
+          return localExp;
+        }
         console.warn('Cloud personal expense error, queued offline:', error.message);
         enqueueOfflineItem('ADD_PERSONAL_EXPENSE', {
           ...data,
@@ -2674,26 +2743,29 @@ export async function createInAppNotificationCloud(
   const localNotif = db.createNotification(data);
 
   if (IS_LIVE_SYNC_ENABLED) {
-    try {
-      await supabase.from('in_app_notifications').upsert({
-        id: localNotif.id,
-        user_id: localNotif.userId,
-        room_id: localNotif.roomId || null,
-        type: localNotif.type,
-        title: localNotif.title,
-        message: localNotif.message,
-        priority: localNotif.priority,
-        is_read: localNotif.isRead,
-        read_at: localNotif.readAt || null,
-        action_type: localNotif.actionType || null,
-        action_target: localNotif.actionTarget || null,
-        metadata: localNotif.metadata || {},
-        event_id: localNotif.eventId || null,
-        is_deleted: false,
-        created_at: localNotif.createdAt,
-      });
-    } catch (err) {
-      console.warn('createInAppNotificationCloud supabase error:', err);
+    // Only synchronize to Supabase if ID and user_id are valid UUIDs
+    if (isUuid(localNotif.id) && isUuid(localNotif.userId)) {
+      try {
+        await supabase.from('in_app_notifications').upsert({
+          id: localNotif.id,
+          user_id: localNotif.userId,
+          room_id: isUuid(localNotif.roomId) ? localNotif.roomId : null,
+          type: localNotif.type,
+          title: localNotif.title,
+          message: localNotif.message,
+          priority: localNotif.priority,
+          is_read: localNotif.isRead,
+          read_at: localNotif.readAt || null,
+          action_type: localNotif.actionType || null,
+          action_target: localNotif.actionTarget || null,
+          metadata: localNotif.metadata || {},
+          event_id: localNotif.eventId || null,
+          is_deleted: false,
+          created_at: localNotif.createdAt,
+        });
+      } catch (err) {
+        console.warn('createInAppNotificationCloud supabase error:', err);
+      }
     }
   }
 
@@ -2703,7 +2775,7 @@ export async function createInAppNotificationCloud(
 export async function markNotificationReadCloud(notificationId: string): Promise<void> {
   db.markNotificationRead(notificationId);
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (IS_LIVE_SYNC_ENABLED && isUuid(notificationId)) {
     try {
       await supabase
         .from('in_app_notifications')
@@ -2724,7 +2796,7 @@ export async function toggleNotificationReadCloud(
 ): Promise<void> {
   db.toggleNotificationRead(notificationId);
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (IS_LIVE_SYNC_ENABLED && isUuid(notificationId)) {
     try {
       const nextRead = !currentRead;
       await supabase
@@ -2746,14 +2818,17 @@ export async function markAllNotificationsReadCloud(userId: string, ids?: string
   if (IS_LIVE_SYNC_ENABLED) {
     try {
       if (ids && ids.length > 0) {
-        await supabase
-          .from('in_app_notifications')
-          .update({
-            is_read: true,
-            read_at: new Date().toISOString(),
-          })
-          .in('id', ids);
-      } else {
+        const validIds = ids.filter(isUuid);
+        if (validIds.length > 0) {
+          await supabase
+            .from('in_app_notifications')
+            .update({
+              is_read: true,
+              read_at: new Date().toISOString(),
+            })
+            .in('id', validIds);
+        }
+      } else if (isUuid(userId)) {
         await supabase
           .from('in_app_notifications')
           .update({
@@ -2772,7 +2847,7 @@ export async function markAllNotificationsReadCloud(userId: string, ids?: string
 export async function deleteNotificationCloud(notificationId: string): Promise<void> {
   db.deleteNotification(notificationId);
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (IS_LIVE_SYNC_ENABLED && isUuid(notificationId)) {
     try {
       await supabase
         .from('in_app_notifications')
@@ -2790,11 +2865,14 @@ export async function clearReadNotificationsCloud(userId: string, ids?: string[]
   if (IS_LIVE_SYNC_ENABLED) {
     try {
       if (ids && ids.length > 0) {
-        await supabase
-          .from('in_app_notifications')
-          .update({ is_deleted: true })
-          .in('id', ids);
-      } else {
+        const validIds = ids.filter(isUuid);
+        if (validIds.length > 0) {
+          await supabase
+            .from('in_app_notifications')
+            .update({ is_deleted: true })
+            .in('id', validIds);
+        }
+      } else if (isUuid(userId)) {
         await supabase
           .from('in_app_notifications')
           .update({ is_deleted: true })
@@ -3329,19 +3407,35 @@ export async function deleteUserAccountCloud(userId: string): Promise<{ success:
   try {
     // 1. If live cloud is enabled, invoke the atomic database RPC
     if (IS_LIVE_SYNC_ENABLED) {
-      const { data, error } = await supabase.rpc('delete_user_account');
-      if (error) {
-        console.error('delete_user_account RPC error:', error);
-        // Fallback: attempt direct profile delete if RPC not yet deployed
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
-        if (isUuid) {
+      // Check if user has an active Supabase Auth session first
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentAuthUser = sessionData?.session?.user;
+
+      if (currentAuthUser && currentAuthUser.id) {
+        const { data, error } = await supabase.rpc('delete_user_account');
+        if (error) {
+          console.error('delete_user_account RPC error:', error);
+          // Fallback: attempt direct profile delete if RPC not yet deployed
+          if (isUuid(userId)) {
+            const { error: profErr } = await supabase.from('profiles').delete().eq('id', userId);
+            if (profErr) {
+              console.warn('Direct profile delete fallback error:', profErr.message);
+            }
+          }
+        } else if (data && (data as any).success === false) {
+          console.warn('delete_user_account notice:', (data as any).message);
+        } else {
+          console.log('User account deleted from cloud successfully:', data);
+        }
+      } else {
+        // Unauthenticated in Supabase Auth (e.g. mock test user or resident JWT session)
+        // Skip calling delete_user_account RPC to prevent unnecessary unauthenticated server calls
+        if (isUuid(userId)) {
           const { error: profErr } = await supabase.from('profiles').delete().eq('id', userId);
           if (profErr) {
             console.warn('Direct profile delete fallback error:', profErr.message);
           }
         }
-      } else {
-        console.log('User account deleted from cloud successfully:', data);
       }
 
       // Revoke any active session in Supabase Auth

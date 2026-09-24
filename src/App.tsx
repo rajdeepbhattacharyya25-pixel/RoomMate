@@ -100,7 +100,14 @@ const DEFAULT_RESIDENT: User = {
 
 export function AppContent() {
   const [dbState, setDbState] = useState<DatabaseState>(db.getState());
-  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(() => isSupabaseConfigured);
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(() => {
+    const hasLocalSession = Boolean(getStoredResidentSession());
+    const hasLocalUsers = db.getState().users.length > 0;
+    if (hasLocalSession && hasLocalUsers) {
+      return false;
+    }
+    return isSupabaseConfigured;
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return Boolean(getStoredResidentSession());
   });
@@ -192,7 +199,17 @@ export function AppContent() {
   // Sync state whenever db updates
   const refreshState = useCallback(() => {
     const updated = db.getState();
-    setDbState({ ...updated });
+    setDbState({
+      ...updated,
+      personalExpenses: [...(updated.personalExpenses || [])],
+      sharedExpenses: [...(updated.sharedExpenses || [])],
+      expenseSplits: [...(updated.expenseSplits || [])],
+      settlementPayments: [...(updated.settlementPayments || [])],
+      rooms: [...(updated.rooms || [])],
+      roomMembers: [...(updated.roomMembers || [])],
+      users: [...(updated.users || [])],
+      notifications: [...(updated.notifications || [])],
+    });
     const refreshedUser = updated.users.find((u) => u.id === currentUser.id);
     if (refreshedUser) setCurrentUser(refreshedUser);
   }, [currentUser.id]);
@@ -479,10 +496,8 @@ export function AppContent() {
     notes?: string;
     expenseDate?: string;
   }) => {
-    const newExp = await addSharedExpenseCloud({
-      ...data,
-      createdBy: currentUser.id,
-    });
+    // 1. Instant optimistic local write (0ms UI latency)
+    const localExpense = db.createSharedExpense(currentUser.id, data);
     hapticSuccess();
     refreshState();
 
@@ -492,44 +507,58 @@ export function AppContent() {
       participantCount: data.participantUserIds.length,
     });
 
-    // Notify other room members via push and in-app notifications
-    const otherMembers = data.participantUserIds.filter((id) => id !== currentUser.id);
-    if (otherMembers.length > 0) {
-      sendPushNotificationToMembers({
-        recipientUserIds: otherMembers,
-        title: `New Bill: ${data.title}`,
-        body: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Check your share.`,
-        channelId: EXPENSES_CHANNEL_ID,
-        data: { roomId: data.roomId, type: 'expense' },
-      });
-
-      // Also create In-App Notifications for each roommate
-      const memberCount = data.participantUserIds.length || 1;
-      const userShare = data.totalAmount / memberCount;
-
-      for (const participantId of otherMembers) {
-        await createInAppNotificationCloud({
-          userId: participantId,
-          roomId: data.roomId,
-          type: 'EXPENSE_ADDED',
-          title: `New Bill: ${data.title}`,
-          message: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Your share: ₹${userShare.toFixed(2)}.`,
-          priority: 'MEDIUM',
-          isRead: false,
-          actionType: 'VIEW_EXPENSE',
-          actionTarget: data.roomId,
-          metadata: {
-            amount: data.totalAmount,
-            payerName: currentUser.name,
-            payerId: currentUser.id,
-            roomName: activeRoom?.name,
-            category: data.category,
-          },
-          eventId: `exp_${newExp?.expense?.id || Date.now()}_${participantId}`,
+    // 2. Background Cloud Sync & Notifications (non-blocking)
+    (async () => {
+      try {
+        const cloudResult = await addSharedExpenseCloud({
+          ...data,
+          id: localExpense.id,
+          createdBy: currentUser.id,
         });
+
+        // Notify other room members via push and in-app notifications
+        const otherMembers = data.participantUserIds.filter((id) => id !== currentUser.id);
+        if (otherMembers.length > 0) {
+          sendPushNotificationToMembers({
+            recipientUserIds: otherMembers,
+            title: `New Bill: ${data.title}`,
+            body: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Check your share.`,
+            channelId: EXPENSES_CHANNEL_ID,
+            data: { roomId: data.roomId, type: 'expense' },
+          });
+
+          const memberCount = data.participantUserIds.length || 1;
+          const userShare = data.totalAmount / memberCount;
+
+          await Promise.all(
+            otherMembers.map((participantId) =>
+              createInAppNotificationCloud({
+                userId: participantId,
+                roomId: data.roomId,
+                type: 'EXPENSE_ADDED',
+                title: `New Bill: ${data.title}`,
+                message: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Your share: ₹${userShare.toFixed(2)}.`,
+                priority: 'MEDIUM',
+                isRead: false,
+                actionType: 'VIEW_EXPENSE',
+                actionTarget: data.roomId,
+                metadata: {
+                  amount: data.totalAmount,
+                  payerName: currentUser.name,
+                  payerId: currentUser.id,
+                  roomName: activeRoom?.name,
+                  category: data.category,
+                },
+                eventId: `exp_${cloudResult?.expense?.id || localExpense.id}_${participantId}`,
+              })
+            )
+          );
+          refreshState();
+        }
+      } catch (err) {
+        console.warn('Background sync for shared expense failed:', err);
       }
-      refreshState();
-    }
+    })();
   };
 
   const handleRecordSettlement = async (data: {
@@ -540,9 +569,11 @@ export function AppContent() {
     paymentMethod: SettlementPayment['paymentMethod'];
     notes?: string;
   }) => {
-    await recordSettlementCloud({
+    const payerId = data.payerId || currentUser.id;
+    // 1. Instant optimistic local write (0ms latency)
+    const localSettlement = db.recordSettlementPayment(payerId, {
       roomId: data.roomId,
-      payerId: data.payerId || currentUser.id,
+      payerId,
       payeeId: data.payeeId,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
@@ -553,38 +584,53 @@ export function AppContent() {
 
     analytics.trackSettlementRecorded({ paymentMethod: data.paymentMethod });
 
-    // Notify payee or payer via push and in-app notifications
-    const recipient = data.payeeId !== currentUser.id ? data.payeeId : data.payerId;
-    if (recipient && recipient !== currentUser.id) {
-      sendPushNotificationToMembers({
-        recipientUserIds: [recipient],
-        title: `Settlement: ₹${data.amount.toFixed(2)}`,
-        body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
-        channelId: SETTLEMENTS_CHANNEL_ID,
-        data: { roomId: data.roomId, type: 'settlement' },
-      });
-
-      // Create In-App Notification for Payee
-      await createInAppNotificationCloud({
-        userId: recipient,
-        roomId: data.roomId,
-        type: 'PARTIAL_PAYMENT_RECEIVED',
-        title: `Settlement Received: ₹${data.amount.toFixed(2)}`,
-        message: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}. Balances updated.`,
-        priority: 'MEDIUM',
-        isRead: false,
-        actionType: 'VIEW_DETAILS',
-        actionTarget: data.roomId,
-        metadata: {
+    // 2. Background Cloud Sync & Notifications (non-blocking)
+    (async () => {
+      try {
+        await recordSettlementCloud({
+          id: localSettlement.id,
+          roomId: data.roomId,
+          payerId,
+          payeeId: data.payeeId,
           amount: data.amount,
-          payerName: currentUser.name,
-          payerId: currentUser.id,
-          roomName: activeRoom?.name,
-        },
-        eventId: `settle_${Date.now()}_${recipient}`,
-      });
-      refreshState();
-    }
+          paymentMethod: data.paymentMethod,
+          notes: data.notes,
+        });
+
+        const recipient = data.payeeId !== currentUser.id ? data.payeeId : payerId;
+        if (recipient && recipient !== currentUser.id) {
+          sendPushNotificationToMembers({
+            recipientUserIds: [recipient],
+            title: `Settlement: ₹${data.amount.toFixed(2)}`,
+            body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
+            channelId: SETTLEMENTS_CHANNEL_ID,
+            data: { roomId: data.roomId, type: 'settlement' },
+          });
+
+          await createInAppNotificationCloud({
+            userId: recipient,
+            roomId: data.roomId,
+            type: 'PARTIAL_PAYMENT_RECEIVED',
+            title: `Settlement Received: ₹${data.amount.toFixed(2)}`,
+            message: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}. Balances updated.`,
+            priority: 'MEDIUM',
+            isRead: false,
+            actionType: 'VIEW_DETAILS',
+            actionTarget: data.roomId,
+            metadata: {
+              amount: data.amount,
+              payerName: currentUser.name,
+              payerId: currentUser.id,
+              roomName: activeRoom?.name,
+            },
+            eventId: `settle_${localSettlement.id}_${recipient}`,
+          });
+          refreshState();
+        }
+      } catch (err) {
+        console.warn('Background sync for settlement failed:', err);
+      }
+    })();
   };
 
   const handleLeaveRoom = async (roomId: string) => {
@@ -1065,20 +1111,39 @@ export function AppContent() {
     notes?: string;
     expenseDate?: string;
   }) => {
-    await addPersonalExpenseCloud({
-      ...data,
-      userId: currentUser.id,
+    // 1. Instant optimistic local write (0ms latency - updates vault immediately)
+    const localExp = db.createPersonalExpense(currentUser.id, {
+      title: data.title,
+      amount: data.amount,
+      category: data.category,
+      notes: data.notes,
+      expenseDate: data.expenseDate || new Date().toISOString().split('T')[0],
     });
     hapticSuccess();
     refreshState();
     analytics.trackPersonalExpenseCreated({ category: data.category });
+
+    // 2. Background cloud persistence (non-blocking)
+    addPersonalExpenseCloud({
+      ...data,
+      id: localExp.id,
+      userId: currentUser.id,
+    }).catch((err) => {
+      console.warn('Background addPersonalExpenseCloud failed:', err);
+    });
   };
 
   const handleDeletePersonalExpense = async (id: string) => {
-    await deletePersonalExpenseCloud(currentUser.id, id);
+    // 1. Instant optimistic local delete (0ms latency)
+    db.deletePersonalExpense(currentUser.id, id);
     hapticImpact('LIGHT');
     refreshState();
     analytics.trackExpenseDeleted({ isShared: false });
+
+    // 2. Background cloud delete
+    deletePersonalExpenseCloud(currentUser.id, id).catch((err) => {
+      console.warn('Background deletePersonalExpenseCloud failed:', err);
+    });
   };
 
   if (isAuthInitializing) {

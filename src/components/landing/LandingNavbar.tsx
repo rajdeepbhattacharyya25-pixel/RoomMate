@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, Smartphone, Download, Lock } from 'lucide-react';
+import { Menu, X, Smartphone, Download, Lock, QrCode } from 'lucide-react';
 import { useScrollProgress } from '../../lib/hooks/useScrollProgress';
 
 interface LandingNavbarProps {
@@ -7,6 +7,7 @@ interface LandingNavbarProps {
   onOpenAdminModal: () => void;
   onOpenGuide: () => void;
   onDownloadApk: () => void;
+  onOpenQrModal?: () => void;
 }
 
 export const LandingNavbar: React.FC<LandingNavbarProps> = ({
@@ -14,6 +15,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
   onOpenAdminModal,
   onOpenGuide,
   onDownloadApk,
+  onOpenQrModal,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { scrollProgress, isScrolled } = useScrollProgress(20);
@@ -76,6 +78,17 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
 
         {/* Nav Actions */}
         <div className="flex items-center gap-2.5 sm:gap-3">
+          {onOpenQrModal && (
+            <button
+              onClick={onOpenQrModal}
+              type="button"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-brand-slate hover:text-brand px-3 py-2 rounded-lg hover:bg-brand-soft transition-colors cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5 text-brand" />
+              <span>Scan QR</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenGuide}
             type="button"
@@ -146,6 +159,19 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             How It Works
           </a>
           <div className="pt-3 border-t border-brand-border flex flex-col gap-2">
+            {onOpenQrModal && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenQrModal();
+                }}
+                type="button"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-brand-slate hover:bg-brand-soft flex items-center gap-1.5"
+              >
+                <QrCode className="w-3.5 h-3.5 text-brand" />
+                <span>Scan to Download QR</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setMobileMenuOpen(false);

@@ -94,7 +94,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({
             <ul className="space-y-2.5 text-xs text-brand-slate">
               <li>
                 <button onClick={onDownloadApk} className="hover:text-brand transition-colors cursor-pointer text-left">
-                  Android APK (v1.0.4)
+                  Android APK (v1.0.4 • Build 10)
                 </button>
               </li>
               <li>

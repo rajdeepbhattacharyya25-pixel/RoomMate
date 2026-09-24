@@ -123,7 +123,7 @@ export const SideloadGuideModal: React.FC<SideloadGuideModalProps> = ({
                   <div>
                     <span className="font-bold text-brand-charcoal">Tap Install &amp; Launch</span>
                     <p className="text-[11px] text-brand-slate mt-0.5">
-                      Open your notification tray, tap the downloaded <code className="font-mono bg-brand-surface px-1 rounded">RoomMate-latest.apk</code> package, and press Install.
+                      Open your notification tray, tap the downloaded <code className="font-mono bg-brand-surface px-1 rounded">RoomMate-staging-v1.0.4-build10.apk</code> package, and press Install.
                     </p>
                   </div>
                 </li>

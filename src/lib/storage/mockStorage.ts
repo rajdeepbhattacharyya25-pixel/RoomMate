@@ -34,6 +34,22 @@ import { calculateSplits, round2 } from '../ledger/engine';
 const PRIMARY_STORAGE_KEY = 'roommate_saas_db_v1';
 const LEGACY_STORAGE_KEY = 'campusflow_saas_db_v3';
 
+export function generateSecureUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fallback
+    }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   appName: 'RoomMate',
   supportEmail: 'admin@roommate.app',
@@ -434,13 +450,16 @@ class MockDatabase {
 
   public createPersonalExpense(
     requesterUserId: string,
-    data: Omit<PersonalExpense, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+    data: Omit<PersonalExpense, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & { id?: string }
   ): PersonalExpense {
     const newExp: PersonalExpense = {
-      id: 'pe-' + Math.random().toString(36).substr(2, 9),
+      id: data.id || generateSecureUuid(),
       userId: requesterUserId,
-      ...data,
+      title: data.title,
       amount: round2(data.amount),
+      category: data.category,
+      notes: data.notes,
+      expenseDate: data.expenseDate || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -455,7 +474,10 @@ class MockDatabase {
     if (exp.userId !== requesterUserId) {
       throw new Error('IDOR_VIOLATION: Unauthorized deletion of another user’s personal expense!');
     }
-    this.state.personalExpenses = this.state.personalExpenses.filter((e) => e.id !== expenseId);
+    const idx = this.state.personalExpenses.findIndex((e) => e.id === expenseId);
+    if (idx >= 0) {
+      this.state.personalExpenses.splice(idx, 1);
+    }
     this.save(this.state);
     return true;
   }
@@ -476,6 +498,7 @@ class MockDatabase {
   public createSharedExpense(
     requesterUserId: string,
     data: {
+      id?: string;
       roomId: string;
       paidBy: string;
       title: string;
@@ -496,7 +519,7 @@ class MockDatabase {
       throw new Error(`ACCESS_DENIED: Cannot add expense to unjoined room ${data.roomId}`);
     }
 
-    const expId = 'se-' + Math.random().toString(36).substr(2, 9);
+    const expId = data.id || generateSecureUuid();
     const newExpense: SharedExpense = {
       id: expId,
       roomId: data.roomId,
@@ -522,7 +545,7 @@ class MockDatabase {
     );
 
     const splitRecords: ExpenseSplit[] = splits.map((s) => ({
-      id: 'es-' + Math.random().toString(36).substr(2, 9),
+      id: generateSecureUuid(),
       sharedExpenseId: expId,
       userId: s.userId,
       shareAmount: s.shareAmount,
@@ -571,7 +594,7 @@ class MockDatabase {
     }
 
     const newPayment: SettlementPayment = {
-      id: data.id || 'sp-' + Math.random().toString(36).substr(2, 9),
+      id: data.id || generateSecureUuid(),
       roomId: data.roomId,
       payerId: data.payerId,
       payeeId: data.payeeId,
@@ -592,15 +615,17 @@ class MockDatabase {
     requesterUserId: string,
     roomId: string
   ): { success: boolean; newAdminId?: string; isArchived: boolean } {
-    const member = this.state.roomMembers.find(
+    const memberIndex = this.state.roomMembers.findIndex(
       (rm) => rm.roomId === roomId && rm.userId === requesterUserId && rm.status === 'ACTIVE'
     );
-    if (!member) {
+    if (memberIndex === -1) {
       throw new Error(`NOT_AN_ACTIVE_MEMBER: User ${requesterUserId} is not an active member of room ${roomId}`);
     }
 
     let newAdminId: string | undefined;
     let isArchived = false;
+
+    const member = this.state.roomMembers[memberIndex];
 
     if (member.role === 'ROOM_ADMIN') {
       // Find oldest remaining active member by joinedAt
@@ -609,8 +634,8 @@ class MockDatabase {
         .sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
 
       if (otherActiveMembers.length > 0) {
-        otherActiveMembers[0].role = 'ROOM_ADMIN';
         newAdminId = otherActiveMembers[0].userId;
+        otherActiveMembers[0].role = 'ROOM_ADMIN';
       } else {
         // Last member leaving: archive room, but keep all ledger records intact
         const room = this.state.rooms.find((r) => r.id === roomId);
@@ -686,14 +711,12 @@ class MockDatabase {
     );
 
     if (existingMember) {
-      if (existingMember.status === 'LEFT' || existingMember.status === 'REMOVED') {
-        existingMember.status = 'ACTIVE';
-        existingMember.joinedAt = new Date().toISOString();
-        existingMember.leftAt = undefined;
-      }
+      existingMember.status = 'ACTIVE';
+      existingMember.joinedAt = new Date().toISOString();
+      existingMember.leftAt = undefined;
     } else {
       this.state.roomMembers.push({
-        id: 'rm-' + Math.random().toString(36).substr(2, 9),
+        id: generateSecureUuid(),
         roomId: room.id,
         userId,
         role: 'MEMBER',
@@ -707,7 +730,7 @@ class MockDatabase {
   }
 
   public createRoom(userId: string, name: string, description?: string): Room {
-    const roomId = 'room-' + Math.random().toString(36).substr(2, 9);
+    const roomId = generateSecureUuid();
     const newRoom: Room = {
       id: roomId,
       name,
@@ -722,21 +745,20 @@ class MockDatabase {
     };
 
     // Creator becomes ROOM_ADMIN
-    this.state.rooms.unshift(newRoom);
-    this.state.roomMembers.push({
-      id: 'rm-' + Math.random().toString(36).substr(2, 9),
+    const newAdminMember: RoomMember = {
+      id: generateSecureUuid(),
       roomId,
       userId,
       role: 'ROOM_ADMIN',
       status: 'ACTIVE',
       joinedAt: new Date().toISOString(),
-    });
+    };
 
     // Generate 6-character alphanumeric invite code + 24-char secure token
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     const token = 'rm_inv_' + Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
-    this.state.roomInvitations.push({
-      id: 'inv-' + Math.random().toString(36).substr(2, 9),
+    const newInv: RoomInvitation = {
+      id: generateSecureUuid(),
       roomId,
       token,
       inviteCode: code,
@@ -744,8 +766,11 @@ class MockDatabase {
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       isRevoked: false,
       createdAt: new Date().toISOString(),
-    });
+    };
 
+    this.state.rooms.unshift(newRoom);
+    this.state.roomMembers.push(newAdminMember);
+    this.state.roomInvitations.push(newInv);
     this.save(this.state);
     return newRoom;
   }
