@@ -116,10 +116,10 @@ A collapsible or elegant 3-step visual walkthrough:
 
 ## 🧪 Verification & Testing Checklist
 
-- [ ] **iOS User Agent Test:** Emulate iPhone Safari user agent; verify modal renders iOS view without triggering any APK download or blank tab.
-- [ ] **Countdown Inhibition:** Confirm `countdown` effect does not fire `onDownload()` when `isIOS` is true.
-- [ ] **"Launch Web App" Button:** Verify clicking the primary button closes the modal and opens the responsive mobile app view.
-- [ ] **PWA Guide Visibility:** Verify the 3-step Safari instructions (Share ⬆️ -> Add to Home Screen -> Add) render cleanly and responsively on small screens.
-- [ ] **Android Regression Test:** Emulate Android user agent; verify 3-second auto-download countdown runs and downloads APK as expected.
-- [ ] **Manual Download Fallback:** Verify the "Download Android APK anyway" link triggers the APK download even when on iOS.
-- [ ] **Automated Test Suite:** Run `npm test` and ensure all 366+ tests pass with 0 failures.
+- [x] **iOS User Agent Test:** Emulate iPhone Safari user agent; verify modal renders iOS view without triggering any APK download or blank tab.
+- [x] **Countdown Inhibition:** Confirm `countdown` effect does not fire `onDownload()` when `isIOS` is true.
+- [x] **"Launch Web App" Button:** Verify clicking the primary button closes the modal and opens the responsive mobile app view.
+- [x] **PWA Guide Visibility:** Verify the 3-step Safari instructions (Share ⬆️ -> Add to Home Screen -> Add) render cleanly and responsively on small screens.
+- [x] **Android Regression Test:** Emulate Android user agent; verify 3-second auto-download countdown runs and downloads APK as expected.
+- [x] **Manual Download Fallback:** Verify the "Download Android APK anyway" link triggers the APK download even when on iOS.
+- [x] **Automated Test Suite:** Run `npm test` and ensure all 371 tests pass with 0 failures.
