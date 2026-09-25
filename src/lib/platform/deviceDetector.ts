@@ -59,3 +59,5 @@ export const getInitialDeviceMode = (): 'mobile' | 'desktop' => {
 
   return 'mobile';
 };
+
+export * from '../utils/deviceDetector';

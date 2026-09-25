@@ -131,6 +131,7 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
         onClose={() => setShowDownloadConfirmModal(false)}
         onDownload={handleDownloadApk}
         onOpenGuide={() => setShowGuideModal(true)}
+        onOpenWebApp={onOpenMobilePreview}
       />
 
       {/* Sideload Installation Guide Modal */}
