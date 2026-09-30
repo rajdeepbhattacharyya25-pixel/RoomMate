@@ -16,9 +16,9 @@ export const BUILD_INFO: BuildMetadata = {
   version: '1.0.4',
   buildNumber: 10,
   channel: 'production' as 'staging' | 'production',
-  buildTimestamp: '2026-09-30T20:00:06.121Z',
+  buildTimestamp: '2026-09-30T20:08:05.879Z',
   buildDate: '01 Oct 2026',
-  buildTime: '01:30:06 IST',
+  buildTime: '01:38:05 IST',
 };
 
 export default BUILD_INFO;

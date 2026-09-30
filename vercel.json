@@ -2,11 +2,14 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [
+  "redirects": [
     {
       "source": "/download",
-      "destination": "/api/download"
-    },
+      "destination": "/RoomMate-v1.0.4-prod.apk",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
