@@ -27,6 +27,7 @@ import { db } from '../../lib/storage/mockStorage';
 import {
   StepUpRiskLevel,
   checkStepUpRequired,
+  getOrCreateDeviceId,
 } from '../../lib/auth/superAdminSecurityService';
 import {
   superAdminUpdateUserRoleCloud,
@@ -48,8 +49,11 @@ import {
   updateFeatureSuggestionStatusCloud,
   updateContactRequestStatusCloud,
   markAllNotificationsReadCloud,
+  createInAppNotificationCloud,
+  fetchCloudDatabaseState,
   IS_LIVE_SYNC_ENABLED,
 } from '../../lib/storage/cloudStorageAdapter';
+import { sendPushNotificationToMembers } from '../../lib/firebase/pushService';
 import { StepUpAuthModal } from './common/StepUpAuthModal';
 
 // Admin Page Imports
@@ -337,8 +341,20 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'This will immediately revoke room memberships and prevent the user from accessing the application.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.superAdminToggleUserSuspension(currentUser.id, userId, true);
-          await superAdminToggleUserSuspensionCloud(userId, true, reason);
+          await superAdminToggleUserSuspensionCloud(userId, true, reason, deviceId);
+          // Send notification of suspension
+          createInAppNotificationCloud({
+            userId,
+            type: 'ACCOUNT_SECURITY',
+            title: 'Account Suspended',
+            message: `Your account has been administratively suspended: ${reason || 'Terms violation or security investigation.'}`,
+            priority: 'HIGH',
+            isRead: false,
+            actionType: 'FORCE_LOGOUT',
+          }).catch((e) => console.warn('Suspension notification error:', e));
+
           refreshStorageData();
           addToast('success', 'User account has been suspended.', 'User Suspended');
         } catch (err: any) {
@@ -355,8 +371,19 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'This will restore the user account and permit them to access active rooms.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.superAdminToggleUserSuspension(currentUser.id, userId, false);
-          await superAdminToggleUserSuspensionCloud(userId, false);
+          await superAdminToggleUserSuspensionCloud(userId, false, undefined, deviceId);
+          createInAppNotificationCloud({
+            userId,
+            type: 'SYSTEM_INFO',
+            title: 'Account Restored',
+            message: 'Your account suspension has been lifted by platform governance. You may now access all rooms.',
+            priority: 'HIGH',
+            isRead: false,
+            actionType: 'NONE',
+          }).catch((e) => console.warn('Restoration notification error:', e));
+
           refreshStorageData();
           addToast('success', 'User account suspension lifted.', 'User Restored');
         } catch (err: any) {
@@ -373,8 +400,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'Freezing prevents members from recording new shared expenses or settlements until unfrozen.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.superAdminToggleRoomFreeze(currentUser.id, roomId, true);
-          await superAdminToggleRoomFreezeCloud(roomId, true, reason);
+          await superAdminToggleRoomFreezeCloud(roomId, true, reason, deviceId);
           refreshStorageData();
           addToast('warning', 'Room ledger frozen during dispute investigation.', 'Room Frozen');
         } catch (err: any) {
@@ -391,8 +419,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'Members will be able to record shared expenses and settle balances again.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.superAdminToggleRoomFreeze(currentUser.id, roomId, false);
-          await superAdminToggleRoomFreezeCloud(roomId, false);
+          await superAdminToggleRoomFreezeCloud(roomId, false, undefined, deviceId);
           refreshStorageData();
           addToast('success', 'Room ledger unfrozen. Members can add expenses.', 'Room Restored');
         } catch (err: any) {
@@ -409,8 +438,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'Archiving moves the room to the platform archive and hides it from normal member discovery.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.superAdminArchiveRoom(currentUser.id, roomId, true);
-          await superAdminArchiveRoomCloud(roomId, true, reason);
+          await superAdminArchiveRoomCloud(roomId, true, reason, deviceId);
           refreshStorageData();
           addToast('info', 'Room moved to archive.', 'Room Archived');
         } catch (err: any) {
@@ -427,8 +457,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'The current invite code will be invalidated immediately and replaced with a new secure code.',
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           const code = db.superAdminResetInviteCode(currentUser.id, roomId);
-          await superAdminResetRoomCodeCloud(roomId);
+          await superAdminResetRoomCodeCloud(roomId, deviceId);
           refreshStorageData();
           addToast('success', `New join code generated: ${code}`, 'Invite Code Reset');
         } catch (err: any) {
@@ -442,6 +473,33 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     try {
       db.updateBugReportStatus(currentUser.id, bugId, status, adminNotes);
       await updateBugReportStatusCloud(bugId, status, adminNotes);
+
+      // Notify the resident who filed the bug report
+      const report = bugReports.find((b) => b.id === bugId);
+      if (report && report.userId) {
+        const notifTitle = `Bug Ticket #${bugId.slice(-6)} ${status === 'RESOLVED' ? 'Resolved' : status === 'CLOSED' ? 'Closed' : 'Updated'}`;
+        const notifMessage = adminNotes
+          ? `Status: ${status}. Admin note: ${adminNotes}`
+          : `Your report regarding "${report.category}" has been updated to ${status}.`;
+
+        createInAppNotificationCloud({
+          userId: report.userId,
+          type: 'SYSTEM_INFO',
+          title: notifTitle,
+          message: notifMessage,
+          priority: status === 'RESOLVED' ? 'HIGH' : 'MEDIUM',
+          isRead: false,
+          actionType: 'NONE',
+          metadata: { bugId, status, adminNotes },
+        }).catch((e) => console.warn('Bug notification cloud error:', e));
+
+        sendPushNotificationToMembers({
+          recipientUserIds: [report.userId],
+          title: notifTitle,
+          body: notifMessage,
+        }).catch((e) => console.warn('Bug push notification error:', e));
+      }
+
       refreshStorageData();
       addToast('success', `Ticket #${bugId.slice(-6)} marked as ${status}`, 'Status Updated');
     } catch (err: any) {
@@ -453,17 +511,48 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     data: Omit<PlatformAnnouncement, 'id' | 'sentAt' | 'recipientsCount' | 'status'>
   ) => {
     try {
+      const recipientIds =
+        data.audience === 'SELECTED_USERS' && data.targetUserIds && data.targetUserIds.length > 0
+          ? data.targetUserIds
+          : allUsers.map((u) => u.id);
+
       db.createAnnouncement(currentUser.id, {
         ...data,
         status: 'DELIVERED',
-        recipientsCount: allUsers.length,
+        recipientsCount: recipientIds.length,
       });
+
       await createPlatformAnnouncementCloud({
         ...data,
         status: 'DELIVERED',
-        recipientsCount: allUsers.length,
+        recipientsCount: recipientIds.length,
         createdBy: currentUser.id,
       });
+
+      // Synchronize in-app notifications if IN_APP delivery is selected
+      if (data.deliveryChannels.includes('IN_APP')) {
+        for (const uid of recipientIds) {
+          createInAppNotificationCloud({
+            userId: uid,
+            type: 'SYSTEM_INFO',
+            title: `📢 ${data.title}`,
+            message: data.message,
+            priority: data.priority === 'CRITICAL' || data.priority === 'IMPORTANT' ? 'HIGH' : 'MEDIUM',
+            isRead: false,
+            actionType: 'NONE',
+          }).catch((e) => console.warn('Announcement notif error for user:', uid, e));
+        }
+      }
+
+      // Synchronize push notifications if PUSH delivery is selected
+      if (data.deliveryChannels.includes('PUSH')) {
+        sendPushNotificationToMembers({
+          recipientUserIds: recipientIds,
+          title: `📢 ${data.title}`,
+          body: data.message,
+        }).catch((e) => console.warn('Announcement push error:', e));
+      }
+
       refreshStorageData();
       addToast('success', 'Announcement dispatched successfully!', 'Broadcast Sent');
     } catch (err: any) {
@@ -495,11 +584,11 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       return;
     }
 
-    const actionText = newRole === 'SUPER_ADMIN' ? 'Promote to SuperAdmin' : 'Demote to Student';
+    const actionText = newRole === 'SUPER_ADMIN' ? 'Promote to SuperAdmin' : 'Demote to Resident';
     const desc =
       newRole === 'SUPER_ADMIN'
         ? 'Granting SuperAdmin role unlocks full administrative console access and elevated database authorities.'
-        : 'Demoting to Student revokes console access and restricts the account to standard room member capabilities.';
+        : 'Demoting to Resident revokes console access and restricts the account to standard room member capabilities.';
 
     await executeWithStepUp(
       2,
@@ -507,8 +596,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       desc,
       async () => {
         try {
+          const deviceId = getOrCreateDeviceId();
           db.updateUserRole(currentUser.id, targetUserId, newRole);
-          await superAdminUpdateUserRoleCloud(targetUserId, newRole);
+          await superAdminUpdateUserRoleCloud(targetUserId, newRole, deviceId);
           refreshStorageData();
           addToast('success', `User role successfully changed to ${newRole}.`, 'Role Updated');
         } catch (err: any) {
@@ -568,6 +658,15 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       async () => {
         try {
           db.logAdminAudit(currentUser.id, 'REVOKE_USER_SESSION', 'USER', userId, { reason });
+          await createInAppNotificationCloud({
+            userId,
+            type: 'ACCOUNT_SECURITY',
+            title: 'Session Invalidation',
+            message: `Your active session has been invalidated by platform governance: ${reason || 'Administrative re-authentication requirement.'}`,
+            priority: 'HIGH',
+            isRead: false,
+            actionType: 'FORCE_LOGOUT',
+          });
           refreshStorageData();
           addToast('info', `Active session revoked for user.`, 'Session Invalidation');
         } catch {
@@ -591,8 +690,21 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
             'global',
             { reason }
           );
+          for (const user of allUsers) {
+            if (user.id !== currentUser.id) {
+              createInAppNotificationCloud({
+                userId: user.id,
+                type: 'ACCOUNT_SECURITY',
+                title: 'Global Session Revocation',
+                message: `All platform sessions were revoked: ${reason || 'Global security re-authentication.'}`,
+                priority: 'HIGH',
+                isRead: false,
+                actionType: 'FORCE_LOGOUT',
+              }).catch(() => {});
+            }
+          }
           refreshStorageData();
-          addToast('warning', 'All active student sessions invalidated.', 'Global Revoke');
+          addToast('warning', 'All active resident sessions invalidated.', 'Global Revoke');
         } catch {
           addToast('error', 'Failed to execute global session revocation.', 'Error');
         }
@@ -603,7 +715,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
 
   const handleSendNotification = async (userId: string, title: string, message: string) => {
     try {
-      db.createNotification({
+      await createInAppNotificationCloud({
         userId,
         type: 'SYSTEM_INFO',
         title,
@@ -612,19 +724,44 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
         isRead: false,
         actionType: 'NONE',
       });
+      sendPushNotificationToMembers({
+        recipientUserIds: [userId],
+        title,
+        body: message,
+      }).catch((pushErr) => console.warn('Push notification dispatch note:', pushErr));
+
       refreshStorageData();
-      addToast('success', `Message delivered to student.`, 'Notification Sent');
+      addToast('success', `Message delivered to resident.`, 'Notification Sent');
     } catch {
       addToast('error', 'Failed to send notification.', 'Error');
     }
   };
 
-  const handlePurgeDemoData = async () => {
+  const handleForceCloudSync = async () => {
+    try {
+      if (IS_LIVE_SYNC_ENABLED) {
+        const cloudState = await fetchCloudDatabaseState();
+        if (cloudState && onDataMutated) {
+          onDataMutated();
+        }
+      }
+      refreshStorageData();
+      addToast('success', 'Synchronized live state from Supabase Cloud.', 'Cloud Synced');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to sync with cloud.', 'Sync Failed');
+    }
+  };
+
+  const handleClearBrowserCache = async () => {
     try {
       localStorage.removeItem('roommate_saas_db_v1');
+      localStorage.removeItem('campusflow_saas_db_v3');
+      if (IS_LIVE_SYNC_ENABLED) {
+        await fetchCloudDatabaseState();
+      }
       window.location.reload();
     } catch {
-      addToast('error', 'Failed to reset test seeds.', 'Reset Error');
+      addToast('error', 'Failed to refresh offline cache.', 'Cache Error');
     }
   };
 
@@ -669,6 +806,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
       onSwitchToMobile={onSwitchToMobile}
       onLogout={onLogout}
+      onForceCloudSync={handleForceCloudSync}
       toasts={toasts}
       onDismissToast={dismissToast}
     >
@@ -832,7 +970,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
         <AdminSettings
           settings={platformSettings}
           onUpdateSettings={handleUpdateSettings}
-          onPurgeDemoData={handlePurgeDemoData}
+          onPurgeDemoData={handleClearBrowserCache}
         />
       )}
 

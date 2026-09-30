@@ -169,7 +169,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             hapticSelection();
             setShowScannerModal(true);
           }}
-          className="px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
+          className="px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
         >
           <Camera className="w-3.5 h-3.5" />
           <span>Scan QR</span>
@@ -180,12 +180,12 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
 
         {/* Custom Payee Notification Badge if Scanned from QR */}
         {customPayeeVpa && (
-          <div className="p-2.5 rounded-xl bg-indigo-50/90 border border-indigo-200 text-xs flex items-center justify-between animate-in fade-in">
+          <div className="p-2.5 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/50 text-xs flex items-center justify-between animate-in fade-in">
             <div className="flex items-center space-x-2 truncate">
-              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <div className="truncate">
-                <div className="font-bold text-slate-900 truncate">{customPayeeName || 'Scanned Payee'}</div>
-                <div className="text-[10px] text-slate-500 font-mono truncate">{customPayeeVpa}</div>
+                <div className="font-bold text-slate-900 dark:text-white truncate">{customPayeeName || 'Scanned Payee'}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">{customPayeeVpa}</div>
               </div>
             </div>
             <button
@@ -194,7 +194,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 setCustomPayeeVpa(null);
                 setCustomPayeeName(null);
               }}
-              className="text-[10px] text-indigo-700 font-bold shrink-0 ml-2 hover:underline"
+              className="text-[10px] text-indigo-700 dark:text-indigo-300 font-bold shrink-0 ml-2 hover:underline"
             >
               Reset
             </button>
@@ -204,7 +204,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
         {/* Payee Selection Switcher (if multiple flatmates) */}
         {availablePayees.length > 1 && (
           <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
               <UserCheck className="w-3 h-3" />
               <span>Select Roommate To Pay</span>
             </label>
@@ -214,10 +214,10 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 hapticSelection();
                 setSelectedPayeeId(e.target.value);
               }}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
             >
               {availablePayees.map((u) => (
-                <option key={u.id} value={u.id}>
+                <option key={u.id} value={u.id} className="dark:bg-[#1C1C25] dark:text-white">
                   {u.name} ({u.email || 'Roommate'})
                 </option>
               ))}
@@ -226,33 +226,33 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
         )}
 
         {/* Payee Details Card */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               {activePayee.name.charAt(0)}
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-900">{activePayee.name}</span>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-900 dark:text-white">{activePayee.name}</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
+              <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                 <span>{payeeUpiId}</span>
               </div>
             </div>
           </div>
           <button
             onClick={handleCopyUpiId}
-            className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-[11px] font-semibold text-slate-700 flex items-center gap-1 shadow-2xs active:scale-95 transition-all"
+            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#272738] text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 shadow-2xs active:scale-95 transition-all"
           >
             {copiedUpi ? (
               <>
-                <CheckCheck className="w-3 h-3 text-emerald-600" />
-                <span className="text-emerald-700">Copied</span>
+                <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-700 dark:text-emerald-400">Copied</span>
               </>
             ) : (
               <>
-                <Copy className="w-3 h-3 text-slate-400" />
+                <Copy className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                 <span>Copy</span>
               </>
             )}
@@ -261,7 +261,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
 
         {/* Amount Input & Quick Chips */}
         <div className="space-y-2">
-          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+          <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
             Settlement Amount in ₹
           </label>
           <CurrencyInput
@@ -281,7 +281,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   hapticSelection();
                   setPayAmount(initialAmount.toFixed(0));
                 }}
-                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
               >
                 Full Due (₹{initialAmount.toFixed(0)})
               </button>
@@ -293,7 +293,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   hapticSelection();
                   setPayAmount((initialAmount / 2).toFixed(0));
                 }}
-                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-300 border border-transparent dark:border-[#27354A] text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
               >
                 50% (₹{(initialAmount / 2).toFixed(0)})
               </button>
@@ -304,7 +304,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 hapticSelection();
                 setPayAmount(String(Math.ceil(numAmount / 50) * 50 || 100));
               }}
-              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-300 border border-transparent dark:border-[#27354A] text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
             >
               Round Up
             </button>
@@ -314,11 +314,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
         {/* 1-Tap App Selector Grid */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Choose Payment App (1-Tap Switch)
             </label>
             {!isMobile && (
-              <span className="text-[10px] text-amber-600 font-medium">Desktop Preview Mode</span>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Desktop Preview Mode</span>
             )}
           </div>
 
@@ -330,20 +330,20 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
               disabled={numAmount <= 0}
               className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
                 selectedApp === 'gpay'
-                  ? 'bg-blue-50/70 border-blue-400 ring-2 ring-blue-500/20'
-                  : 'bg-slate-50/80 border-slate-200 hover:bg-slate-100/70'
+                  ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-700 ring-2 ring-blue-500/20'
+                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
               }`}
             >
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center font-bold text-sm text-[#4285F4]">
+                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center font-bold text-sm text-[#4285F4]">
                   G
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Google Pay</div>
-                  <div className="text-[10px] text-slate-500">tez:// scheme</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Google Pay</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">tez:// scheme</div>
                 </div>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
             </button>
 
             {/* PhonePe */}
@@ -353,8 +353,8 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
               disabled={numAmount <= 0}
               className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
                 selectedApp === 'phonepe'
-                  ? 'bg-purple-50/70 border-purple-400 ring-2 ring-purple-500/20'
-                  : 'bg-slate-50/80 border-slate-200 hover:bg-slate-100/70'
+                  ? 'bg-purple-50/70 dark:bg-purple-950/40 border-purple-400 dark:border-purple-700 ring-2 ring-purple-500/20'
+                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
               }`}
             >
               <div className="flex items-center space-x-2.5">
@@ -362,11 +362,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   पे
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">PhonePe</div>
-                  <div className="text-[10px] text-slate-500">phonepe://</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">PhonePe</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">phonepe://</div>
                 </div>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
             </button>
 
             {/* Paytm */}
@@ -376,8 +376,8 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
               disabled={numAmount <= 0}
               className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
                 selectedApp === 'paytm'
-                  ? 'bg-sky-50/70 border-sky-400 ring-2 ring-sky-500/20'
-                  : 'bg-slate-50/80 border-slate-200 hover:bg-slate-100/70'
+                  ? 'bg-sky-50/70 dark:bg-sky-950/40 border-sky-400 dark:border-sky-700 ring-2 ring-sky-500/20'
+                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
               }`}
             >
               <div className="flex items-center space-x-2.5">
@@ -385,11 +385,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   Pay
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Paytm</div>
-                  <div className="text-[10px] text-slate-500">paytmmp://</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Paytm</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">paytmmp://</div>
                 </div>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
             </button>
 
             {/* Any UPI / CRED */}
@@ -399,8 +399,8 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
               disabled={numAmount <= 0}
               className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
                 selectedApp === 'generic'
-                  ? 'bg-emerald-50/70 border-emerald-400 ring-2 ring-emerald-500/20'
-                  : 'bg-slate-50/80 border-slate-200 hover:bg-slate-100/70'
+                  ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-500/20'
+                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
               }`}
             >
               <div className="flex items-center space-x-2.5">
@@ -408,11 +408,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   UPI
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Any App</div>
-                  <div className="text-[10px] text-slate-500">OS Intent Chooser</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Any App</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">OS Intent Chooser</div>
                 </div>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
             </button>
           </div>
         </div>
@@ -425,14 +425,14 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
               hapticSelection();
               setShowQrCode(!showQrCode);
             }}
-            className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-200 border border-transparent dark:border-[#27354A] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
           >
-            <QrCode className="w-3.5 h-3.5 text-slate-500" />
+            <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             <span>{showQrCode ? 'Hide Scannable QR Code' : 'Show In-Person Scannable QR Code'}</span>
           </button>
 
           {showQrCode && (
-            <div className="mt-3 p-4 bg-slate-900 rounded-2xl text-center space-y-3 animate-in fade-in zoom-in-95">
+            <div className="mt-3 p-4 bg-slate-900 dark:bg-[#15151E] rounded-2xl border border-transparent dark:border-[#27354A] text-center space-y-3 animate-in fade-in zoom-in-95">
               <div className="inline-block p-3 bg-white rounded-xl shadow-lg">
                 <img
                   src={activePayee.upiQrUrl || qrCodeUrl}
@@ -440,7 +440,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                   className="w-44 h-44 mx-auto rounded-lg object-contain bg-white"
                 />
               </div>
-              <p className="text-[11px] text-slate-300">
+              <p className="text-[11px] text-slate-300 dark:text-slate-400">
                 {activePayee.upiQrUrl
                   ? `Scan ${activePayee.name}'s verified UPI QR code on any phone`
                   : `Scan with GPay, PhonePe, or Paytm on any phone to pay ₹${numAmount.toFixed(2)} to ${activePayee.name}`}
@@ -451,11 +451,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
 
         {/* App Switcher Banner / Post-Launch Status */}
         {appLaunched && (
-          <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start space-x-2.5 animate-in fade-in">
-            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-            <div className="text-[11px] text-indigo-950 space-y-0.5">
+          <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 flex items-start space-x-2.5 animate-in fade-in">
+            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+            <div className="text-[11px] text-indigo-950 dark:text-indigo-200 space-y-0.5">
               <p className="font-bold">Payment App Launched!</p>
-              <p className="text-indigo-800">
+              <p className="text-indigo-800 dark:text-indigo-300">
                 Complete your transfer of ₹{numAmount.toFixed(2)} in your bank app, then tap Confirm below to generate your official proof card.
               </p>
             </div>
@@ -465,10 +465,10 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
         {/* Optional UTR / Reference Input */}
         <div className="space-y-1.5 pt-1">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Bank UTR / Reference ID (Optional)
             </label>
-            <span className="text-[10px] font-mono text-slate-400">{generatedRef}</span>
+            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{generatedRef}</span>
           </div>
           <input
             type="text"
@@ -478,7 +478,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs font-mono text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-base md:text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
           />
         </div>
 
@@ -502,15 +502,15 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
           />
 
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-              <FileCheck2 className="w-3 h-3 text-indigo-600" />
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <FileCheck2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
               <span>Payment Screenshot / Receipt (Optional)</span>
             </label>
             {proofImage && (
               <button
                 type="button"
                 onClick={() => setProofImage(null)}
-                className="text-[10px] text-rose-500 hover:underline font-semibold"
+                className="text-[10px] text-rose-500 dark:text-rose-400 hover:underline font-semibold"
               >
                 Remove
               </button>
@@ -518,20 +518,20 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
           </div>
 
           {proofImage ? (
-            <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center space-x-3">
+            <div className="relative rounded-xl border border-slate-200 dark:border-[#27354A] overflow-hidden bg-slate-50 dark:bg-[#20202A] p-2 flex items-center space-x-3">
               <img src={proofImage} alt="Payment Proof" className="w-12 h-12 object-cover rounded-lg shadow-2xs" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">Screenshot Attached</p>
-                <p className="text-[10px] text-emerald-600 font-medium">Ready to record with settlement</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">Screenshot Attached</p>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Ready to record with settlement</p>
               </div>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => proofFileInputRef.current?.click()}
-              className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/30 text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-98"
+              className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 bg-slate-50 dark:bg-[#20202A] hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-98"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+              <ImageIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>Upload Payment Screenshot</span>
             </button>
           )}

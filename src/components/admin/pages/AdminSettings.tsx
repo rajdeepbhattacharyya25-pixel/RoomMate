@@ -94,7 +94,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Multi-Room Student Ledger Engine &bull; Version 1.0.4 &bull; Zero-Trust Staging & Cloud Sync
+              Multi-Room Resident Ledger Engine &bull; Version 1.0.4 &bull; Zero-Trust Staging & Cloud Sync
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
-                Maximum capacity of student roommates per flat
+                Maximum capacity of flatmates per room
               </span>
             </div>
 
@@ -288,7 +288,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
             <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
               <div>
                 <span className="font-bold text-slate-800 block">Google OAuth Provider</span>
-                <span className="text-[11px] text-slate-400">Allow students to sign in with Google</span>
+                <span className="text-[11px] text-slate-400">Allow residents to sign in with Google</span>
               </div>
               <input
                 type="checkbox"
@@ -346,7 +346,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Immediately locks student mobile apps in maintenance splash mode while SuperAdmin retains console access.
+                Immediately locks resident mobile apps in maintenance splash mode while SuperAdmin retains console access.
               </p>
             </div>
             <button
@@ -388,8 +388,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
         title={form.maintenanceMode ? 'Disable Maintenance Mode?' : 'Activate Platform-Wide Maintenance?'}
         message={
           form.maintenanceMode
-            ? 'This will immediately restore access to the mobile app for all student roommates.'
-            : 'CRITICAL: Student mobile clients will be blocked with the maintenance splash screen. Only SuperAdmin will be able to perform operations.'
+            ? 'This will immediately restore access to the mobile app for all residents.'
+            : 'CRITICAL: Resident mobile clients will be blocked with the maintenance splash screen. Only SuperAdmin will be able to perform operations.'
         }
         confirmText={form.maintenanceMode ? 'Restore Mobile Access' : 'Turn On Maintenance'}
         confirmVariant={form.maintenanceMode ? 'warning' : 'danger'}

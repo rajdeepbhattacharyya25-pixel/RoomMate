@@ -369,6 +369,8 @@ export async function sendPushNotificationToMembers(params: {
   title: string;
   body: string;
   channelId?: string;
+  image?: string;
+  actorAvatar?: string;
   data?: Record<string, string>;
 }): Promise<boolean> {
   if (!params.recipientUserIds || params.recipientUserIds.length === 0) {
@@ -410,6 +412,7 @@ export interface RoommatePushEventParams {
   roomId: string;
   roomName?: string;
   senderName: string;
+  senderAvatar?: string;
   title: string;
   body: string;
   extraData?: Record<string, string>;
@@ -438,11 +441,13 @@ export async function sendRoommatePushEvent(params: RoommatePushEventParams): Pr
     title: params.title,
     body: params.body,
     channelId,
+    actorAvatar: params.senderAvatar,
     data: {
       type: params.eventType,
       roomId: params.roomId,
       roomName: params.roomName || '',
       senderName: params.senderName,
+      ...(params.senderAvatar ? { actorAvatar: params.senderAvatar } : {}),
       ...params.extraData,
     },
   });

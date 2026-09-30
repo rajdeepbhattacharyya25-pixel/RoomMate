@@ -207,7 +207,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
           // Generous safe-area padding at the bottom so it never merges with Android's 3-button navigation bar
           paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 20px), 56px)',
         }}
-        className={`relative z-10 w-full max-w-[420px] bg-white border-t border-slate-200/90 rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] flex flex-col overflow-hidden will-change-transform ${className}`}
+        className={`relative z-10 w-full max-w-[420px] bg-white dark:bg-[#12121A] border-t border-slate-200/90 dark:border-[#27354A] rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden will-change-transform ${className}`}
       >
         {/* Swipe / Drag Zone (Touch-to-dismiss handle) */}
         <div
@@ -217,7 +217,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
           className="w-full pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none flex flex-col items-center justify-center shrink-0"
         >
           {showHandle && (
-            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 active:bg-slate-400 dark:active:bg-slate-600 transition-colors" />
           )}
 
           {/* Optional Header Row (Title, Icon, Close button) inside drag zone */}
@@ -225,18 +225,18 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
             <div className="w-full px-5 pt-2.5 pb-1 flex items-center justify-between">
               <div className="flex items-center space-x-2.5 min-w-0 pr-2">
                 {icon && (
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs border border-indigo-100/80">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 shadow-2xs border border-indigo-100/80 dark:border-indigo-800/40">
                     {icon}
                   </div>
                 )}
                 <div className="min-w-0">
                   {typeof title === 'string' ? (
-                    <h2 className="text-sm font-bold text-slate-900 truncate tracking-tight">{title}</h2>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate tracking-tight">{title}</h2>
                   ) : (
                     title
                   )}
                   {subtitle && (
-                    <div className="text-[11px] text-slate-500 truncate">{subtitle}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{subtitle}</div>
                   )}
                 </div>
               </div>
@@ -247,7 +247,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
                   <button
                     type="button"
                     onClick={handleInternalClose}
-                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center active:scale-95 transition-all shadow-2xs"
+                    className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center justify-center active:scale-95 transition-all shadow-2xs"
                     aria-label="Close dialog"
                   >
                     <X className="w-4 h-4" />

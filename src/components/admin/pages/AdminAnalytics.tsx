@@ -235,7 +235,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Aggregate student spending trends, settlement velocity, and live PostHog product telemetry.
+            Aggregate resident spending trends, settlement velocity, and live PostHog product telemetry.
           </p>
         </div>
 
@@ -258,7 +258,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
-            title="View Realtime Student Screen Replays"
+            title="View Realtime Resident Screen Replays"
           >
             <Video className="w-3.5 h-3.5 text-amber-400" />
             <span>Session Replays</span>
@@ -541,7 +541,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-900">Shared Expense Volume Timeline</h3>
             <p className="text-xs text-slate-500">
-              Aggregated collective expenditures across all student flats ({timeframe})
+              Aggregated collective expenditures across all shared flats ({timeframe})
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs">
@@ -628,7 +628,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
                 <Zap className="w-4 h-4 text-amber-500" />
                 Settlement & Splitting Behavior
               </h3>
-              <span className="text-xs text-slate-400 font-medium">Student Patterns</span>
+              <span className="text-xs text-slate-400 font-medium">Resident Patterns</span>
             </div>
             <p className="text-xs text-slate-500 mb-6">
               How flatmates resolve IOUs and prefer to settle balances.

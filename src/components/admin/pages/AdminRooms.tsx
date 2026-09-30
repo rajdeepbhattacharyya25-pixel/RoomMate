@@ -62,7 +62,7 @@ export const AdminRooms: React.FC<AdminRoomsProps> = ({
           <div>
             <span className="font-bold text-slate-900 block">{r.name}</span>
             <span className="text-[11px] text-slate-400 font-mono block">
-              {r.description || 'Student Room'}
+              {r.description || 'Shared Room'}
             </span>
           </div>
         </div>

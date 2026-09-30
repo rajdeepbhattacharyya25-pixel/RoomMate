@@ -14,6 +14,8 @@ interface PushPayload {
   channelId?: string;
   type?: string;
   priority?: string;
+  image?: string;
+  actorAvatar?: string;
   data?: Record<string, unknown>;
 }
 
@@ -378,7 +380,23 @@ serve(async (req) => {
       );
     }
 
-    // 6. Dispatch notifications using FCM HTTP v1 API
+    // 6. Resolve notification large icon (dynamic avatar vs RoomMate logo per user taxonomy):
+    // User-generated event: Sender/actor avatar if present and is valid HTTP/HTTPS URL
+    // System event or missing avatar: RoomMate High-Res Logo fallback
+    const DEFAULT_ROOMMATE_LOGO_URL = 'https://roommate26.vercel.app/logo.png';
+    const rawImage =
+      (typeof payload.image === 'string' && payload.image.trim()) ||
+      (typeof payload.actorAvatar === 'string' && payload.actorAvatar.trim()) ||
+      (typeof data?.actorAvatar === 'string' && (data.actorAvatar as string).trim()) ||
+      (typeof data?.senderAvatar === 'string' && (data.senderAvatar as string).trim()) ||
+      '';
+
+    const resolvedNotificationImage =
+      rawImage && (rawImage.startsWith('http://') || rawImage.startsWith('https://'))
+        ? rawImage
+        : DEFAULT_ROOMMATE_LOGO_URL;
+
+    // 7. Dispatch notifications using FCM HTTP v1 API
     const stringData: Record<string, string> = {};
     if (data) {
       for (const [k, v] of Object.entries(data)) {
@@ -401,13 +419,17 @@ serve(async (req) => {
               notification: {
                 title,
                 body,
+                image: resolvedNotificationImage,
               },
               android: {
                 priority: 'high',
                 notification: {
-                  channel_id: channelId,
+                  channel_id: channelId || 'roommate_alerts',
                   sound: 'notification.mp3',
-                  icon: 'ic_launcher',
+                  icon: 'ic_stat_notification',
+                  color: '#6366F1',
+                  image: resolvedNotificationImage,
+                  notification_priority: 'PRIORITY_HIGH',
                 },
               },
               data: stringData,

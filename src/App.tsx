@@ -9,6 +9,7 @@ import {
   JoinPolicy,
   InvitePolicy,
   RoomJoinRequest,
+  PlatformSettings,
 } from './types';
 import { db, DatabaseState } from './lib/storage/mockStorage';
 import {
@@ -18,6 +19,10 @@ import {
   addPersonalExpenseCloud,
   deletePersonalExpenseCloud,
   subscribeToRoomRealtime,
+  subscribeToUserRealtime,
+  subscribeToPlatformSettingsRealtime,
+  fetchPlatformSettingsCloud,
+  subscribeToSuperAdminRealtime,
   authenticateResidentWithSupabase,
   createRoomCloud,
   joinRoomWithCodeCloud,
@@ -167,6 +172,7 @@ export function AppContent() {
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
   const [remoteSyncToast, setRemoteSyncToast] = useState<string | null>(null);
   const [roomJoinRequests, setRoomJoinRequests] = useState<Array<RoomJoinRequest & { user: User }>>([]);
+  const [pendingJoinInviteCode, setPendingJoinInviteCode] = useState<string | null>(null);
   const [googlePinSetupUser, setGooglePinSetupUser] = useState<User | null>(null);
   const [profileOnboardingUser, setProfileOnboardingUser] = useState<{
     user: User;
@@ -174,6 +180,10 @@ export function AppContent() {
     needsPin: boolean;
     isGoogleUser: boolean;
   } | null>(null);
+
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() =>
+    db.getPlatformSettings()
+  );
 
   const fetchJoinRequests = useCallback(async () => {
     if (!activeRoom?.id) {
@@ -217,8 +227,7 @@ export function AppContent() {
   // 0. Native Mobile Platform Initialization (Status Bar, Notifications, Keyboard, Network, App Lock, Back Button)
   useEffect(() => {
     initNativeNotifications();
-    // Light status bar ensures dark icons (clock, battery %) over light #F9F9FF theme
-    setAppStatusBarStyle('LIGHT', '#F9F9FF');
+    // ThemeContext manages native status bar style and background color dynamically
     hideSplashScreen();
     const cleanupKeyboard = setupKeyboardListeners();
     const cleanupBack = setupBackButtonListener((message) => {
@@ -399,6 +408,107 @@ export function AppContent() {
     };
   }, [activeRoom?.id, currentUser.id, currentUser.name, activeRoom?.name]);
 
+  // 3. Realtime Global SuperAdmin Subscriptions (Syncs all mobile room & expense events across platform)
+  useEffect(() => {
+    if (!IS_LIVE_SYNC_ENABLED || currentUser.role !== 'SUPER_ADMIN') return;
+
+    const unsubscribe = subscribeToSuperAdminRealtime((table, eventType) => {
+      fetchCloudDatabaseState().then((cloudState) => {
+        if (cloudState) {
+          setDbState(cloudState);
+          const readableTable =
+            table === 'shared_expenses'
+              ? 'Expense'
+              : table === 'settlement_payments'
+              ? 'Settlement'
+              : table === 'rooms'
+              ? 'Room'
+              : table === 'profiles'
+              ? 'Resident Profile'
+              : table === 'room_members'
+              ? 'Room Member'
+              : table === 'bug_reports'
+              ? 'Bug Ticket'
+              : table === 'system_incidents'
+              ? 'Incident'
+              : table;
+          setRemoteSyncToast(`SuperAdmin Live Sync: ${readableTable} ${eventType.toLowerCase()}d`);
+          setTimeout(() => setRemoteSyncToast(null), 3500);
+        }
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser.role]);
+
+  // 4. Realtime User-Level Subscriptions (In-App Notifications, Suspension, Session Invalidation)
+  useEffect(() => {
+    if (!IS_LIVE_SYNC_ENABLED || !isAuthenticated || !currentUser?.id) return;
+
+    const unsubscribe = subscribeToUserRealtime(currentUser.id, (table, eventType, payload) => {
+      if (table === 'in_app_notifications') {
+        playNotificationSound();
+        if (payload?.new?.action_type === 'FORCE_LOGOUT') {
+          handleLogout();
+          return;
+        }
+        fetchCloudDatabaseState().then((cloudState) => {
+          if (cloudState) {
+            setDbState(cloudState);
+          }
+        });
+        setRemoteSyncToast('🔔 New In-App Notification Received');
+        setTimeout(() => setRemoteSyncToast(null), 3500);
+      } else if (table === 'profiles') {
+        if (payload?.new) {
+          const isSusp = Boolean(payload.new.is_suspended);
+          setCurrentUser((prev) => ({
+            ...prev,
+            isSuspended: isSusp,
+            role: payload.new.role || prev.role,
+          }));
+          if (isSusp) {
+            setRemoteSyncToast('⚠️ Account suspension updated');
+            setTimeout(() => setRemoteSyncToast(null), 4000);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isAuthenticated, currentUser?.id]);
+
+  // 5. Realtime Platform Settings & Maintenance Mode Subscriptions
+  useEffect(() => {
+    if (!IS_LIVE_SYNC_ENABLED) return;
+
+    fetchPlatformSettingsCloud().then((settings) => {
+      if (settings) {
+        setPlatformSettings(settings);
+      }
+    });
+
+    const unsubscribe = subscribeToPlatformSettingsRealtime((table, eventType) => {
+      fetchPlatformSettingsCloud().then((settings) => {
+        if (settings) {
+          setPlatformSettings(settings);
+          if (settings.maintenanceMode) {
+            setRemoteSyncToast('⚠️ Platform Maintenance Mode Activated');
+            setTimeout(() => setRemoteSyncToast(null), 4000);
+          }
+        }
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   // If switched user persona changes
   const handleSwitchUser = (user: User) => {
     setCurrentUser(user);
@@ -524,7 +634,8 @@ export function AppContent() {
             title: `New Bill: ${data.title}`,
             body: `${currentUser.name} added ₹${data.totalAmount.toFixed(2)}. Check your share.`,
             channelId: EXPENSES_CHANNEL_ID,
-            data: { roomId: data.roomId, type: 'expense' },
+            actorAvatar: currentUser.avatarUrl,
+            data: { roomId: data.roomId, type: 'expense', actorAvatar: currentUser.avatarUrl || '' },
           });
 
           const memberCount = data.participantUserIds.length || 1;
@@ -604,7 +715,8 @@ export function AppContent() {
             title: `Settlement: ₹${data.amount.toFixed(2)}`,
             body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
             channelId: SETTLEMENTS_CHANNEL_ID,
-            data: { roomId: data.roomId, type: 'settlement' },
+            actorAvatar: currentUser.avatarUrl,
+            data: { roomId: data.roomId, type: 'settlement', actorAvatar: currentUser.avatarUrl || '' },
           });
 
           await createInAppNotificationCloud({
@@ -854,25 +966,12 @@ export function AppContent() {
         return;
       }
 
-      try {
-        const res = await requestJoinRoomCloud(currentUser.id, token);
-        refreshState();
-        if (res.status === 'JOINED') {
-          setActiveRoom(res.room);
-          setRemoteSyncToast(`Joined ${res.room.name}!`);
-        } else if (res.status === 'PENDING') {
-          setRemoteSyncToast(`Join request sent to ${res.room.name} admin.`);
-        } else {
-          setActiveRoom(res.room);
-        }
-        setTimeout(() => setRemoteSyncToast(null), 3500);
-        localStorage.removeItem('roommate_pending_join_token');
-        sessionStorage.removeItem('roommate_pending_join_token');
-      } catch (err: unknown) {
-        console.warn('Deep link join error:', err);
-      }
+      // Pop open the Room Confirmation preview modal inside mobile app
+      setPendingJoinInviteCode(token);
+      localStorage.removeItem('roommate_pending_join_token');
+      sessionStorage.removeItem('roommate_pending_join_token');
     },
-    [isAuthenticated, currentUser.id, refreshState]
+    [isAuthenticated]
   );
 
   useEffect(() => {
@@ -1316,18 +1415,59 @@ export function AppContent() {
             <ShieldAlert className="w-8 h-8" />
           </div>
           <h1 className="text-xl font-extrabold text-white">Resident Account Suspended</h1>
-          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            Your account ({currentUser.email}) has been temporarily suspended by the platform administrator due to pending subscription payment or policy violations.
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Your account ({currentUser.email}) has been administratively suspended by platform governance. Room access and ledger transactions have been paused.
           </p>
-          <div className="pt-2">
+          <div className="pt-3 flex flex-col gap-2">
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+            >
+              Sign Out / Switch Account
+            </button>
+            <a
+              href="mailto:support@roommate.app?subject=Account%20Suspension%20Appeal"
+              className="text-xs text-indigo-400 hover:underline pt-1"
+            >
+              Contact Support Desk
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Maintenance Mode Barrier for mobile residents (SuperAdmin bypasses)
+  if (platformSettings.maintenanceMode && currentUser.role !== 'SUPER_ADMIN') {
+    return (
+      <div className="min-h-screen bg-[#0a0e17] flex items-center justify-center p-4">
+        <div className="glass-card max-w-md w-full p-8 text-center space-y-4 border-amber-500/40">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">
+            <span>Scheduled Maintenance Active</span>
+          </div>
+          <h1 className="text-xl font-extrabold text-white">Platform Under Maintenance</h1>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            {platformSettings.maintenanceMessage || 'RoomMate is undergoing scheduled infrastructure maintenance and updates. Mobile resident operations will resume shortly.'}
+          </p>
+          <div className="pt-3 flex flex-col gap-2">
             <button
               onClick={() => {
-                const admin = dbState.users.find((u) => u.role === 'SUPER_ADMIN');
-                if (admin) handleSwitchUser(admin);
+                fetchPlatformSettingsCloud().then((s) => {
+                  if (s) setPlatformSettings(s);
+                });
               }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold border border-slate-700"
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
             >
-              Switch to Super Admin to Reactivate
+              Check Again
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-slate-400 hover:text-white text-xs font-medium"
+            >
+              Sign Out
             </button>
           </div>
         </div>
@@ -1374,6 +1514,8 @@ export function AppContent() {
           onUpdateRoomPolicies={handleUpdateRoomPolicies}
           onResolveInvite={handleResolveInvite}
           onRequestJoinRoom={handleRequestJoinRoom}
+          pendingJoinInviteCode={pendingJoinInviteCode}
+          onClearPendingJoinInviteCode={() => setPendingJoinInviteCode(null)}
           onCreateRoom={async (name, desc) => {
             analytics.trackRoomCreationStarted();
             try {
@@ -1664,7 +1806,7 @@ export function AppContent() {
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Access Denied: SuperAdmin Required</h2>
               <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                You are currently signed in as a student resident. The SuperAdmin platform portal and system health routes are strictly restricted.
+                You are currently signed in as a resident. The SuperAdmin platform portal and system health routes are strictly restricted.
               </p>
               <button
                 onClick={() => setActiveTab('dashboard')}

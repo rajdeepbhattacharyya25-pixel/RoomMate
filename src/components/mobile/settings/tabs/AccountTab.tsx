@@ -208,11 +208,11 @@ export const AccountTab: React.FC<AccountTabProps> = ({
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* 5.1 Profile Card */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] space-y-4">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none space-y-4 transition-colors duration-150">
         <div className="flex items-center space-x-3.5">
           {/* Avatar with Camera upload button */}
           <div className="relative group shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-2xl shadow-xs overflow-hidden border-2 border-white">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-2xl shadow-xs overflow-hidden border-2 border-white dark:border-[#12121A]">
               {effectiveAvatar ? (
                 <img
                   src={effectiveAvatar}
@@ -229,7 +229,7 @@ export const AccountTab: React.FC<AccountTabProps> = ({
               onClick={handleUploadDp}
               disabled={isUploadingDp}
               aria-label="Change profile photo"
-              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md border-2 border-white hover:bg-indigo-700 active:scale-95 transition-all"
+              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md border-2 border-white dark:border-[#12121A] hover:bg-indigo-700 active:scale-95 transition-all"
             >
               {isUploadingDp ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -241,93 +241,93 @@ export const AccountTab: React.FC<AccountTabProps> = ({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
-              <h2 className="text-base font-bold text-slate-900 truncate">{currentUser.name}</h2>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{currentUser.name}</h2>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   currentUser.role === 'SUPER_ADMIN'
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                    : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                 }`}
               >
                 {currentUser.role === 'SUPER_ADMIN' ? 'Admin' : 'Resident'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 truncate mt-0.5">{currentUser.email}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{currentUser.email}</p>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs font-mono text-indigo-600 font-medium">@{username}</span>
-              <span className="text-[10px] text-slate-300">•</span>
-              <span className="text-xs font-mono text-slate-600 font-medium flex items-center gap-1">
-                <Smartphone className="w-3 h-3 text-emerald-600" />
-                {currentUser.phone || <span className="text-slate-400 italic">No phone added</span>}
+              <span className="text-xs font-mono text-indigo-600 dark:text-indigo-400 font-medium">@{username}</span>
+              <span className="text-[10px] text-slate-300 dark:text-slate-600">•</span>
+              <span className="text-xs font-mono text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1">
+                <Smartphone className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                {currentUser.phone || <span className="text-slate-400 dark:text-slate-500 italic">No phone added</span>}
               </span>
             </div>
           </div>
         </div>
 
         {/* Edit Identity Actions */}
-        <div className="pt-2 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
             onClick={() => setShowEditName(true)}
-            className="py-2 px-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
+            className="py-2 px-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#282836] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
           >
-            <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+            <Edit2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span className="truncate">Edit Name</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowEditPhone(true)}
-            className="py-2 px-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
+            className="py-2 px-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#282836] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
           >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+            <Smartphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="truncate">Edit Phone</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowChangeEmail(true)}
-            className="py-2 px-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
+            className="py-2 px-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#282836] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
           >
-            <Mail className="w-3.5 h-3.5 text-indigo-600" />
+            <Mail className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span className="truncate">Email</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowEditUsername(true)}
-            className="py-2 px-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
+            className="py-2 px-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#282836] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors active:scale-98"
           >
-            <AtSign className="w-3.5 h-3.5 text-indigo-600" />
+            <AtSign className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span className="truncate">Username</span>
           </button>
         </div>
       </div>
 
       {/* 6. Payment Identity Section (Housed Exclusively in Account) */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div>
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Payment Identity
           </h3>
-          <p className="text-[11px] text-slate-500 mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
             How roommates identify and pay you during settlements
           </p>
         </div>
 
         {/* 6.1 UPI ID Card */}
-        <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-1.5">
+        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-[#20202A] border border-slate-200/80 dark:border-[#27354A] space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-600">Your UPI ID (VPA)</span>
+            <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Your UPI ID (VPA)</span>
             <div className="flex items-center space-x-1">
               <button
                 type="button"
                 onClick={handleCopyUpi}
-                className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                className="p-1 rounded-md text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors"
                 title="Copy UPI ID"
               >
                 {copiedUpi ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />
                 )}
@@ -335,36 +335,36 @@ export const AccountTab: React.FC<AccountTabProps> = ({
               <button
                 type="button"
                 onClick={() => setShowEditUpi(true)}
-                className="px-2 py-0.5 rounded text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="px-2 py-0.5 rounded text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
               >
                 Edit
               </button>
             </div>
           </div>
-          <div className="text-xs font-mono font-bold text-emerald-800 flex items-center space-x-1.5">
+          <div className="text-xs font-mono font-bold text-emerald-800 dark:text-emerald-400 flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>{upiId}</span>
           </div>
         </div>
 
         {/* 6.2 UPI Payment QR Code Card */}
-        <div className="space-y-2 pt-1 border-t border-slate-100">
+        <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <QrCode className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 UPI Payment QR Code
               </h4>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Roommates can scan this directly to settle debts with you.
               </p>
             </div>
           </div>
 
           {effectiveQr ? (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/80 dark:border-[#27354A]">
               <div
                 onClick={() => setShowFullQr(true)}
                 className="flex items-center space-x-3 cursor-pointer group"
@@ -372,14 +372,14 @@ export const AccountTab: React.FC<AccountTabProps> = ({
                 <img
                   src={effectiveQr}
                   alt="My UPI QR"
-                  className="w-12 h-12 rounded-lg object-contain bg-white border border-slate-200 p-0.5 group-hover:scale-105 transition-transform"
+                  className="w-12 h-12 rounded-lg object-contain bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] p-0.5 group-hover:scale-105 transition-transform"
                 />
                 <div>
-                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>QR Ready</span>
                   </div>
-                  <p className="text-[10px] text-slate-500">PhonePe, GPay, Paytm compatible</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">PhonePe, GPay, Paytm compatible</p>
                 </div>
               </div>
 
@@ -387,7 +387,7 @@ export const AccountTab: React.FC<AccountTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowFullQr(true)}
-                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs flex items-center gap-1 font-medium shadow-2xs"
+                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#282836] active:scale-95 transition-all text-xs flex items-center gap-1 font-medium shadow-2xs"
                   title="View QR Code"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -397,7 +397,7 @@ export const AccountTab: React.FC<AccountTabProps> = ({
                   type="button"
                   onClick={handleSelectQr}
                   disabled={isAnalyzingQr}
-                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 active:scale-95 transition-all text-xs flex items-center gap-1 font-medium disabled:opacity-60"
+                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 active:scale-95 transition-all text-xs flex items-center gap-1 font-medium disabled:opacity-60"
                   title="Replace QR Code"
                 >
                   {isAnalyzingQr ? (
@@ -410,7 +410,7 @@ export const AccountTab: React.FC<AccountTabProps> = ({
                 <button
                   type="button"
                   onClick={handleRemoveQr}
-                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 active:scale-95 transition-all text-xs flex items-center justify-center"
+                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 active:scale-95 transition-all text-xs flex items-center justify-center"
                   title="Remove QR Code"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -418,13 +418,13 @@ export const AccountTab: React.FC<AccountTabProps> = ({
               </div>
             </div>
           ) : (
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center space-y-2.5 bg-slate-50/50">
-              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+            <div className="border-2 border-dashed border-slate-200 dark:border-[#27354A] rounded-xl p-4 text-center space-y-2.5 bg-slate-50/50 dark:bg-[#20202A]/50">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
                 <QrCode className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-800">No Payment QR uploaded yet</p>
-                <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">No Payment QR uploaded yet</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs mx-auto mt-0.5">
                   Upload a screenshot of your PhonePe, Google Pay, or Paytm QR code.
                 </p>
               </div>

@@ -55,21 +55,21 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-account-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in select-none"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in select-none"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 space-y-4 animate-in slide-in-from-bottom-6 duration-200"
+        className="w-full sm:max-w-md bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 dark:border-[#27354A] space-y-4 animate-in slide-in-from-bottom-6 duration-200"
       >
-        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-[#27354A]">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <AlertTriangle className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h3 id="delete-account-title" className="text-sm font-bold text-slate-900">Delete Account?</h3>
-              <p className="text-[11px] text-slate-500">Permanent and irreversible action</p>
+              <h3 id="delete-account-title" className="text-sm font-bold text-slate-900 dark:text-slate-100">Delete Account?</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Permanent and irreversible action</p>
             </div>
           </div>
           <button
@@ -77,15 +77,15 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
             onClick={onClose}
             disabled={isDeleting}
             aria-label="Close"
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#20202A] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-rose-50/70 border border-rose-200/80 text-xs text-rose-900 leading-relaxed space-y-1.5">
-          <p className="font-semibold text-rose-950">This action permanently deletes your account:</p>
-          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-800">
+        <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 text-xs text-rose-900 dark:text-rose-200 leading-relaxed space-y-1.5">
+          <p className="font-semibold text-rose-950 dark:text-rose-200">This action permanently deletes your account:</p>
+          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-800 dark:text-rose-300">
             <li>Erases authentication credentials and identity profile</li>
             <li>Purges private expense vault and subscription history</li>
             <li>Removes your membership across all shared rooms</li>
@@ -94,15 +94,15 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
         </div>
 
         {errorMessage && (
-          <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs text-rose-700 dark:text-rose-300">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         <div>
-          <label htmlFor="confirm-delete-input" className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Type <span className="font-mono font-bold text-rose-600">DELETE</span> to confirm:
+          <label htmlFor="confirm-delete-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            Type <span className="font-mono font-bold text-rose-600 dark:text-rose-400">DELETE</span> to confirm:
           </label>
           <input
             id="confirm-delete-input"
@@ -112,7 +112,7 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder="DELETE"
             autoCapitalize="characters"
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:border-rose-500 disabled:opacity-60"
+            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-[#181820] outline-none focus:border-rose-500 disabled:opacity-60 placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
 
@@ -121,7 +121,7 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 active:scale-98 transition-all"
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-98 transition-all"
           >
             Cancel
           </button>

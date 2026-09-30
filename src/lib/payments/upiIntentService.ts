@@ -268,7 +268,7 @@ export function renderSettlementVoucherCanvas(data: SettlementReceiptData): stri
   // Footer
   ctx.fillStyle = '#475569';
   ctx.font = '500 13px Inter, system-ui, sans-serif';
-  ctx.fillText('Generated on RoomMate Mobile • Student Expense & Ledger System', width / 2, 935);
+  ctx.fillText('Generated on RoomMate Mobile • Resident Expense & Room Ledger System', width / 2, 935);
 
   return canvas.toDataURL('image/png');
 }

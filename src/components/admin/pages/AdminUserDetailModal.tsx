@@ -75,7 +75,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
     if (user.createdAt) {
       items.push({
         id: `reg-${user.id}`,
-        title: 'Student profile verified',
+        title: 'Resident profile verified',
         description: `Registered with ${user.email}`,
         timestamp: user.createdAt,
         icon: 'clock',
@@ -221,7 +221,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                 <span className="text-[11px] font-semibold text-slate-400">Account Type</span>
                 <p className="text-xs font-bold text-slate-800">
-                  {user.role === 'SUPER_ADMIN' ? 'Platform SuperAdmin' : 'Resident Student'}
+                  {user.role === 'SUPER_ADMIN' ? 'Platform SuperAdmin' : 'Resident'}
                 </p>
               </div>
 
@@ -325,7 +325,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
                   <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-xs font-semibold text-slate-600">No Activity Recorded</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    This student has not performed any room or billing transactions yet.
+                    This resident has not performed any room or billing transactions yet.
                   </p>
                 </div>
               )}
@@ -386,14 +386,14 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
                         : 'bg-slate-200 text-slate-700'
                     }`}
                   >
-                    Current: {user.role === 'SUPER_ADMIN' ? 'SuperAdmin' : 'Resident Student'}
+                    Current: {user.role === 'SUPER_ADMIN' ? 'SuperAdmin' : 'Resident'}
                   </span>
                 </div>
 
                 <p className="text-[11px] text-slate-600 leading-snug">
                   {user.role === 'SUPER_ADMIN'
                     ? 'This user holds SuperAdmin privileges, enabling platform configuration, user governance, room freezes, and security telemetry.'
-                    : 'This user is currently a standard Resident Student. Elevating them will grant platform-wide SuperAdmin console access.'}
+                    : 'This user is currently a standard Resident. Elevating them will grant platform-wide SuperAdmin console access.'}
                 </p>
 
                 <div className="pt-1">
@@ -422,7 +422,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
                       <span>
                         {currentAdminUser && currentAdminUser.id === user.id
                           ? 'Cannot Demote Current Admin (Protected)'
-                          : 'Demote to Resident Student'}
+                          : 'Demote to Resident'}
                       </span>
                     </button>
                   )}
@@ -484,14 +484,14 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
             }
             setShowRoleDialog(false);
           }}
-          title={user.role === 'SUPER_ADMIN' ? 'Demote SuperAdmin to Student' : 'Promote Student to SuperAdmin'}
+          title={user.role === 'SUPER_ADMIN' ? 'Demote SuperAdmin to Resident' : 'Promote Resident to SuperAdmin'}
           description={
             user.role === 'SUPER_ADMIN'
-              ? `Are you sure you want to revoke administrative privileges for ${user.name}? They will immediately lose access to the SuperAdmin console and revert to a standard student resident account.`
+              ? `Are you sure you want to revoke administrative privileges for ${user.name}? They will immediately lose access to the SuperAdmin console and revert to a standard resident account.`
               : `CRITICAL PRIVILEGE ESCALATION: Are you sure you want to promote ${user.name} to SuperAdmin? They will receive full administrative control over all rooms, user accounts, and platform settings.`
           }
           variant={user.role === 'SUPER_ADMIN' ? 'warning' : 'danger'}
-          confirmLabel={user.role === 'SUPER_ADMIN' ? 'Demote to Student' : 'Promote to SuperAdmin'}
+          confirmLabel={user.role === 'SUPER_ADMIN' ? 'Demote to Resident' : 'Promote to SuperAdmin'}
         />
 
         {/* Suspend Confirmation Dialog */}
@@ -502,7 +502,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
             onToggleSuspension(user.id, !user.isSuspended, reason);
             setShowSuspendDialog(false);
           }}
-          title={user.isSuspended ? 'Reactivate Student Account' : 'Suspend Student Account'}
+          title={user.isSuspended ? 'Reactivate Resident Account' : 'Suspend Resident Account'}
           description={
             user.isSuspended
               ? `Are you sure you want to restore platform access for ${user.name}? They will immediately be able to access rooms and log shared bills.`

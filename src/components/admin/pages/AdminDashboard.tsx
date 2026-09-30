@@ -69,17 +69,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   // Compute Core Platform Metrics strictly from real state (0 when empty)
-  const studentUsers = useMemo(() => allUsers.filter((u) => u.role === 'STUDENT'), [allUsers]);
-  const totalUsers = studentUsers.length;
+  const residentUsers = useMemo(() => allUsers.filter((u) => u.role === 'STUDENT'), [allUsers]);
+  const totalUsers = residentUsers.length;
   const activeUsers = useMemo(() => {
-    return studentUsers.filter((u) => {
+    return residentUsers.filter((u) => {
       if (u.isSuspended) return false;
       const belongsToRoom = roomMembers.some((m) => m.userId === u.id);
       const hasCreatedExpense = sharedExpenses.some((e) => e.paidBy === u.id || e.createdBy === u.id);
       const hasSettled = settlementPayments.some((s) => s.payerId === u.id || s.payeeId === u.id);
       return belongsToRoom || hasCreatedExpense || hasSettled || !u.isSuspended;
     }).length;
-  }, [studentUsers, roomMembers, sharedExpenses, settlementPayments]);
+  }, [residentUsers, roomMembers, sharedExpenses, settlementPayments]);
 
   const activeRooms = useMemo(() => rooms.filter((r) => !r.isArchived && !r.isFrozen).length, [rooms]);
 
@@ -122,12 +122,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const nextD = new Date(d);
         nextD.setDate(nextD.getDate() + 1);
 
-        const newUsersCount = studentUsers.filter((u) => {
+        const newUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.createdAt);
           return uDate >= d && uDate < nextD;
         }).length;
 
-        const activeUsersCount = studentUsers.filter((u) => {
+        const activeUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.updatedAt || u.createdAt);
           const hasExp = sharedExpenses.some(
             (e) => e.paidBy === u.id && new Date(e.createdAt) >= d && new Date(e.createdAt) < nextD
@@ -155,12 +155,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const dEnd = new Date(now);
         dEnd.setDate(dEnd.getDate() - i * 7);
 
-        const newUsersCount = studentUsers.filter((u) => {
+        const newUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.createdAt);
           return uDate >= dStart && uDate < dEnd;
         }).length;
 
-        const activeUsersCount = studentUsers.filter((u) => {
+        const activeUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.updatedAt || u.createdAt);
           const hasExp = sharedExpenses.some(
             (e) => e.paidBy === u.id && new Date(e.createdAt) >= dStart && new Date(e.createdAt) < dEnd
@@ -187,12 +187,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
         const label = d.toLocaleString('en-IN', { month: 'short' });
 
-        const newUsersCount = studentUsers.filter((u) => {
+        const newUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.createdAt);
           return uDate >= d && uDate < nextMonth;
         }).length;
 
-        const activeUsersCount = studentUsers.filter((u) => {
+        const activeUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.updatedAt || u.createdAt);
           const hasExp = sharedExpenses.some(
             (e) => e.paidBy === u.id && new Date(e.createdAt) >= d && new Date(e.createdAt) < nextMonth
@@ -219,12 +219,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
         const label = d.toLocaleString('en-IN', { month: 'short' });
 
-        const newUsersCount = studentUsers.filter((u) => {
+        const newUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.createdAt);
           return uDate >= d && uDate < nextMonth;
         }).length;
 
-        const activeUsersCount = studentUsers.filter((u) => {
+        const activeUsersCount = residentUsers.filter((u) => {
           const uDate = new Date(u.updatedAt || u.createdAt);
           const hasExp = sharedExpenses.some(
             (e) => e.paidBy === u.id && new Date(e.createdAt) >= d && new Date(e.createdAt) < nextMonth
@@ -252,12 +252,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const dStart = new Date(now.getFullYear(), (qOffset - 1) * 3, 1);
       const dEnd = new Date(now.getFullYear(), qOffset * 3, 1);
 
-      const newUsersCount = studentUsers.filter((u) => {
+      const newUsersCount = residentUsers.filter((u) => {
         const uDate = new Date(u.createdAt);
         return uDate >= dStart && uDate < dEnd;
       }).length;
 
-      const activeUsersCount = studentUsers.filter((u) => {
+      const activeUsersCount = residentUsers.filter((u) => {
         const uDate = new Date(u.updatedAt || u.createdAt);
         const hasExp = sharedExpenses.some(
           (e) => e.paidBy === u.id && new Date(e.createdAt) >= dStart && new Date(e.createdAt) < dEnd
@@ -275,7 +275,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
     }
     return points;
-  }, [studentUsers, sharedExpenses, settlementPayments, timeFilter]);
+  }, [residentUsers, sharedExpenses, settlementPayments, timeFilter]);
 
   // Dynamic Recent Activity Feed assembled from real state
   const recentActivities = useMemo(() => {
@@ -301,11 +301,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
     });
 
-    // 2. Recent student users
-    studentUsers.slice(0, 8).forEach((u) => {
+    // 2. Recent resident users
+    residentUsers.slice(0, 8).forEach((u) => {
       items.push({
         id: `user-${u.id}`,
-        title: 'New student onboarded',
+        title: 'New resident onboarded',
         description: `${u.name} registered (${u.email || u.phone || 'Resident'})`,
         time: formatRelativeTime(u.createdAt),
         timestamp: new Date(u.createdAt).getTime(),
@@ -369,12 +369,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .filter((i) => !isNaN(i.timestamp))
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, 5);
-  }, [auditLogs, studentUsers, rooms, allUsers, sharedExpenses, settlementPayments, bugReports]);
+  }, [auditLogs, residentUsers, rooms, allUsers, sharedExpenses, settlementPayments, bugReports]);
 
   // Export Executive Summary
   const handleExportSummary = () => {
     const summary = [
-      { Metric: 'Total Registered Students', Value: totalUsers },
+      { Metric: 'Total Registered Residents', Value: totalUsers },
       { Metric: 'Active Monthly Residents', Value: activeUsers },
       { Metric: 'Active Room Clusters', Value: activeRooms },
       { Metric: 'Total Shared Expense Volume (INR)', Value: totalSharedVolume },
@@ -403,7 +403,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="text-xl">👋</span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Here&apos;s what&apos;s happening across RoomMate student ledgers &amp; clusters today.
+            Here&apos;s what&apos;s happening across RoomMate resident ledgers &amp; clusters today.
           </p>
         </div>
 
@@ -432,10 +432,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           value={totalUsers.toLocaleString('en-IN')}
           trend={
             totalUsers > 0
-              ? { value: `${activeUsers} active`, isPositive: true, period: 'verified students' }
+              ? { value: `${activeUsers} active`, isPositive: true, period: 'verified residents' }
               : undefined
           }
-          subtitle={totalUsers === 0 ? 'No registered students yet' : undefined}
+          subtitle={totalUsers === 0 ? 'No registered residents yet' : undefined}
           icon={<Users className="w-4 h-4" />}
           iconBg="bg-indigo-50"
           iconColor="text-indigo-600"
@@ -707,7 +707,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-slate-600 leading-relaxed">
             <span className="font-bold text-indigo-900">Privacy Safeguard Active:</span> Personal expense histories are
-            strictly private to individual students. The financial overview only aggregates shared room expenses and
+            strictly private to individual residents. The financial overview only aggregates shared room expenses and
             platform-wide reconciliation volume.
           </div>
 

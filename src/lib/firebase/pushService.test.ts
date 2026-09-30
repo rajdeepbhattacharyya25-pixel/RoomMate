@@ -214,6 +214,36 @@ describe('FCM Push Service Suite', () => {
       );
     });
 
+    it('passes senderAvatar as actorAvatar in push dispatch payload', async () => {
+      vi.mocked(supabase.functions.invoke).mockResolvedValue({
+        data: { success: true, delivered: 1, totalTokens: 1 },
+        error: null,
+      });
+
+      const result = await sendRoommatePushEvent({
+        eventType: 'NEW_SHARED_EXPENSE',
+        senderName: 'Arjun',
+        senderAvatar: 'https://i.ibb.co/arjun_profile.jpg',
+        title: 'Electricity Split',
+        body: 'Arjun added ₹1,200',
+        recipientUserIds: ['user_priya'],
+        roomId: 'room_flat_302',
+      });
+
+      expect(result).toBe(true);
+      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+        'send-push',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            actorAvatar: 'https://i.ibb.co/arjun_profile.jpg',
+            data: expect.objectContaining({
+              actorAvatar: 'https://i.ibb.co/arjun_profile.jpg',
+            }),
+          }),
+        })
+      );
+    });
+
     it('safely handles empty recipient lists without network calls', async () => {
       const result = await sendRoommatePushEvent({
         eventType: 'ROOM_INVITATION',

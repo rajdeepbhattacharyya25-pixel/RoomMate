@@ -29,45 +29,45 @@ export const FullScreenQrModal: React.FC<FullScreenQrModalProps> = ({
       aria-modal="true"
       aria-labelledby="fullscreen-qr-title"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 dark:bg-black/90 backdrop-blur-xs p-4 animate-in fade-in select-none"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-3xl p-6 max-w-xs w-full text-center space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200"
+        className="bg-white dark:bg-[#12121A] rounded-3xl p-6 max-w-xs w-full text-center space-y-4 shadow-2xl border border-slate-200/90 dark:border-[#27354A] relative animate-in zoom-in-95 duration-200"
       >
         <button
           onClick={onClose}
           aria-label="Close QR Modal"
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center active:scale-95 transition-colors"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 dark:bg-[#20202A] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center justify-center active:scale-95 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
         <div className="pt-2">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-2">
             <QrCode className="w-6 h-6" />
           </div>
-          <h3 id="fullscreen-qr-title" className="text-base font-bold text-slate-900">
+          <h3 id="fullscreen-qr-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
             {currentUser.name}&apos;s QR Code
           </h3>
-          <p className="text-xs text-slate-500">Scan with PhonePe, GPay, or Paytm</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Scan with PhonePe, GPay, or Paytm</p>
         </div>
 
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl inline-block shadow-inner">
+        <div className="p-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-2xl inline-block shadow-inner">
           <img
             src={activeQr}
             alt="Full Payment QR"
-            className="w-56 h-56 object-contain rounded-xl bg-white"
+            className="w-56 h-56 object-contain rounded-xl bg-white p-2"
           />
         </div>
 
-        <p className="text-[11px] text-slate-500 font-mono">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
           UPI ID: {displayUpi}
         </p>
 
         <button
           onClick={onClose}
-          className="w-full h-11 rounded-xl bg-slate-900 text-white text-xs font-semibold active:scale-98 transition-all"
+          className="w-full h-11 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-semibold active:scale-98 transition-all"
         >
           Done
         </button>

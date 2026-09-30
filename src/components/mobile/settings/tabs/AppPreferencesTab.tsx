@@ -17,20 +17,17 @@ import {
   setShakeSensitivity,
   ShakeSensitivity,
 } from '../../../../lib/native/shakeDetector';
+import { useTheme, ThemePreference } from '../../../../context/ThemeContext';
 
 interface AppPreferencesTabProps {
   onShowToast: (msg: string) => void;
 }
 
-type ThemeMode = 'system' | 'light' | 'dark';
 type ListDensity = 'standard' | 'compact';
 
 export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToast }) => {
-  // Appearance / Theme
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof localStorage === 'undefined') return 'system';
-    return (localStorage.getItem('roommate_theme') as ThemeMode) || 'system';
-  });
+  // Global Theme Context
+  const { theme, setTheme } = useTheme();
 
   // List Density
   const [density, setDensity] = useState<ListDensity>(() => {
@@ -44,24 +41,9 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
 
   const [isClearingCache, setIsClearingCache] = useState<boolean>(false);
 
-  const handleSelectTheme = (selected: ThemeMode) => {
+  const handleSelectTheme = (selected: ThemePreference) => {
     hapticSelection();
     setTheme(selected);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('roommate_theme', selected);
-      if (selected === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else if (selected === 'light') {
-        document.documentElement.classList.remove('dark');
-      } else {
-        // System default check
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-      }
-    }
     const label = selected === 'system' ? 'System Default' : selected === 'light' ? 'Light Mode' : 'Dark Mode';
     onShowToast(`Theme preference updated: ${label}`);
   };
@@ -101,14 +83,14 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
   return (
     <div className="space-y-4">
       {/* Card 1: Appearance & Theme */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-2">
-          <Palette className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Palette className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Appearance & Theme
           </h3>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
           Choose how RoomMate looks on your device:
         </p>
 
@@ -119,15 +101,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
             onClick={() => handleSelectTheme('system')}
             className={`p-3 rounded-xl border text-center transition-all active:scale-95 ${
               theme === 'system'
-                ? 'bg-indigo-50/80 border-indigo-400 ring-1 ring-indigo-500 shadow-xs'
-                : 'bg-white border-slate-200 hover:bg-slate-50'
+                ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-500 shadow-xs'
+                : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
             }`}
           >
-            <div className="w-7 h-7 mx-auto rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 mb-1.5">
+            <div className="w-7 h-7 mx-auto rounded-lg bg-slate-100 dark:bg-[#20202A] flex items-center justify-center text-slate-600 dark:text-slate-300 mb-1.5">
               <Monitor className="w-4 h-4" />
             </div>
-            <div className="text-xs font-bold text-slate-900">System</div>
-            <div className="text-[10px] text-slate-500">Auto match</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-slate-100">System</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">Auto match</div>
           </button>
 
           {/* Light */}
@@ -136,15 +118,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
             onClick={() => handleSelectTheme('light')}
             className={`p-3 rounded-xl border text-center transition-all active:scale-95 ${
               theme === 'light'
-                ? 'bg-amber-50/80 border-amber-400 ring-1 ring-amber-500 shadow-xs'
-                : 'bg-white border-slate-200 hover:bg-slate-50'
+                ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-400 dark:border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
             }`}
           >
-            <div className="w-7 h-7 mx-auto rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 mb-1.5">
+            <div className="w-7 h-7 mx-auto rounded-lg bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-700 dark:text-amber-400 mb-1.5">
               <Sun className="w-4 h-4" />
             </div>
-            <div className="text-xs font-bold text-slate-900">Light</div>
-            <div className="text-[10px] text-slate-500">Always crisp</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Light</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">Always crisp</div>
           </button>
 
           {/* Dark */}
@@ -153,30 +135,30 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
             onClick={() => handleSelectTheme('dark')}
             className={`p-3 rounded-xl border text-center transition-all active:scale-95 ${
               theme === 'dark'
-                ? 'bg-slate-900 text-white border-slate-700 ring-1 ring-slate-800 shadow-xs'
-                : 'bg-white border-slate-200 hover:bg-slate-50'
+                ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-500 shadow-xs'
+                : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
             }`}
           >
             <div className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center mb-1.5 ${
-              theme === 'dark' ? 'bg-slate-800 text-indigo-400' : 'bg-slate-100 text-slate-700'
+              theme === 'dark' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300'
             }`}>
               <Moon className="w-4 h-4" />
             </div>
-            <div className={`text-xs font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Dark</div>
-            <div className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Low glare</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Dark</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">Low glare</div>
           </button>
         </div>
       </div>
 
       {/* Card 2: Layout & List Density */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-2">
-          <Layers className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             List Density
           </h3>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
           Adjust row height and spacing across expense ledgers:
         </p>
 
@@ -186,15 +168,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
             onClick={() => handleSelectDensity('standard')}
             className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
               density === 'standard'
-                ? 'bg-slate-50 border-indigo-400 ring-1 ring-indigo-500/30'
-                : 'bg-white border-slate-200 hover:bg-slate-50'
+                ? 'bg-slate-50 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-500/30'
+                : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-slate-900">Standard</span>
-              {density === 'standard' && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />}
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Standard</span>
+              {density === 'standard' && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
             </div>
-            <p className="text-[10px] text-slate-500 leading-tight">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
               Comfortable touch targets with complete metadata
             </p>
           </button>
@@ -204,15 +186,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
             onClick={() => handleSelectDensity('compact')}
             className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
               density === 'compact'
-                ? 'bg-slate-50 border-indigo-400 ring-1 ring-indigo-500/30'
-                : 'bg-white border-slate-200 hover:bg-slate-50'
+                ? 'bg-slate-50 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-500/30'
+                : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-slate-900">Compact</span>
-              {density === 'compact' && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />}
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Compact</span>
+              {density === 'compact' && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
             </div>
-            <p className="text-[10px] text-slate-500 leading-tight">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
               Higher information density with minimal vertical padding
             </p>
           </button>
@@ -220,16 +202,16 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
       </div>
 
       {/* Card 3: Shake to Report Bug */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center space-x-2">
-              <Smartphone className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 Shake to Report
               </h3>
             </div>
-            <p className="text-[11px] text-slate-500 max-w-xs pt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs pt-1">
               Shake your device anywhere in the app to instantly open the bug reporting and feedback window.
             </p>
           </div>
@@ -247,15 +229,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
               }}
               className="sr-only peer"
             />
-            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+            <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
           </label>
         </div>
 
         {shakeEnabled && (
-          <div className="pt-2.5 border-t border-slate-100 space-y-2">
+          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-700">Motion Sensitivity</span>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Motion Sensitivity</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 {shakeSensitivity === 'low'
                   ? 'Firm (Zero false triggers)'
                   : shakeSensitivity === 'high'
@@ -264,7 +246,7 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200/60">
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 dark:bg-[#20202A] rounded-xl border border-slate-200/60 dark:border-[#27354A]">
               <button
                 type="button"
                 onClick={() => {
@@ -275,8 +257,8 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
                   shakeSensitivity === 'low'
-                    ? 'bg-white text-indigo-600 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-[#181820] text-indigo-600 dark:text-indigo-400 shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 Firm
@@ -292,8 +274,8 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
                   shakeSensitivity === 'medium'
-                    ? 'bg-white text-indigo-600 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-[#181820] text-indigo-600 dark:text-indigo-400 shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 Standard
@@ -309,15 +291,15 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
                   shakeSensitivity === 'high'
-                    ? 'bg-white text-indigo-600 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-[#181820] text-indigo-600 dark:text-indigo-400 shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 Gentle
               </button>
             </div>
 
-            <p className="text-[10px] text-slate-400 leading-tight">
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
               {shakeSensitivity === 'low' &&
                 'Requires a deliberate, firm double-shake. Recommended if you walk, jog, or carry your phone in your pocket.'}
               {shakeSensitivity === 'medium' &&
@@ -330,14 +312,14 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
       </div>
 
       {/* Card 4: Cache Storage Maintenance */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-2">
-          <Trash2 className="w-4 h-4 text-slate-500" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Trash2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Storage & Cache Maintenance
           </h3>
         </div>
-        <p className="text-[11px] text-slate-500 leading-relaxed">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
           Clear temporary image cache and service worker assets without affecting your offline database records or login credentials.
         </p>
 
@@ -345,7 +327,7 @@ export const AppPreferencesTab: React.FC<AppPreferencesTabProps> = ({ onShowToas
           type="button"
           onClick={handleClearCache}
           disabled={isClearingCache}
-          className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
+          className="w-full py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#282836] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
         >
           <Trash2 className="w-3.5 h-3.5" />
           <span>{isClearingCache ? 'Cleaning Buffers...' : 'Clear Cached Assets'}</span>

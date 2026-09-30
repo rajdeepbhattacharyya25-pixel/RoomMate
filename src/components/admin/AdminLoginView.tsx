@@ -134,7 +134,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
         matched = {
           ...masterSeed,
           id: `usr-admin-${cleanEmail.replace(/[^a-z0-9]/g, '-')}`,
-          name: cleanEmail === 'rajdeep.bhattacharyya25@gmail.com' ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
+          name: (cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' || cleanEmail === 'rajdeep.bhattacharyya25@gmail.com') ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
           email: cleanEmail,
           role: 'SUPER_ADMIN',
         };
@@ -185,8 +185,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
         }
 
         const inputHash = await hashMasterPassword(password);
-        const isMasterBypass = password === 'master_admin_key_2026';
-        if (inputHash !== settings.masterPasswordHash && !isMasterBypass) {
+        if (inputHash !== settings.masterPasswordHash) {
           const rateResult = recordMfaFailure();
           if (rateResult.isLocked) {
             setLockoutRemaining(15 * 60);
@@ -478,19 +477,6 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
     onLoginSuccess(admin);
   };
 
-  const handleFillDemoAdmin = () => {
-    const superAdmin =
-      allUsers.find((u) => u.role === 'SUPER_ADMIN') ||
-      db.getState().users.find((u) => u.role === 'SUPER_ADMIN') ||
-      DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN');
-
-    const adminEmail = superAdmin?.email || 'admin@roommate.app';
-    setEmail(adminEmail);
-    setPassword('master_admin_key_2026');
-    setConfirmPassword('master_admin_key_2026');
-    setError(null);
-  };
-
   const copySecretToClipboard = () => {
     if (enrollmentData?.secret) {
       navigator.clipboard.writeText(enrollmentData.secret);
@@ -561,16 +547,6 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
                 {step === 'RECOVERY_CODE' && 'Emergency Recovery Code'}
               </span>
             </div>
-            {step === 'CREDENTIALS' && (
-              <button
-                type="button"
-                onClick={handleFillDemoAdmin}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors"
-              >
-                <Sparkles className="w-3 h-3 text-indigo-500" />
-                <span>Auto-Fill Demo</span>
-              </button>
-            )}
           </div>
 
           {/* Lockout Banner */}

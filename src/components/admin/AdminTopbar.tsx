@@ -9,6 +9,7 @@ import {
   Smartphone,
   CheckCheck,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { User, InAppNotification } from '../../types';
 import { AdminRoute } from './AdminSidebar';
@@ -21,6 +22,7 @@ interface AdminTopbarProps {
   onSwitchToMobile?: () => void;
   onLogout?: () => void;
   isCloudLive?: boolean;
+  onForceCloudSync?: () => Promise<void> | void;
   notifications?: InAppNotification[];
   onDismissNotification?: (id: string) => void;
   onMarkAllNotificationsRead?: () => void;
@@ -33,12 +35,24 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   onSwitchToMobile,
   onLogout,
   isCloudLive = true,
+  onForceCloudSync,
   notifications = [],
   onDismissNotification,
   onMarkAllNotificationsRead,
 }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    if (!onForceCloudSync || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await onForceCloudSync();
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -93,10 +107,21 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 
       {/* Right Header Controls */}
       <div className="flex items-center gap-3">
-        {/* Live Cloud Status Pill */}
+        {/* Live Cloud Status Pill & On-Demand Re-Sync */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-semibold">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>{isCloudLive ? 'Cloud Systems Operational' : 'Offline Mock Vault'}</span>
+          <span>{isCloudLive ? 'Cloud Systems Operational' : 'Offline Vault'}</span>
+          {onForceCloudSync && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="ml-1 p-0.5 hover:bg-emerald-200/60 rounded-full text-emerald-700 transition-colors disabled:opacity-50"
+              title="Force Cloud Re-Sync from Mobile / Database"
+            >
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
 
         {/* Mobile Preview Switcher (Desktop Web feature) */}

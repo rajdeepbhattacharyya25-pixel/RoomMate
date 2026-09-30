@@ -40,6 +40,7 @@ import {
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { ExportBottomSheet } from './ExportBottomSheet';
+import { ProgressiveFeedControls } from './ProgressiveFeedControls';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { hapticImpact, hapticSelection, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
 import {
@@ -94,6 +95,27 @@ const CATEGORIES: Array<{
 ];
 
 const PRESETS = [50, 100, 200, 500, 1000];
+
+// Robust date parser ensuring timezone-safe year, month, and day extraction
+function parseExpenseDate(dateStr?: string): { year: number; month: number; day: number; date: Date } {
+  if (!dateStr) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate(), date: now };
+  }
+  const isoPart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = isoPart.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1; // 0-indexed month
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return { year: y, month: m, day: d, date: new Date(y, m, d, 12, 0, 0) };
+    }
+  }
+  const parsed = new Date(dateStr);
+  return { year: parsed.getFullYear(), month: parsed.getMonth(), day: parsed.getDate(), date: parsed };
+}
+
 
 const CATEGORY_QUICK_CHIPS: Record<PersonalExpense['category'], string[]> = {
   Food: ['Chai ☕', 'Lunch 🍲', 'Dinner 🍛', 'Groceries 🛒', 'Snacks 🍟', 'Swiggy 🍕'],
@@ -175,6 +197,9 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
   // Export State
   const [showExportSheet, setShowExportSheet] = useState<boolean>(false);
 
+
+
+
   const handleExport = useCallback(async (format: ExportFormat) => {
     const dataset = gatherMonthlyExportData({
       month: selectedMonthIndex,
@@ -230,9 +255,9 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
     // Also include past months from data
     for (const exp of userExpenses) {
-      const d = new Date(exp.expenseDate || exp.createdAt);
-      const y = d.getFullYear();
-      const m = d.getMonth();
+      const parsed = parseExpenseDate(exp.expenseDate || exp.createdAt);
+      const y = parsed.year;
+      const m = parsed.month;
       const key = `${y}-${m}`;
       const existing = map.get(key);
       if (existing) {
@@ -319,11 +344,12 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
     const dailySpend = [0, 0, 0, 0, 0, 0, 0];
 
     for (const exp of userExpenses) {
-      const expDate = new Date(exp.expenseDate || exp.createdAt);
+      const parsed = parseExpenseDate(exp.expenseDate || exp.createdAt);
+      const expDate = parsed.date;
       allSum += exp.amount;
 
       // Check selected month & year
-      if (expDate.getMonth() === selectedMonthIndex && expDate.getFullYear() === selectedYear) {
+      if (parsed.month === selectedMonthIndex && parsed.year === selectedYear) {
         monthSum += exp.amount;
         monthList.push(exp);
       }
@@ -368,6 +394,22 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
     return userExpenses;
   }, [selectedPeriod, thisWeekExpenses, selectedMonthExpenses, userExpenses]);
 
+  // Proactive Category Cap & Limit Indicators for Add Sheet
+  const numEnteredAmount = Number(amount) || 0;
+  const currentCategorySpentThisMonth = useMemo(() => {
+    let sum = 0;
+    for (const exp of selectedMonthExpenses) {
+      if (exp.category === category) {
+        sum += exp.amount;
+      }
+    }
+    return sum;
+  }, [selectedMonthExpenses, category]);
+
+  const selectedCategoryCap = budgetConfig.categoryCaps[category] || 0;
+  const projectedCategoryTotal = currentCategorySpentThisMonth + numEnteredAmount;
+  const willExceedCategoryCap = selectedCategoryCap > 0 && projectedCategoryTotal > selectedCategoryCap;
+
   // Filtered by Search & Category
   const filteredExpenses = useMemo(() => {
     return activePeriodExpenses.filter((p) => {
@@ -378,6 +420,19 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       return matchesSearch && matchesCat;
     });
   }, [activePeriodExpenses, searchQuery, selectedCategoryFilter]);
+
+  const VAULT_PAGE_SIZE = 15;
+  const [vaultVisibleLimit, setVaultVisibleLimit] = useState<number>(VAULT_PAGE_SIZE);
+  const recordsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-reset pagination to top 15 whenever any filter or search changes
+  useEffect(() => {
+    setVaultVisibleLimit(VAULT_PAGE_SIZE);
+  }, [selectedPeriod, selectedMonthIndex, selectedYear, selectedCategoryFilter, searchQuery]);
+
+  const displayedExpenses = useMemo(() => {
+    return filteredExpenses.slice(0, vaultVisibleLimit);
+  }, [filteredExpenses, vaultVisibleLimit]);
 
   const handleInitiateDelete = (exp: PersonalExpense) => {
     hapticImpact('MEDIUM');
@@ -444,9 +499,21 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       expenseDate,
     });
 
+    // Auto-navigate to the expense's month so user immediately sees their record
+    const addedDateInfo = parseExpenseDate(expenseDate);
+    setSelectedYear(addedDateInfo.year);
+    setSelectedMonthIndex(addedDateInfo.month);
+    setSelectedPeriod('MONTH');
+
+    // Ensure category filter doesn't hide the freshly created expense
+    if (selectedCategoryFilter !== 'ALL' && selectedCategoryFilter !== category) {
+      setSelectedCategoryFilter('ALL');
+    }
+
     setTitle('');
     setAmount('');
     setNotes('');
+    setExpenseDate(new Date().toISOString().split('T')[0]);
     setShowAddSheet(false);
     if (onCloseAddSheet) onCloseAddSheet();
   };
@@ -523,22 +590,22 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
   }, [selectedPeriod, selectedYear, selectedMonthIndex, isCurrentMonth, now, budgetLimit, currentDisplayTotal, safeDailySpend]);
 
   return (
-    <div className="space-y-4 pb-28 sm:pb-nav-safe px-4 pt-3 bg-[#F9F9FF] min-h-full">
+    <div className="space-y-4 pb-28 sm:pb-nav-safe px-4 pt-3 bg-[#F9F9FF] dark:bg-[#0B0B10] min-h-full">
       {/* Privacy Guarantee Header Card */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Lock className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <h1 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                 Personal Vault
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
                   100% Private
                 </span>
               </h1>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Only visible to you. Zero room visibility.
               </p>
             </div>
@@ -554,13 +621,13 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         </div>
 
         {/* Period Segmented Control (This Week | This Month | All Time) */}
-        <div className="mt-3 p-1 bg-slate-100 rounded-xl flex items-center">
+        <div className="mt-3 p-1 bg-slate-100 dark:bg-[#12121A] rounded-xl flex items-center">
           <button
             onClick={() => setSelectedPeriod('WEEK')}
             className={`flex-1 py-1.5 text-center rounded-lg text-xs font-medium transition-all ${
               selectedPeriod === 'WEEK'
-                ? 'bg-white text-slate-900 font-semibold shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-white dark:bg-[#20202A] text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             This Week
@@ -569,8 +636,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             onClick={() => setSelectedPeriod('MONTH')}
             className={`flex-1 py-1.5 text-center rounded-lg text-xs font-medium transition-all ${
               selectedPeriod === 'MONTH'
-                ? 'bg-white text-slate-900 font-semibold shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-white dark:bg-[#20202A] text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             By Month
@@ -579,8 +646,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             onClick={() => setSelectedPeriod('ALL')}
             className={`flex-1 py-1.5 text-center rounded-lg text-xs font-medium transition-all ${
               selectedPeriod === 'ALL'
-                ? 'bg-white text-slate-900 font-semibold shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-white dark:bg-[#20202A] text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             All Time
@@ -589,11 +656,11 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
         {/* SPECIFIC MONTH SELECTOR BAR (Only visible in 'MONTH' view) */}
         {selectedPeriod === 'MONTH' && (
-          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-[#27354A]/60 flex items-center justify-between">
             {/* Step to Previous Month */}
             <button
               onClick={handlePrevMonth}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] text-slate-700 dark:text-slate-300 flex items-center justify-center active:scale-95 transition-all"
               title="Previous Month"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -602,7 +669,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             {/* Interactive Month Picker Trigger Pill */}
             <button
               onClick={() => setShowMonthPickerModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs hover:bg-indigo-100 active:scale-95 transition-all shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/50 active:scale-95 transition-all shadow-2xs"
             >
               <CalendarDays className="w-3.5 h-3.5" />
               <span>
@@ -613,14 +680,14 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                   Current
                 </span>
               )}
-              <ChevronDown className="w-3.5 h-3.5 text-indigo-500 ml-0.5" />
+              <ChevronDown className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 ml-0.5" />
             </button>
 
             {/* Step to Next Month (Disabled if on current month) */}
             <button
               onClick={handleNextMonth}
               disabled={isCurrentMonth}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:pointer-events-none text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] disabled:opacity-30 disabled:pointer-events-none text-slate-700 dark:text-slate-300 flex items-center justify-center active:scale-95 transition-all"
               title="Next Month"
             >
               <ChevronRight className="w-4 h-4" />
@@ -629,16 +696,16 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         )}
 
         {/* Dynamic Period Spent Amount */}
-        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-baseline justify-between">
+        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-[#27354A]/60 flex items-baseline justify-between">
           <div>
-            <span className="text-xs text-slate-500 block">
+            <span className="text-xs text-slate-500 dark:text-slate-400 block">
               {selectedPeriod === 'WEEK'
                 ? 'Spent This Week (Mon–Sun)'
                 : selectedPeriod === 'MONTH'
                 ? `Spent in ${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`
                 : 'Lifetime Private Spending'}
             </span>
-            <span className="text-2xl font-extrabold text-slate-900 tabular-nums">
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">
               ₹{currentDisplayTotal.toLocaleString('en-IN')}
             </span>
           </div>
@@ -646,7 +713,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           {selectedPeriod !== 'ALL' && (
             <div className="text-right">
               <div className="flex items-center justify-end gap-1">
-                <span className="text-[10px] text-slate-400 block uppercase font-medium">Budget</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block uppercase font-medium">Budget</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -654,7 +721,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                     setEditCategoryCaps(budgetConfig.categoryCaps);
                     setShowBudgetModal(true);
                   }}
-                  className="p-0.5 rounded text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  className="p-0.5 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
                   title="Configure Allowance & Category Caps"
                 >
                   <SlidersHorizontal className="w-3 h-3" />
@@ -667,7 +734,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                   setEditCategoryCaps(budgetConfig.categoryCaps);
                   setShowBudgetModal(true);
                 }}
-                className="text-xs font-bold text-indigo-700 hover:text-indigo-900 tabular-nums hover:underline"
+                className="text-xs font-bold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 tabular-nums hover:underline"
               >
                 ₹{budgetLimit.toLocaleString('en-IN')} ({budgetPercentage}%)
               </button>
@@ -677,7 +744,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
         {/* Progress Bar for Budget */}
         {selectedPeriod !== 'ALL' && (
-          <div className="mt-2 w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+          <div className="mt-2 w-full h-1.5 rounded-full bg-slate-100 dark:bg-[#12121A] overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
                 budgetPercentage > 100
@@ -693,30 +760,30 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
         {/* Contextual Smart Insight for Month (Current vs Past) */}
         {selectedPeriod === 'MONTH' && (
-          <div className="mt-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px] text-slate-600">
+          <div className="mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-100 dark:border-[#27354A]/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
             {isCurrentMonth ? (
               <>
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span>
                     <strong>{daysLeftInMonth} days</strong> left in month
                   </span>
                 </div>
-                <span className="text-emerald-700 font-semibold tabular-nums">
+                <span className="text-emerald-700 dark:text-emerald-400 font-semibold tabular-nums">
                   ₹{safeDailySpend}/day safe limit
                 </span>
               </>
             ) : (
               <>
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>
                     <strong>Month Completed</strong>
                   </span>
                 </div>
                 <span
                   className={`font-semibold tabular-nums ${
-                    monthlyAllowance >= selectedMonthTotal ? 'text-emerald-700' : 'text-rose-600'
+                    monthlyAllowance >= selectedMonthTotal ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                   }`}
                 >
                   {monthlyAllowance >= selectedMonthTotal
@@ -737,7 +804,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 hapticImpact('LIGHT');
                 setShowExportSheet(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-[11px] hover:bg-indigo-100 active:scale-95 transition-all shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px] hover:bg-indigo-100 dark:hover:bg-indigo-900/50 active:scale-95 transition-all shadow-2xs"
             >
               <Download className="w-3 h-3" />
               <span>Export</span>
@@ -747,24 +814,24 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
         {/* 7-Day Micro Bar Graph for 'This Week' View */}
         {selectedPeriod === 'WEEK' && (
-          <div className="mt-3 pt-2 border-t border-slate-100 space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-[#27354A]/60 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-medium">
               <span>Daily Breakdown (Mon - Sun)</span>
               <span>Daily Avg: ₹{Math.round(weeklyTotal / 7).toLocaleString('en-IN')}</span>
             </div>
             <div className="grid grid-cols-7 gap-1.5 items-end h-14 pt-2">
               {weeklyDaysData.map((d, i) => (
                 <div key={i} className="flex flex-col items-center gap-1 h-full justify-end">
-                  <div className="w-full bg-slate-100 rounded-sm h-full flex items-end overflow-hidden">
+                  <div className="w-full bg-slate-100 dark:bg-[#20202A] rounded-sm h-full flex items-end overflow-hidden">
                     <div
                       className={`w-full rounded-sm transition-all duration-300 ${
-                        d.isToday ? 'bg-indigo-600' : 'bg-indigo-300'
+                        d.isToday ? 'bg-indigo-600' : 'bg-indigo-300 dark:bg-indigo-800'
                       }`}
                       style={{ height: `${Math.max(8, d.percent)}%` }}
                       title={`₹${d.amount}`}
                     />
                   </div>
-                  <span className={`text-[9px] font-semibold ${d.isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  <span className={`text-[9px] font-semibold ${d.isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     {d.label}
                   </span>
                 </div>
@@ -777,22 +844,22 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       {/* Dynamic Burn Rate Velocity Health Banner */}
       {selectedPeriod === 'MONTH' && velocityInfo && (
         <div
-          className={`rounded-2xl border p-3.5 flex items-center justify-between shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] ${
+          className={`rounded-2xl border p-3.5 flex items-center justify-between shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none ${
             velocityInfo.status === 'EXCEEDED'
-              ? 'bg-rose-50/80 border-rose-200'
+              ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/40'
               : velocityInfo.status === 'HIGH_VELOCITY'
-              ? 'bg-amber-50/80 border-amber-200'
-              : 'bg-emerald-50/80 border-emerald-200'
+              ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/40'
+              : 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40'
           }`}
         >
           <div className="flex items-center gap-2.5">
             <div
               className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 velocityInfo.status === 'EXCEEDED'
-                  ? 'bg-rose-100 text-rose-700'
+                  ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'
                   : velocityInfo.status === 'HIGH_VELOCITY'
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                  : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
               }`}
             >
               {velocityInfo.status === 'EXCEEDED' ? (
@@ -807,15 +874,15 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               <span
                 className={`text-xs font-bold block ${
                   velocityInfo.status === 'EXCEEDED'
-                    ? 'text-rose-900'
+                    ? 'text-rose-900 dark:text-rose-200'
                     : velocityInfo.status === 'HIGH_VELOCITY'
-                    ? 'text-amber-900'
-                    : 'text-emerald-900'
+                    ? 'text-amber-900 dark:text-amber-200'
+                    : 'text-emerald-900 dark:text-emerald-200'
                 }`}
               >
                 {velocityInfo.label}
               </span>
-              <span className="text-[11px] text-slate-600 block">
+              <span className="text-[11px] text-slate-600 dark:text-slate-300 block">
                 {velocityInfo.sublabel}
               </span>
             </div>
@@ -828,7 +895,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               setEditCategoryCaps(budgetConfig.categoryCaps);
               setShowBudgetModal(true);
             }}
-            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg bg-white border border-slate-200 shadow-2xs active:scale-95 transition-all flex-shrink-0"
+            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 px-2.5 py-1 rounded-lg bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] shadow-2xs active:scale-95 transition-all flex-shrink-0"
           >
             Adjust
           </button>
@@ -836,11 +903,11 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       )}
 
       {/* Category Spending Targets & Caps Card */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] space-y-3">
+      <div className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-indigo-600" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <PieChart className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
               Category Targets & Caps
             </h2>
           </div>
@@ -852,14 +919,14 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 setEditCategoryCaps(budgetConfig.categoryCaps);
                 setShowBudgetModal(true);
               }}
-              className="text-[11px] font-semibold text-indigo-600 hover:underline"
+              className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Configure
             </button>
             <button
               type="button"
               onClick={() => setShowCategoryCapsCard(!showCategoryCapsCard)}
-              className="text-slate-400 hover:text-slate-600 p-0.5"
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
             >
               <ChevronDown
                 className={`w-4 h-4 transition-transform ${showCategoryCapsCard ? 'rotate-180' : ''}`}
@@ -875,13 +942,13 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 <div key={cat.name} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
-                      <cat.icon className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="font-semibold text-slate-800">{cat.name}</span>
+                      <cat.icon className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{cat.name}</span>
                     </div>
                     <div className="flex items-center gap-1 text-[11px] tabular-nums">
-                      <span className="font-bold text-slate-900">₹{cat.spent.toLocaleString('en-IN')}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">₹{cat.spent.toLocaleString('en-IN')}</span>
                       {cat.cap > 0 && (
-                        <span className="text-slate-400">
+                        <span className="text-slate-400 dark:text-slate-500">
                           / ₹{cat.cap.toLocaleString('en-IN')}
                         </span>
                       )}
@@ -889,10 +956,10 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                         <span
                           className={`ml-1 text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                             cat.isOver
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
                               : cat.pct > 75
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
+                              : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40'
                           }`}
                         >
                           {cat.pct}%
@@ -902,7 +969,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                   </div>
 
                   {cat.cap > 0 && (
-                    <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-[#12121A] overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
                           cat.isOver ? 'bg-rose-500' : cat.pct > 75 ? 'bg-amber-500' : 'bg-indigo-600'
@@ -920,7 +987,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="text"
           value={searchQuery}
@@ -932,12 +999,12 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               ? `${MONTH_NAMES[selectedMonthIndex]}'s`
               : 'all'
           } expenses...`}
-          className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 shadow-2xs transition-all"
+          className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-indigo-500 shadow-2xs transition-all"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
             aria-label="Clear Search"
           >
             <X className="w-3.5 h-3.5" />
@@ -952,7 +1019,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           className={`h-8 px-3 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-2xs ${
             selectedCategoryFilter === 'ALL'
               ? 'bg-indigo-600 text-white'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
           }`}
         >
           All ({activePeriodExpenses.length})
@@ -967,7 +1034,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               className={`h-8 px-3 rounded-full text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-all shadow-2xs ${
                 isActive
                   ? 'bg-indigo-600 text-white font-semibold'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                  : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
               }`}
             >
               <span>{cat.name}</span>
@@ -978,9 +1045,9 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       </div>
 
       {/* Expenses Feed */}
-      <div className="space-y-2">
+      <div ref={recordsContainerRef} className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
             {selectedPeriod === 'WEEK'
               ? 'This Week’s Records'
               : selectedPeriod === 'MONTH'
@@ -991,7 +1058,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           {selectedPeriod === 'MONTH' && !isCurrentMonth && (
             <button
               onClick={() => handleSelectMonth(currentActualYear, currentActualMonth)}
-              className="text-[11px] font-semibold text-indigo-600 hover:underline"
+              className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Return to Current Month
             </button>
@@ -999,67 +1066,105 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         </div>
 
         {filteredExpenses.length === 0 ? (
-          <div className="rounded-2xl bg-white border border-slate-200/80 p-8 text-center text-xs text-slate-500 space-y-2 shadow-xs">
-            <Lock className="w-8 h-8 text-slate-400 mx-auto" />
-            <p className="font-semibold text-slate-900">
-              {selectedPeriod === 'WEEK'
+          <div className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] p-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2 shadow-xs">
+            <Lock className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto" />
+            <p className="font-semibold text-slate-900 dark:text-slate-100">
+              {selectedCategoryFilter !== 'ALL'
+                ? `No ${selectedCategoryFilter} expenses found`
+                : selectedPeriod === 'WEEK'
                 ? 'No expenses recorded this week'
                 : selectedPeriod === 'ALL'
                 ? 'No personal expenses recorded yet'
                 : `No expenses recorded in ${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`}
             </p>
-            <p className="text-[11px] text-slate-400">
-              {selectedPeriod === 'ALL'
-                ? 'Tap + Add to log your first private student expense.'
-                : 'Use the arrows above to browse other months or tap + Add to log an expense.'}
-            </p>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {selectedCategoryFilter !== 'ALL' ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter('ALL')}
+                  className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline pt-1"
+                >
+                  Show all categories ({activePeriodExpenses.length} records available)
+                </button>
+              ) : selectedPeriod === 'WEEK' ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPeriod('MONTH')}
+                  className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline pt-1"
+                >
+                  Switch to Monthly View ({selectedMonthExpenses.length} records in {MONTH_NAMES[selectedMonthIndex]})
+                </button>
+              ) : selectedPeriod === 'ALL' ? (
+                'Tap + Add to log your first private resident expense.'
+              ) : (
+                'Use the arrows above to browse other months or tap + Add to log an expense.'
+              )}
+            </div>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200/80 rounded-2xl divide-y divide-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] overflow-hidden">
-            {filteredExpenses.map((exp) => (
-              <div
-                key={exp.id}
-                className="p-3.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                    ₹
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-900">{exp.title}</div>
-                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">
-                        {exp.category}
-                      </span>
-                      <span>•</span>
-                      <span>{exp.expenseDate}</span>
-                      {exp.notes && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate max-w-[100px]">{exp.notes}</span>
-                        </>
-                      )}
+          <>
+            <div className="bg-white dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] rounded-2xl divide-y divide-slate-100 dark:divide-[#27354A]/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden">
+              {displayedExpenses.map((exp) => (
+                <div
+                  key={exp.id}
+                  className="p-3.5 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-[#20202A]/60 transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                      ₹
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">{exp.title}</div>
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mt-0.5">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 text-[10px] font-medium">
+                          {exp.category}
+                        </span>
+                        <span>•</span>
+                        <span>{exp.expenseDate}</span>
+                        {exp.notes && (
+                          <>
+                            <span>•</span>
+                            <span className="truncate max-w-[100px]">{exp.notes}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center space-x-2.5">
-                  <span className="text-xs font-bold text-slate-900 tabular-nums">
-                    ₹{exp.amount.toLocaleString('en-IN')}
-                  </span>
-                  <button
-                    onClick={() => {
-                      handleInitiateDelete(exp);
-                    }}
-                    className="w-10 h-10 -mr-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all active:scale-90"
-                    aria-label="Delete Expense"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center space-x-2.5">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                      ₹{exp.amount.toLocaleString('en-IN')}
+                    </span>
+                    <button
+                      onClick={() => {
+                        handleInitiateDelete(exp);
+                      }}
+                      className="w-10 h-10 -mr-1.5 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition-all active:scale-90"
+                      aria-label="Delete Expense"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            {/* Progressive Feed Controls (Option C) */}
+            <ProgressiveFeedControls
+              currentCount={displayedExpenses.length}
+              totalCount={filteredExpenses.length}
+              pageSize={VAULT_PAGE_SIZE}
+              onShowMore={() =>
+                setVaultVisibleLimit((prev) => Math.min(prev + VAULT_PAGE_SIZE, filteredExpenses.length))
+              }
+              onViewAll={() => setVaultVisibleLimit(filteredExpenses.length)}
+              onShowLess={() => {
+                setVaultVisibleLimit(VAULT_PAGE_SIZE);
+                recordsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              itemLabel="expenses"
+            />
+          </>
         )}
       </div>
 
@@ -1086,8 +1191,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 onClick={() => handleSelectMonth(item.year, item.monthIndex)}
                 className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-[0.99] ${
                   isSelected
-                    ? 'bg-indigo-50/80 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs'
-                    : 'bg-white border-slate-200 hover:bg-slate-50'
+                    ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-500/20 shadow-xs'
+                    : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -1095,37 +1200,37 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                     className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
                       isSelected
                         ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-700'
+                        : 'bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {MONTH_NAMES[item.monthIndex].slice(0, 3)}
                   </div>
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-slate-900">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
                         {MONTH_NAMES[item.monthIndex]} {item.year}
                       </span>
                       {isCurrent && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
                           Active
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                       {item.count} expenses logged
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-xs font-bold text-slate-900 tabular-nums">
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                     ₹{item.total.toLocaleString()}
                   </div>
                   <span
                     className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
                       item.total <= monthlyAllowance
-                        ? 'text-emerald-700 bg-emerald-50'
-                        : 'text-rose-700 bg-rose-50'
+                        ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40'
+                        : 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40'
                     }`}
                   >
                     {item.total <= monthlyAllowance ? 'Under Budget' : 'Over Budget'}
@@ -1150,8 +1255,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         maxHeight="92vh"
       >
         {!isOnline && (
-          <div className="mb-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center gap-2 text-xs text-amber-800">
-            <WifiOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          <div className="mb-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-700 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+            <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <span className="font-medium">
               Operating Offline: Expense will be saved to your local vault immediately & synced once reconnected.
             </span>
@@ -1161,13 +1266,13 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         <form onSubmit={handleCreate} className="space-y-4 pb-4">
           {/* Amount Display with Currency */}
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between mb-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between mb-1">
               <span className="flex items-center gap-1">
                 <span>Amount in ₹</span>
                 <span className="text-rose-500 font-bold">*</span>
               </span>
               {validationErrors.amount && (
-                <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1 animate-pulse">
+                <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 animate-pulse">
                   <AlertCircle className="w-3 h-3" />
                   Required
                 </span>
@@ -1188,7 +1293,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               hasError={Boolean(validationErrors.amount)}
             />
             {validationErrors.amount && (
-              <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1 mt-1">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{validationErrors.amount}</span>
               </p>
@@ -1202,7 +1307,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 key={val}
                 type="button"
                 onClick={() => handleAddPreset(val)}
-                className="h-8 px-3 min-w-[52px] rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-xs font-semibold text-slate-700 transition-all active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60"
+                className="h-8 px-3 min-w-[52px] rounded-lg bg-slate-100 dark:bg-[#20202A] hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-[#27354A]"
               >
                 +₹{val}
               </button>
@@ -1212,12 +1317,12 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           {/* Title / Description Field */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                 <span>Description</span>
                 <span className="text-rose-500 font-bold">*</span>
               </label>
               {validationErrors.title && (
-                <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1 animate-pulse">
+                <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 animate-pulse">
                   <AlertCircle className="w-3 h-3" />
                   Required
                 </span>
@@ -1234,14 +1339,14 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 }
               }}
               placeholder="e.g. Chai, Books, Metro recharge"
-              className={`w-full px-3.5 py-2.5 rounded-xl text-base md:text-xs text-slate-900 placeholder:text-slate-400 outline-none transition-all ${
+              className={`w-full px-3.5 py-2.5 rounded-xl text-base md:text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none transition-all ${
                 validationErrors.title
-                  ? 'bg-rose-50/40 border-2 border-rose-400 ring-2 ring-rose-500/20 focus:border-rose-500'
-                  : 'bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500'
+                  ? 'bg-rose-50/40 dark:bg-rose-950/20 border-2 border-rose-400 ring-2 ring-rose-500/20 focus:border-rose-500'
+                  : 'bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500'
               }`}
             />
             {validationErrors.title && (
-              <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1 mt-1">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{validationErrors.title}</span>
               </p>
@@ -1249,7 +1354,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
             {/* Quick Suggestions based on Selected Category */}
             <div className="pt-2">
-              <span className="text-[10px] text-slate-400 font-medium block mb-1">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block mb-1">
                 Quick 1-tap presets for {category}:
               </span>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
@@ -1270,8 +1375,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                       }}
                       className={`h-7 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all active:scale-95 flex items-center gap-1 border shrink-0 ${
                         isSelected
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 font-bold shadow-2xs'
-                          : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200/60'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 font-bold shadow-2xs'
+                          : 'bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#27354A] text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-[#27354A]'
                       }`}
                     >
                       {chip}
@@ -1284,7 +1389,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
 
           {/* Category Grid */}
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               Category
             </label>
             <div className="grid grid-cols-4 gap-1.5">
@@ -1300,8 +1405,8 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                     }}
                     className={`min-h-[52px] py-2 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border transition-all active:scale-95 ${
                       isSelected
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
+                        : 'bg-slate-50 dark:bg-[#20202A] border-slate-200 dark:border-[#27354A] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#27354A]'
                     }`}
                   >
                     <cat.icon className="w-4.5 h-4.5" />
@@ -1310,18 +1415,50 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 );
               })}
             </div>
+
+            {/* Category Cap & Spend Preview */}
+            {selectedCategoryCap > 0 && (
+              <div
+                className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between transition-colors ${
+                  willExceedCategoryCap
+                    ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200'
+                    : 'bg-slate-50 dark:bg-[#181820] border-slate-200/80 dark:border-[#27354A] text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                  <HeartPulse className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <div className="truncate">
+                    <span className="font-semibold">{category} Limit:</span>{' '}
+                    <span>₹{selectedCategoryCap.toLocaleString('en-IN')}/mo</span>
+                    {willExceedCategoryCap && (
+                      <span className="text-[11px] block text-amber-700 dark:text-amber-300 font-medium">
+                        Will exceed limit by ₹{(projectedCategoryTotal - selectedCategoryCap).toLocaleString('en-IN')}. (Saved normally)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right text-[11px] font-bold shrink-0">
+                  <span className={willExceedCategoryCap ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}>
+                    ₹{projectedCategoryTotal.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-normal">
+                    {Math.round((projectedCategoryTotal / selectedCategoryCap) * 100)}% of limit
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Date */}
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               Date
             </label>
             <input
               type="date"
               value={expenseDate}
               onChange={(e) => setExpenseDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:ring-1 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
             />
           </div>
 
@@ -1350,7 +1487,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         <div className="space-y-4 pt-1 pb-4">
           {/* Monthly Pocket Money / Allowance Input */}
           <div className="space-y-2">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
               Total Monthly Allowance (₹)
             </label>
             <CurrencyInput
@@ -1371,7 +1508,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
                     Number(editAllowanceInput) === val
                       ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      : 'bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#27354A]'
                   }`}
                 >
                   ₹{(val / 1000).toFixed(0)}k
@@ -1381,9 +1518,9 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           </div>
 
           {/* Category Caps Section */}
-          <div className="space-y-2 pt-1 border-t border-slate-100">
+          <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-[#27354A]/60">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Category Spending Caps (₹)
               </label>
               <button
@@ -1400,7 +1537,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                     Health: Math.round(total * 0.05),
                   });
                 }}
-                className="text-[10px] font-semibold text-indigo-600 hover:underline inline-flex items-center gap-1"
+                className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
               >
                 <Sparkles className="w-3 h-3" />
                 Auto-Distribute
@@ -1411,10 +1548,10 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
               {CATEGORIES.filter((c) => c.name !== 'Other').map((cat) => {
                 const currentCap = editCategoryCaps[cat.name] || 0;
                 return (
-                  <div key={cat.name} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                  <div key={cat.name} className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-200/80 dark:border-[#27354A] space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <cat.icon className="w-3.5 h-3.5 text-slate-600" />
-                      <span className="text-xs font-semibold text-slate-800">{cat.name}</span>
+                      <cat.icon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{cat.name}</span>
                     </div>
                     <CurrencyInput
                       size="sm"
@@ -1426,7 +1563,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                         }))
                       }
                       placeholder="0"
-                      containerClassName="bg-white"
+                      containerClassName="bg-white dark:bg-[#20202A]"
                     />
                   </div>
                 );

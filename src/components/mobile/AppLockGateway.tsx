@@ -117,9 +117,9 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="App Lock Security Gateway"
-      className="fixed inset-0 z-[100] bg-[#F9F9FF]/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-slate-900 animate-in fade-in select-none"
+      className="fixed inset-0 z-[100] bg-[#F9F9FF]/95 dark:bg-[#0B0B10]/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-slate-900 dark:text-white animate-in fade-in select-none"
     >
-      <div className="w-full max-w-[380px] bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center space-y-4 animate-in zoom-in-95">
+      <div className="w-full max-w-[380px] bg-white dark:bg-[#12121A] border border-slate-200/90 dark:border-[#27354A] rounded-3xl p-6 shadow-sm dark:shadow-2xl flex flex-col items-center text-center space-y-4 animate-in zoom-in-95">
         
         {/* Official RoomMate Emblem with Emerald Verification Badge */}
         <div className="flex flex-col items-center pt-1">
@@ -134,11 +134,11 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
                 if (fallback) fallback.classList.remove('hidden');
               }}
             />
-            <div className="fallback-icon hidden w-24 h-24 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="fallback-icon hidden w-24 h-24 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Building className="w-12 h-12 stroke-[2]" />
             </div>
             {/* Emerald Verified Micro Badge */}
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border-2 border-white flex items-center justify-center shadow-xs">
+            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white dark:bg-[#12121A] border-2 border-white dark:border-[#12121A] flex items-center justify-center shadow-xs">
               <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
                 <Check className="w-3 h-3 text-white stroke-[3.5]" />
               </div>
@@ -146,19 +146,19 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
           </div>
 
           {/* App Title & Subtitle */}
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             RoomMate
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
             Live Together. Spend Smarter.
           </p>
 
           {/* Vault Locked Status Pill */}
-          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A]">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="text-[11px] font-semibold text-slate-700">Personal Vault Locked</span>
-            <span className="text-slate-300 text-[11px]">•</span>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5">
+            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Personal Vault Locked</span>
+            <span className="text-slate-300 dark:text-slate-600 text-[11px]">•</span>
+            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
               <ShieldCheck className="w-3 h-3" />
               Encrypted
             </span>
@@ -166,20 +166,20 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
         </div>
 
         {/* Resident Identity Pill */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50/70 border border-indigo-100/90">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100/90 dark:border-indigo-800/50">
           <div className="w-5 h-5 rounded-full bg-indigo-600 text-[10px] font-bold text-white flex items-center justify-center shadow-2xs">
             {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'R'}
           </div>
-          <span className="text-xs font-semibold text-indigo-950">{currentUser.name}</span>
-          <span className="text-[10px] font-medium text-indigo-600">
+          <span className="text-xs font-semibold text-indigo-950 dark:text-indigo-200">{currentUser.name}</span>
+          <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
             ({currentUser.role === 'SUPER_ADMIN' ? 'Admin' : 'Resident'})
           </span>
         </div>
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="w-full p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start space-x-2 text-left animate-in fade-in">
-            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+          <div className="w-full p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-medium flex items-start space-x-2 text-left animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
             <div className="leading-relaxed">{errorMessage}</div>
           </div>
         )}
@@ -218,9 +218,9 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
                   hapticSelection();
                   setShowPinFallback(true);
                 }}
-                className="w-full h-11 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-200/90 active:scale-[0.98] transition-all"
+                className="w-full h-11 rounded-xl bg-slate-50 dark:bg-[#1C1C25] hover:bg-slate-100 dark:hover:bg-[#20202A] text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-200/90 dark:border-[#27354A] active:scale-[0.98] transition-all"
               >
-                <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+                <KeyRound className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 <span>Unlock with Vault PIN Instead</span>
               </button>
             </>
@@ -259,7 +259,7 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
                     setShowPinFallback(false);
                     triggerBiometricAuth();
                   }}
-                  className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-semibold active:scale-[0.98] transition-all"
+                  className="flex-1 h-11 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#282838] text-slate-700 dark:text-slate-300 text-xs font-semibold active:scale-[0.98] transition-all"
                 >
                   Use Biometrics
                 </button>
@@ -276,14 +276,14 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
           )}
 
           {/* Switch Account Option */}
-          <div className="pt-3 border-t border-slate-100">
+          <div className="pt-3 border-t border-slate-100 dark:border-[#27354A]">
             <button
               type="button"
               onClick={() => {
                 hapticSelection();
                 onSwitchAccount();
               }}
-              className="text-xs font-semibold text-slate-500 hover:text-indigo-600 flex items-center justify-center gap-1.5 mx-auto transition-colors"
+              className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-center gap-1.5 mx-auto transition-colors"
             >
               <UserCheck className="w-3.5 h-3.5" />
               <span>Switch Resident Account or Sign In</span>
@@ -291,8 +291,8 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
           </div>
 
           {/* 256-bit security seal */}
-          <div className="flex items-center justify-center gap-1.5 pt-1 text-slate-400 text-[10px] font-medium">
-            <Lock className="w-3 h-3 text-emerald-600" />
+          <div className="flex items-center justify-center gap-1.5 pt-1 text-slate-400 dark:text-slate-500 text-[10px] font-medium">
+            <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
             <span>256-bit Encrypted Local Vault</span>
           </div>
         </div>

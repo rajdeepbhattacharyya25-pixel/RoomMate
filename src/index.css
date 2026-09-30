@@ -7,7 +7,10 @@
   /* RoomMate Natural Light Design System */
   --bg-canvas: #f9f9ff;
   --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
   --bg-surface-subtle: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
   --border-subtle: #e5e7eb;
   --border-divider: #f1f5f9;
 
@@ -26,6 +29,28 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+}
+
+.dark {
+  /* RoomMate Sophisticated Dark Design System */
+  --bg-canvas: #0b0b10;
+  --bg-surface: #12121a;
+  --bg-surface-elevated: #181820;
+  --bg-surface-subtle: #161622;
+  --bg-card: #1c1c25;
+  --bg-input: #20202a;
+  --border-subtle: #27354a;
+  --border-divider: #1f293d;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --credit-green: #10b981;
+  --debt-red: #f43f5e;
+  --pending-amber: #f59e0b;
 }
 
 .pt-safe {
@@ -53,12 +78,13 @@ button, a, input, select, textarea, [role="button"] {
 
 body {
   font-family: var(--font-sans);
-  background-color: #f1f5f9;
+  background-color: var(--bg-canvas);
   color: var(--text-primary);
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 /* Glassmorphism card utilities */

@@ -147,34 +147,34 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Safeguard Alert Notice */}
-      <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)]">
-        <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-        <div className="text-xs text-indigo-950 leading-relaxed">
+      <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-start gap-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none transition-colors duration-150">
+        <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+        <div className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed">
           <span className="font-bold">Financial Safeguard Guard:</span> Critical debt settlements, overdue balances, and room join requests always notify you in real-time.
         </div>
       </div>
 
       {/* Card 1: Alert Categories & Triggers */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-2">
-          <Bell className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Alert Categories
           </h3>
         </div>
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {/* High Priority (Locked) */}
           <div className="py-3 flex items-center justify-between gap-3">
             <div className="min-w-0 pr-2">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-xs font-bold text-slate-900">High-Priority Alerts</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">High-Priority Alerts</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] flex items-center gap-1">
                   <Lock className="w-2.5 h-2.5" />
                   Locked
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-snug">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 Overdue debts, room approval requests, and security verifications.
               </p>
             </div>
@@ -195,21 +195,21 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                 handleToggleSetting('sharedBills');
               }
             }}
-            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
           >
             <div className="min-w-0 pr-2">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Receipt className="w-3.5 h-3.5 text-amber-600" />
-                <span className="text-xs font-bold text-slate-900">Shared Room Bills</span>
+                <Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Shared Room Bills</span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-snug">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 Alerts when roommates add new Wi-Fi, electricity, or grocery expenses.
               </p>
             </div>
 
             <div
               className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors shrink-0 ${
-                settings.sharedBills ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                settings.sharedBills ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
               }`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-md" />
@@ -227,21 +227,21 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                 handleToggleSetting('settlements');
               }
             }}
-            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
           >
             <div className="min-w-0 pr-2">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Handshake className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-xs font-bold text-slate-900">UPI & Cash Settlements</span>
+                <Handshake className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">UPI & Cash Settlements</span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-snug">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 Confirmations when a flatmate settles up their debt with you.
               </p>
             </div>
 
             <div
               className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors shrink-0 ${
-                settings.settlements ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                settings.settlements ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
               }`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-md" />
@@ -259,21 +259,21 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                 handleToggleSetting('nudges');
               }
             }}
-            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
           >
             <div className="min-w-0 pr-2">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="text-xs font-bold text-slate-900">Roommate Reminders & Nudges</span>
+                <MessageCircle className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Roommate Reminders & Nudges</span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-snug">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 Friendly payment nudges and reminders from fellow room members.
               </p>
             </div>
 
             <div
               className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors shrink-0 ${
-                settings.nudges ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                settings.nudges ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
               }`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-md" />
@@ -283,15 +283,15 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
       </div>
 
       {/* Card 2: Audio, Tactile & Quiet Hours */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-2">
-          <Volume2 className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Volume2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Feedback & Silence
           </h3>
         </div>
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {/* Notification Sound */}
           <div className="py-3 space-y-2">
             <div
@@ -307,12 +307,12 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
               className="flex items-center justify-between gap-3 cursor-pointer select-none"
             >
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                   {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Notification Sound Chime</div>
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Notification Sound Chime</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     Pleasant chime on bills & payment settlements
                   </div>
                 </div>
@@ -320,7 +320,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
 
               <div
                 className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors shrink-0 ${
-                  soundOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                  soundOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
                 }`}
               >
                 <div className="w-4 h-4 rounded-full bg-white shadow-md" />
@@ -332,7 +332,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                 <button
                   type="button"
                   onClick={handleTestChime}
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 active:scale-95 transition-all"
+                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 active:scale-95 transition-all"
                 >
                   <Volume2 className="w-3 h-3" />
                   <span>{testSoundPlayed ? 'Playing Chime...' : 'Test Chime'}</span>
@@ -355,12 +355,12 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
             className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
                 <Smartphone className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-900">Tactile Haptic Feedback</div>
-                <div className="text-[11px] text-slate-500">
+                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Tactile Haptic Feedback</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   Subtle vibrations on taps, debt splits & approvals
                 </div>
               </div>
@@ -368,7 +368,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
 
             <div
               className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors shrink-0 ${
-                hapticsOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                hapticsOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
               }`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-md" />
@@ -386,22 +386,22 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                 setShowQuietHours(true);
               }
             }}
-            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+            className="py-3 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
                 <Moon className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-900">Quiet Hours (DND)</div>
-                <div className="text-[11px] text-slate-500">
+                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Quiet Hours (DND)</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   Mute non-critical alerts during study or sleep
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1 text-slate-400">
-              <span className="text-xs font-semibold text-slate-700 font-mono">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">
                 {quietHoursLabel}
               </span>
               <ChevronRight className="w-4 h-4" />
@@ -411,22 +411,22 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
       </div>
 
       {/* Card 3: Cross-Device Push Notifications (FCM) */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
               <Bell className="w-4.5 h-4.5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-slate-900">Cross-Device Push Alerts</div>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Cross-Device Push Alerts</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
                 Receive notifications even when RoomMate is closed
               </div>
             </div>
           </div>
 
           {pushRegistered ? (
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1 shrink-0">
+            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shrink-0">
               <Check className="w-3 h-3" />
               <span>Active</span>
             </span>

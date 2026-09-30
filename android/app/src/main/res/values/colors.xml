@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RoomMate Signature Indigo Accent Color for Android Status Bar Notifications -->
+    <color name="notification_accent_color">#6366F1</color>
+</resources>

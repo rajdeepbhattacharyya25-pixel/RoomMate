@@ -12,6 +12,7 @@ import {
 import { Room, RoomInvitation, RoomMember, User } from '../../types';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { hapticImpact, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
+import { generateQrDataUrl } from '../../lib/services/qrGenerator';
 
 interface RoomInviteModalProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
   const [selectedExpiry, setSelectedExpiry] = useState<number | undefined>(undefined);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenSuccessMsg, setRegenSuccessMsg] = useState<string | null>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
 
   const isRoomAdmin =
     roomMembers.some(
@@ -59,10 +61,16 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
       : window.location.origin;
   const inviteLink = `${baseUrl}/join/${token}`;
 
-  // QR Code URL via reliable high-res image service with fallback
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=${encodeURIComponent(
-    inviteLink
-  )}`;
+  // Generate offline local QR Code data URL
+  React.useEffect(() => {
+    let active = true;
+    generateQrDataUrl(inviteLink, { width: 300, margin: 2 }).then((url) => {
+      if (active) setQrCodeUrl(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, [inviteLink]);
 
   const handleCopyLink = async () => {
     try {
@@ -135,55 +143,63 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
     >
       <div className="space-y-4 pb-2">
         {regenSuccessMsg && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2 animate-in fade-in">
-            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{regenSuccessMsg}</span>
           </div>
         )}
 
         {!canInvite ? (
-          <div className="p-6 text-center space-y-3 bg-slate-50 rounded-2xl border border-slate-200">
-            <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mx-auto">
+          <div className="p-6 text-center space-y-3 bg-slate-50 dark:bg-[#1C1C25] rounded-2xl border border-slate-200 dark:border-[#27354A]">
+            <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-[#20202A] text-slate-500 dark:text-slate-400 flex items-center justify-center mx-auto">
               <Lock className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-slate-800">Admin Only Invites</h3>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white">Admin Only Invites</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
               This room is configured so that only the room admin can generate and share invitations. Please ask the admin to invite new members.
             </p>
           </div>
         ) : (
           <>
             {/* Scannable QR Code Card */}
-            <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex flex-col items-center text-center space-y-3">
-              <div className="w-56 h-56 bg-slate-50 rounded-2xl p-2.5 border border-slate-100 flex items-center justify-center shadow-inner relative group">
-                <img
-                  src={qrCodeUrl}
-                  alt={`QR Code to join ${room.name}`}
-                  className="w-full h-full object-contain rounded-xl"
-                  loading="eager"
-                />
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] shadow-sm flex flex-col items-center text-center space-y-3">
+              {/* Preserved white background for camera scanning */}
+              <div className="w-56 h-56 bg-white rounded-2xl p-3 border border-slate-200 dark:border-slate-300 flex items-center justify-center shadow-inner relative group">
+                {qrCodeUrl ? (
+                  <img
+                    src={qrCodeUrl}
+                    alt={`QR Code to join ${room.name}`}
+                    className="w-full h-full object-contain rounded-xl bg-white"
+                    loading="eager"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                    <QrCode className="w-12 h-12 stroke-[1.5] text-indigo-400" />
+                    <span className="text-[10px] text-slate-400 mt-2 font-medium">Generating QR...</span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <p className="text-xs font-bold text-slate-800">Scan this QR code to join</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-xs font-bold text-slate-800 dark:text-white">Scan this QR code to join</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   Point any phone camera or use the RoomMate scanner
                 </p>
               </div>
 
               {/* Room Code Fallback Badge */}
               {invitation && (
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100">
-                  <span className="text-[11px] font-medium text-slate-600">Manual Code:</span>
-                  <span className="font-mono font-bold text-xs text-indigo-700">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/60">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Manual Code:</span>
+                  <span className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300">
                     #{invitation.inviteCode}
                   </span>
                   <button
                     type="button"
                     onClick={handleCopyCode}
-                    className="text-indigo-600 hover:text-indigo-800 text-[10px] font-semibold flex items-center gap-0.5 ml-1"
+                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 text-[10px] font-semibold flex items-center gap-0.5 ml-1"
                   >
-                    {copiedCode ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    {copiedCode ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
                     <span>{copiedCode ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
@@ -191,21 +207,21 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
             </div>
 
             {/* Invite Link & Actions */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] space-y-2.5">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Shareable Invite Link
               </label>
 
-              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-mono text-slate-700 truncate flex-1 select-all">
+              <div className="flex items-center gap-2 bg-white dark:bg-[#20202A] px-3 py-2 rounded-xl border border-slate-200 dark:border-[#27354A] shadow-xs">
+                <span className="text-xs font-mono text-slate-700 dark:text-slate-200 truncate flex-1 select-all">
                   {inviteLink}
                 </span>
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold flex items-center gap-1 transition-all shrink-0 active:scale-95"
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-all shrink-0 active:scale-95"
                 >
-                  {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  {copiedLink ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedLink ? 'Copied!' : 'Copy'}</span>
                 </button>
               </div>
@@ -214,9 +230,9 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="h-11 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                  className="h-11 rounded-xl bg-white dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#272738] border border-slate-200 dark:border-[#27354A] text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
                 >
-                  {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-600" />}
+                  {copiedLink ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-600 dark:text-slate-400" />}
                   <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
                 </button>
 
@@ -233,13 +249,13 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 
             {/* Admin Controls: Regenerate Invite & Expiration */}
             {isRoomAdmin && (
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+              <div className="p-4 rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-600" />
-                    <span className="text-xs font-bold text-slate-800">Admin Security Controls</span>
+                    <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-white">Admin Security Controls</span>
                   </div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
                     Active
                   </span>
                 </div>
@@ -248,22 +264,22 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowRegenConfirm(true)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#272738] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                     <span>Regenerate Invite & Revoke Old</span>
                   </button>
                 ) : (
-                  <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 space-y-3 animate-in fade-in">
+                  <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 space-y-3 animate-in fade-in">
                     <div>
-                      <h4 className="text-xs font-bold text-amber-900">Regenerate Invite?</h4>
-                      <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                      <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">Regenerate Invite?</h4>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
                         The current QR code and invite link will immediately stop working. Anyone using the old invitation will no longer be able to join. Existing roommates and expenses remain untouched.
                       </p>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         <span>Optional Expiration</span>
                       </label>
@@ -281,7 +297,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
                             className={`py-1.5 px-1 rounded-lg text-[11px] font-semibold transition-all ${
                               selectedExpiry === opt.hours
                                 ? 'bg-amber-600 text-white shadow-xs'
-                                : 'bg-white border border-amber-200 text-amber-900 hover:bg-amber-100'
+                                : 'bg-white dark:bg-[#20202A] border border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-[#282836]'
                             }`}
                           >
                             {opt.label}
@@ -295,7 +311,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
                         type="button"
                         disabled={isRegenerating}
                         onClick={() => setShowRegenConfirm(false)}
-                        className="flex-1 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95"
+                        className="flex-1 py-2 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#282836] active:scale-95 transition-all"
                       >
                         Cancel
                       </button>
@@ -303,7 +319,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
                         type="button"
                         disabled={isRegenerating}
                         onClick={handleConfirmRegenerate}
-                        className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center justify-center gap-1 active:scale-95 shadow-xs"
+                        className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center justify-center gap-1 active:scale-95 shadow-xs transition-all"
                       >
                         {isRegenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
                         <span>{isRegenerating ? 'Regenerating...' : 'Confirm'}</span>

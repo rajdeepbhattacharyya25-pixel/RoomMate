@@ -128,29 +128,29 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
     switch (priority) {
       case 'HIGH':
         return {
-          icon: <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />,
-          border: 'border-l-4 border-l-rose-500 border-slate-200/80',
-          bgUnread: 'bg-rose-50/25',
-          tagBg: 'bg-rose-100 text-rose-800 border-rose-200',
+          icon: <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />,
+          border: 'border-l-4 border-l-rose-500 border-slate-200/80 dark:border-[#27354A]',
+          bgUnread: 'bg-rose-50/25 dark:bg-rose-950/25',
+          tagBg: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900/60',
           tagText: 'URGENT',
           ariaPriority: 'High Priority Alert',
         };
       case 'MEDIUM':
         return {
-          icon: <Receipt className="w-4 h-4 text-amber-600 shrink-0" />,
-          border: 'border-l-4 border-l-amber-500 border-slate-200/80',
-          bgUnread: 'bg-amber-50/20',
-          tagBg: 'bg-amber-100 text-amber-800 border-amber-200',
+          icon: <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />,
+          border: 'border-l-4 border-l-amber-500 border-slate-200/80 dark:border-[#27354A]',
+          bgUnread: 'bg-amber-50/20 dark:bg-amber-950/20',
+          tagBg: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900/60',
           tagText: 'SHARED BILL',
           ariaPriority: 'Medium Priority',
         };
       case 'LOW':
       default:
         return {
-          icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />,
-          border: 'border-l-4 border-l-emerald-500 border-slate-200/80',
-          bgUnread: 'bg-emerald-50/20',
-          tagBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+          icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />,
+          border: 'border-l-4 border-l-emerald-500 border-slate-200/80 dark:border-[#27354A]',
+          bgUnread: 'bg-emerald-50/20 dark:bg-emerald-950/20',
+          tagBg: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/60',
           tagText: 'ACTIVITY',
           ariaPriority: 'Information',
         };
@@ -164,7 +164,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
     if (!notification.actionType || notification.actionType === 'NONE') return null;
 
     let label = 'View';
-    let btnClass = 'bg-slate-100 text-slate-800 hover:bg-slate-200';
+    let btnClass = 'bg-slate-100 dark:bg-[#20202A] text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#27354A]';
 
     switch (notification.actionType) {
       case 'PAY_NOW':
@@ -173,7 +173,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
         break;
       case 'VIEW_EXPENSE':
         label = 'View Expense';
-        btnClass = 'bg-slate-900 text-white hover:bg-slate-800';
+        btnClass = 'bg-slate-900 dark:bg-indigo-600 text-white hover:bg-slate-800 dark:hover:bg-indigo-700';
         break;
       case 'REVIEW':
         label = 'Review Request';
@@ -181,11 +181,11 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
         break;
       case 'VIEW_DETAILS':
         label = 'Details';
-        btnClass = 'bg-slate-100 text-slate-800 hover:bg-slate-200';
+        btnClass = 'bg-slate-100 dark:bg-[#20202A] text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#27354A]';
         break;
       case 'VIEW_BALANCE':
         label = 'View Balance';
-        btnClass = 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100';
+        btnClass = 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/40';
         break;
     }
 
@@ -248,9 +248,9 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
           transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
           cursor: isSwiping ? 'grabbing' : 'default',
         }}
-        className={`relative z-10 p-3.5 rounded-xl border bg-white shadow-2xs transition-colors select-none ${
+        className={`relative z-10 p-3.5 rounded-xl border bg-white dark:bg-[#1C1C25] shadow-2xs transition-colors select-none ${
           config.border
-        } ${!notification.isRead ? `${config.bgUnread} ring-1 ring-black/5` : 'bg-white'}`}
+        } ${!notification.isRead ? `${config.bgUnread} ring-1 ring-black/5 dark:ring-white/5` : 'bg-white dark:bg-[#1C1C25]'}`}
       >
         {/* Top Meta Row */}
         <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -266,7 +266,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
 
             {/* Room Name if present */}
             {notification.metadata?.roomName && (
-              <span className="text-[11px] font-medium text-slate-500 truncate max-w-[120px]">
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
                 • {notification.metadata.roomName}
               </span>
             )}
@@ -274,7 +274,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
 
           <div className="flex items-center gap-2 shrink-0">
             {/* Timestamp */}
-            <div className="flex items-center gap-1 text-[11px] text-slate-400">
+            <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
               <Clock className="w-3 h-3" />
               <span>{formatRelativeTime(notification.createdAt)}</span>
             </div>
@@ -282,7 +282,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
             {/* Unread indicator dot */}
             {!notification.isRead && (
               <span
-                className="w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-indigo-200"
+                className="w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-indigo-200 dark:ring-indigo-900/60"
                 title="Unread"
               />
             )}
@@ -292,19 +292,19 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
         {/* Title */}
         <h4
           className={`text-sm mb-1 leading-snug ${
-            !notification.isRead ? 'font-bold text-slate-900' : 'font-medium text-slate-700'
+            !notification.isRead ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-700 dark:text-slate-300'
           }`}
         >
           {notification.title}
         </h4>
 
         {/* Description Message */}
-        <p className="text-xs text-slate-600 leading-relaxed mb-3">
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-3">
           {notification.message}
         </p>
 
         {/* Bottom Actions Row */}
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-[#27354A]/60">
           <div className="flex items-center gap-2">
             {/* Toggle Read/Unread small button */}
             <button
@@ -312,7 +312,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
                 hapticSelection();
                 onToggleRead(notification.id, notification.isRead);
               }}
-              className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium py-1 px-1.5 rounded hover:bg-slate-50 transition-colors flex items-center gap-1"
+              className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium py-1 px-1.5 rounded hover:bg-slate-50 dark:hover:bg-[#20202A] transition-colors flex items-center gap-1"
               title={notification.isRead ? 'Mark as unread' : 'Mark as read'}
             >
               {notification.isRead ? (
@@ -334,7 +334,7 @@ export const NotificationCard: React.FC<NotificationCardProps> = ({
                 hapticImpact('LIGHT');
                 onDelete(notification.id);
               }}
-              className="text-[11px] text-slate-400 hover:text-rose-600 font-medium py-1 px-1.5 rounded hover:bg-rose-50 transition-colors flex items-center gap-1"
+              className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 font-medium py-1 px-1.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors flex items-center gap-1"
               title="Delete notification"
             >
               <Trash2 className="w-3 h-3" />

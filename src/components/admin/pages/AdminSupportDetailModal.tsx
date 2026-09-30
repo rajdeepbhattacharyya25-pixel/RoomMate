@@ -119,7 +119,7 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
     ? `Feature Suggestion: ${feature?.title}`
     : `Inquiry: ${contact?.subject}`;
 
-  const reporterName = bug?.userName || feature?.userName || contact?.userName || 'Student';
+  const reporterName = bug?.userName || feature?.userName || contact?.userName || 'Resident';
   const reporterEmail = bug?.userEmail || feature?.userEmail || contact?.userEmail || 'No email';
   const createdAt = bug?.createdAt || feature?.createdAt || contact?.createdAt || '';
 
@@ -223,7 +223,7 @@ export const AdminSupportDetailModal: React.FC<AdminSupportDetailModalProps> = (
                   Feature Roadmap Lifecycle
                 </span>
                 <span className="text-xs font-medium text-slate-600 mt-0.5 block">
-                  Update suggestion status to inform student roadmap and votes.
+                  Update suggestion status to inform resident roadmap and votes.
                 </span>
               </div>
               <div className="flex items-center gap-3">

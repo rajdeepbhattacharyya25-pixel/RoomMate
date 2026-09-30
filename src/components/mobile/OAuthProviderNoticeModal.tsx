@@ -68,20 +68,20 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
       role="dialog"
       aria-modal="true"
       aria-labelledby="oauth-notice-title"
-      className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 text-slate-900 animate-in fade-in"
+      className="fixed inset-0 z-[110] bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 text-slate-900 dark:text-white animate-in fade-in"
     >
-      <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/80 space-y-5 animate-in slide-in-from-bottom-6 sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/80 dark:border-[#27354A] space-y-5 animate-in slide-in-from-bottom-6 sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/70 flex items-center justify-center text-amber-600 flex-shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 flex items-center justify-center text-amber-600 dark:text-amber-400 flex-shrink-0">
               <ShieldAlert className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
-              <h3 id="oauth-notice-title" className="text-base font-bold text-slate-900">
+              <h3 id="oauth-notice-title" className="text-base font-bold text-slate-900 dark:text-white">
                 Google Sign-In Configuration
               </h3>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 One-time Supabase Dashboard setup required
               </p>
             </div>
@@ -89,7 +89,7 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#20202A] transition-colors"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -97,13 +97,13 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
         </div>
 
         {/* Notice description */}
-        <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/60 text-xs text-amber-900 leading-relaxed space-y-1">
+        <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-900 dark:text-amber-200 leading-relaxed space-y-1">
           <p className="font-semibold">Google OAuth is integrated in the app!</p>
-          <p className="text-amber-800/90 text-[11px]">
+          <p className="text-amber-800/90 dark:text-amber-300/90 text-[11px]">
             To process live Google logins, add your Google Cloud OAuth Client ID and Secret to your Supabase project.
           </p>
           {errorMessage && (
-            <p className="font-mono text-[10px] text-amber-950/80 bg-amber-100/60 p-1.5 rounded-lg mt-1 break-all">
+            <p className="font-mono text-[10px] text-amber-950/80 dark:text-amber-200 bg-amber-100/60 dark:bg-amber-900/40 p-1.5 rounded-lg mt-1 break-all">
               {errorMessage}
             </p>
           )}
@@ -111,34 +111,34 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
 
         {/* 3 Step Setup Guide */}
         <div className="space-y-2.5">
-          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
             Quick 2-Minute Setup Steps:
           </h4>
 
           {/* Step 1 */}
-          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl space-y-1.5">
+          <div className="p-3 bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/70 dark:border-[#27354A] rounded-xl space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">1. Google Cloud Console</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">1. Google Cloud Console</span>
               <a
                 href="https://console.cloud.google.com/apis/credentials"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
               >
                 Open Console <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
               Create an <strong>OAuth 2.0 Client ID (Web Application)</strong>. Set Authorized redirect URI to:
             </p>
-            <div className="flex items-center justify-between gap-2 p-2 bg-white border border-slate-200 rounded-lg">
-              <code className="text-[10px] text-slate-800 font-mono break-all select-all">
+            <div className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-lg">
+              <code className="text-[10px] text-slate-800 dark:text-slate-200 font-mono break-all select-all">
                 {redirectUri}
               </code>
               <button
                 type="button"
                 onClick={handleCopyUri}
-                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-200/60 flex-shrink-0"
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-1 rounded-md border border-indigo-200/60 dark:border-indigo-800/50 flex-shrink-0"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                 {copied ? 'Copied' : 'Copy'}
@@ -147,62 +147,62 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
           </div>
 
           {/* Step 2 */}
-          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl space-y-1">
+          <div className="p-3 bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/70 dark:border-[#27354A] rounded-xl space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">2. Supabase Google Provider</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">2. Supabase Google Provider</span>
               <a
                 href={`https://supabase.com/dashboard/project/${projectId}/auth/providers`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
               >
                 Go to Providers <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
               In <strong>Authentication &gt; Providers &gt; Google</strong>, toggle <strong>Enabled</strong>, paste your <strong>Client ID</strong> and <strong>Client Secret</strong>, and click <strong>Save</strong>.
             </p>
           </div>
 
           {/* Step 3: URL Configuration */}
-          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl space-y-2">
+          <div className="p-3 bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/70 dark:border-[#27354A] rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">3. Supabase URL Configuration</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">3. Supabase URL Configuration</span>
               <a
                 href={`https://supabase.com/dashboard/project/${projectId}/auth/url-configuration`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
               >
                 URL Configuration <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <div className="text-[11px] text-slate-600 space-y-1">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
               <p>• <strong>Site URL:</strong> Set to <code>http://localhost:5173</code> (do not use https://localhost, as port 443 has no server).</p>
               <p>• <strong>Redirect URLs:</strong> Add these exact patterns:</p>
             </div>
-            <div className="space-y-1 font-mono text-[10px] text-slate-700 bg-white p-2 border border-slate-200 rounded-lg select-all">
+            <div className="space-y-1 font-mono text-[10px] text-slate-700 dark:text-slate-300 bg-white dark:bg-[#20202A] p-2 border border-slate-200 dark:border-[#27354A] rounded-lg select-all">
               <div>• <code>roommate://**</code> (Mandatory for Android App deep-linking)</div>
               <div>• <code>roommate://auth-callback</code></div>
               <div>• <code>http://localhost:5173/**</code> (Web Dev)</div>
               <div>• <code>https://localhost/**</code></div>
               <div>• <code>https://*.vercel.app/**</code> (Production Web)</div>
             </div>
-            <p className="text-[10px] text-amber-700">
+            <p className="text-[10px] text-amber-700 dark:text-amber-400">
               ⚠️ Without <code>roommate://**</code>, Supabase redirects to <code>https://localhost</code>, which fails on mobile with ERR_CONNECTION_REFUSED.
             </p>
           </div>
         </div>
 
         {/* 4. Instant Paste & Redeem Tool */}
-        <div className="p-3.5 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl space-y-2.5">
+        <div className="p-3.5 bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/40 rounded-2xl space-y-2.5">
           <div className="flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-indigo-600" />
-            <span className="text-xs font-bold text-indigo-900">
+            <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
               Browser stuck on "Site can't be reached"?
             </span>
           </div>
-          <p className="text-[11px] text-indigo-800/80 leading-relaxed">
+          <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
             If Google already authenticated you and the browser landed on <code>https://localhost/#access_token=...</code>, paste that address here to complete sign-in immediately:
           </p>
           <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
               value={pasteInput}
               onChange={(e) => setPasteInput(e.target.value)}
               placeholder="https://localhost/#access_token=..."
-              className="flex-1 min-w-0 bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              className="flex-1 min-w-0 bg-white dark:bg-[#20202A] border border-indigo-200 dark:border-[#27354A] rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
             />
             <button
               type="button"
@@ -229,13 +229,13 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
               ) : (
                 <>
                   <span>Sign In</span>
-                  <ArrowRight className="w-3 h-3" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
           </div>
           {redeemError && (
-            <p className="text-[10px] text-red-600 font-medium">{redeemError}</p>
+            <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">{redeemError}</p>
           )}
         </div>
 
@@ -244,7 +244,7 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
           <button
             type="button"
             onClick={handleClose}
-            className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors"
+            className="w-full h-11 bg-slate-900 dark:bg-[#20202A] hover:bg-slate-800 dark:hover:bg-[#27354A] text-white border dark:border-[#27354A] rounded-xl text-xs font-bold transition-colors"
           >
             Close Guide
           </button>

@@ -110,7 +110,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[375px] bg-slate-900 border border-white/15 rounded-3xl p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto text-white animate-in zoom-in-95"
+        className="w-full max-w-[375px] bg-slate-900 dark:bg-[#12121A] border border-white/15 dark:border-[#27354A] rounded-3xl p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto text-white animate-in zoom-in-95"
       >
         {/* Header Bar */}
         <div className="flex items-center justify-between">
@@ -132,7 +132,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
         </div>
 
         {/* Digital Proof Voucher Card (Aesthetic Preview) */}
-        <div className="relative rounded-2xl bg-gradient-to-b from-slate-800/90 to-indigo-950/90 border border-white/15 p-4 space-y-3.5 shadow-inner overflow-hidden">
+        <div className="relative rounded-2xl bg-gradient-to-b from-slate-800/90 to-indigo-950/90 dark:from-[#1C1C25] dark:to-[#161622] border border-white/15 dark:border-[#27354A] p-4 space-y-3.5 shadow-inner overflow-hidden">
           {/* Subtle Top Accent */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-indigo-500 to-blue-500" />
 

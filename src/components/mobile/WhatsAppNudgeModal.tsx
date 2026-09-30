@@ -136,7 +136,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
       <div className="space-y-3.5 pb-4">
           
           {/* 1. Roommate Debt Banner */}
-          <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 relative overflow-hidden">
+          <div className="bg-slate-50 dark:bg-[#1C1C25] rounded-2xl p-3.5 border border-slate-200/70 dark:border-[#27354A] relative overflow-hidden">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 {/* Avatar with Verified Roommate Badge */}
@@ -145,7 +145,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                     {debtorUser.name.charAt(0).toUpperCase()}
                   </div>
                   <div
-                    className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center shadow-xs"
+                    className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white dark:border-[#1C1C25] flex items-center justify-center shadow-xs"
                     title="Verified Roommate"
                   >
                     <Check className="w-2.5 h-2.5 text-white stroke-[3]" />
@@ -153,10 +153,10 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-sm font-semibold text-slate-900">{debtorUser.name}</span>
-                    <span className="text-[11px] text-slate-500 font-medium">({debtorUser.phone || 'Room 302'})</span>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{debtorUser.name}</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">({debtorUser.phone || 'Room 302'})</span>
                   </div>
-                  <div className="flex items-center text-[11px] font-medium text-emerald-600 mt-0.5">
+                  <div className="flex items-center text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
                     Verified Flatmate
                   </div>
@@ -165,8 +165,8 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
 
               {/* Outstanding Balance Display */}
               <div className="text-right">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Balance</span>
-                <div className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200 inline-block font-mono">
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Balance</span>
+                <div className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 inline-block font-mono">
                   Owes ₹{totalAmount.toFixed(2)}
                 </div>
               </div>
@@ -174,16 +174,16 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
 
             {/* Split Breakdown Mini Chips */}
             {items && items.length > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex flex-wrap gap-1.5 items-center">
-                <span className="text-[11px] font-medium text-slate-400 mr-0.5">Split Items:</span>
+              <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-[#27354A]/60 flex flex-wrap gap-1.5 items-center">
+                <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 mr-0.5">Split Items:</span>
                 {items.map((item, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-slate-200 text-xs text-slate-700 shadow-2xs"
+                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-xs text-slate-700 dark:text-slate-300 shadow-2xs"
                   >
                     <span className="mr-1">{idx % 2 === 0 ? '📶' : '🛒'}</span>
                     <span>{item.title}:</span>
-                    <strong className="ml-1 text-slate-900 font-semibold font-mono">
+                    <strong className="ml-1 text-slate-900 dark:text-white font-semibold font-mono">
                       ₹{item.shareAmount.toFixed(2)}
                     </strong>
                   </span>
@@ -193,10 +193,10 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           </div>
 
           {/* 2. Receiving UPI ID Card */}
-          <div className="bg-white rounded-xl p-3 border border-slate-200 flex items-center justify-between shadow-2xs">
+          <div className="bg-white dark:bg-[#1C1C25] rounded-xl p-3 border border-slate-200 dark:border-[#27354A] flex items-center justify-between shadow-2xs">
             <div className="flex items-center space-x-2.5 overflow-hidden flex-1 mr-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100 dark:border-emerald-800/50">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="truncate flex-1">
                 {isEditingUpi ? (
@@ -210,7 +210,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                       value={tempUpiInput}
                       onChange={(e) => setTempUpiInput(e.target.value)}
                       placeholder="username@okaxis"
-                      className="h-9 px-2.5 bg-slate-50 border border-indigo-400 rounded-lg text-base md:text-xs font-mono text-slate-900 focus:outline-none w-full transition-colors"
+                      className="h-9 px-2.5 bg-slate-50 dark:bg-[#20202A] border border-indigo-400 dark:border-indigo-500 rounded-lg text-base md:text-xs font-mono text-slate-900 dark:text-white focus:outline-none w-full transition-colors"
                       autoFocus
                     />
                     <button
@@ -223,12 +223,12 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 ) : (
                   <>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-xs text-slate-500 font-medium">Receive on:</span>
-                      <span className="text-xs font-mono font-semibold text-slate-900 truncate">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Receive on:</span>
+                      <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white truncate">
                         {receivingUpiId}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 font-normal leading-tight mt-0.5">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-normal leading-tight mt-0.5">
                       Instant bank credit via UPI Autopay / Intent
                     </p>
                   </>
@@ -239,7 +239,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
             {!isEditingUpi && (
               <button
                 onClick={handleStartEditUpi}
-                className="shrink-0 text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center space-x-1 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+                className="shrink-0 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-xs font-semibold flex items-center space-x-1 px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
                 id="btn-change-upi"
               >
                 <Edit2 className="w-3 h-3" />
@@ -251,12 +251,12 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           {/* 3. Nudge Tone Selector (Segmented Tabs) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Select Reminder Tone
               </span>
-              <span className="text-[11px] font-semibold text-indigo-600">Pre-formatted</span>
+              <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">Pre-formatted</span>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-[#20202A] rounded-xl border border-slate-200 dark:border-[#27354A]">
               {/* Casual Tab */}
               <button
                 type="button"
@@ -267,7 +267,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'casual'
                     ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-white/60'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/10'
                 }`}
               >
                 <span>☕</span>
@@ -284,7 +284,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'direct'
                     ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-white/60'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/10'
                 }`}
               >
                 <span>⚡</span>
@@ -301,7 +301,7 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 className={`py-2 px-2 min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all duration-150 ${
                   tone === 'roomie'
                     ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-white/60'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/10'
                 }`}
               >
                 <span>🍕</span>
@@ -313,10 +313,10 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           {/* 4. Live WhatsApp Message Bubble Preview */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Live Message Preview
               </span>
-              <span className="inline-flex items-center text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium">
+              <span className="inline-flex items-center text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
                 Auto-synced
               </span>
@@ -324,24 +324,23 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
 
             {/* WhatsApp Chat Container Window */}
             <div
-              className="rounded-2xl p-3 border border-slate-200 relative shadow-inner"
+              className="rounded-2xl p-3 border border-slate-200 dark:border-[#27354A] relative shadow-inner bg-[#F0ECE2] dark:bg-[#0B141A]"
               style={{
-                backgroundColor: '#F0ECE2',
-                backgroundImage: 'radial-gradient(#DFD8CB 0.75px, transparent 0.75px)',
+                backgroundImage: 'radial-gradient(currentColor 0.75px, transparent 0.75px)',
                 backgroundSize: '12px 12px',
               }}
             >
               {/* Date Pill */}
               <div className="flex justify-center mb-2">
-                <span className="bg-white/85 backdrop-blur-xs text-[10px] text-slate-600 px-2.5 py-0.5 rounded-md font-medium shadow-2xs">
+                <span className="bg-white/85 dark:bg-[#182229] backdrop-blur-xs text-[10px] text-slate-600 dark:text-slate-300 border border-transparent dark:border-white/5 px-2.5 py-0.5 rounded-md font-medium shadow-2xs">
                   Today
                 </span>
               </div>
 
-              {/* WhatsApp Message Bubble (Green Sender Bubble) */}
-              <div className="relative ml-auto max-w-[92%] bg-[#E7FFDB] border border-[#C3E6B7] text-slate-800 rounded-2xl rounded-tr-xs p-3 shadow-xs text-xs space-y-1.5 font-sans">
+              {/* WhatsApp Message Bubble (Sender Bubble) */}
+              <div className="relative ml-auto max-w-[92%] bg-[#E7FFDB] dark:bg-[#005C4B] border border-[#C3E6B7] dark:border-[#005C4B] text-slate-800 dark:text-[#E9EDEF] rounded-2xl rounded-tr-xs p-3 shadow-xs text-xs space-y-1.5 font-sans">
                 {/* Message Text */}
-                <p className="font-semibold text-slate-900 leading-snug">
+                <p className="font-semibold text-slate-900 dark:text-white leading-snug">
                   {tone === 'direct' && `*${roomName} Expense Split Reminder* ⚡\nHey ${debtorUser.name.split(' ')[0]},`}
                   {tone === 'roomie' && `Hey ${debtorUser.name.split(' ')[0]}! 🍕 Dues check for ${roomName}:`}
                   {tone === 'casual' && `Hey ${debtorUser.name.split(' ')[0]}! 👋 Hope you're having a good day. Quick reminder for our ${roomName} split:`}
@@ -349,51 +348,51 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
 
                 {/* Split Items */}
                 {items && items.length > 0 && (
-                  <div className="pl-1.5 border-l-2 border-emerald-500 space-y-0.5 text-[11px] text-slate-700">
+                  <div className="pl-1.5 border-l-2 border-emerald-500 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
                     {items.slice(0, 3).map((item, i) => (
                       <div key={i}>
-                        • {item.title}: <span className="font-semibold text-slate-900 font-mono">₹{item.shareAmount.toFixed(2)}</span>
+                        • {item.title}: <span className="font-semibold text-slate-900 dark:text-white font-mono">₹{item.shareAmount.toFixed(2)}</span>
                       </div>
                     ))}
                     {items.length > 3 && (
-                      <div className="text-[10px] text-slate-500 italic">+ {items.length - 3} more shared items</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">+ {items.length - 3} more shared items</div>
                     )}
                   </div>
                 )}
 
                 {/* Total Due Highlight Card */}
-                <div className="bg-white/80 rounded-lg p-2 border border-emerald-200/70 flex items-center justify-between">
-                  <span className="font-semibold text-slate-900 text-xs">Total Due:</span>
-                  <span className="font-bold text-emerald-800 font-mono text-xs">
+                <div className="bg-white/80 dark:bg-[#025144] rounded-lg p-2 border border-emerald-200/70 dark:border-[#00705B] flex items-center justify-between">
+                  <span className="font-semibold text-slate-900 dark:text-white text-xs">Total Due:</span>
+                  <span className="font-bold text-emerald-800 dark:text-emerald-200 font-mono text-xs">
                     ₹{totalAmount.toFixed(2)}
                   </span>
                 </div>
 
                 {/* UPI Direct Link Box */}
                 <div className="pt-0.5">
-                  <div className="text-[10px] text-slate-600 font-medium">
+                  <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium">
                     👉 Tap here to pay via GPay / PhonePe in 1-tap:
                   </div>
-                  <div className="mt-1 bg-emerald-800/10 text-emerald-950 p-1.5 rounded-lg font-mono text-[9px] break-all border border-emerald-300/80 select-all leading-snug">
+                  <div className="mt-1 bg-emerald-800/10 dark:bg-black/25 text-emerald-950 dark:text-emerald-200 p-1.5 rounded-lg font-mono text-[9px] break-all border border-emerald-300/80 dark:border-emerald-700/50 select-all leading-snug">
                     {upiDeepLink}
                   </div>
                 </div>
 
                 {/* Timestamp & Double Blue Tick */}
-                <div className="flex items-center justify-end space-x-1 pt-0.5 text-[10px] text-slate-500">
+                <div className="flex items-center justify-end space-x-1 pt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                   <span>10:42 AM</span>
                   <CheckCheck className="w-3.5 h-3.5 text-[#34B7F1] stroke-[2.5]" />
                 </div>
 
                 {/* WhatsApp Chat Tail */}
-                <div className="absolute -right-1.5 top-0 w-2.5 h-2.5 bg-[#E7FFDB] border-t border-r border-[#C3E6B7] rotate-45" />
+                <div className="absolute -right-1.5 top-0 w-2.5 h-2.5 bg-[#E7FFDB] dark:bg-[#005C4B] border-t border-r border-[#C3E6B7] dark:border-[#005C4B] rotate-45" />
               </div>
             </div>
           </div>
         </div>
 
         {/* Action Footer Area */}
-        <div className="p-4 bg-white border-t border-slate-100 space-y-2">
+        <div className="p-4 bg-white dark:bg-[#12121A] border-t border-slate-100 dark:border-[#27354A] space-y-2">
           {/* Primary Action: Send via WhatsApp */}
           <a
             href={whatsAppUrl}
@@ -422,17 +421,17 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
           <div className="grid grid-cols-2 gap-2 pt-0.5">
             <button
               onClick={handleCopy}
-              className="h-11 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
+              className="h-11 bg-slate-50 dark:bg-[#1C1C25] hover:bg-slate-100 dark:hover:bg-[#22222E] active:scale-[0.98] border border-slate-200 dark:border-[#27354A] rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
               id="btn-copy"
             >
               {copied ? (
                 <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span className="text-emerald-700 font-semibold">Copied!</span>
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Copied!</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4 text-slate-500" />
+                  <Copy className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <span>Copy Message</span>
                 </>
               )}
@@ -443,10 +442,10 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
                 setShowQrModal(true);
                 hapticImpact('MEDIUM');
               }}
-              className="h-11 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200 rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 text-xs font-semibold transition-all"
+              className="h-11 bg-slate-50 dark:bg-[#1C1C25] hover:bg-slate-100 dark:hover:bg-[#22222E] active:scale-[0.98] border border-slate-200 dark:border-[#27354A] rounded-xl px-3 flex items-center justify-center space-x-1.5 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
               id="btn-show-qr"
             >
-              <QrCode className="w-4 h-4 text-indigo-600" />
+              <QrCode className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Show UPI QR</span>
             </button>
           </div>
@@ -456,20 +455,20 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
             <button
               onClick={handleDirectSettle}
               disabled={settleSuccess}
-              className="inline-flex items-center space-x-1 text-xs font-medium text-slate-500 hover:text-indigo-600 active:scale-95 transition-all py-1 px-2 rounded"
+              className="inline-flex items-center space-x-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-95 transition-all py-1 px-2 rounded"
             >
               {settleSuccess ? (
-                <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                   <Check className="w-3.5 h-3.5" />
                   <span>Settlement Recorded!</span>
                 </span>
               ) : (
                 <>
                   <span>Already received offline?</span>
-                  <span className="text-indigo-600 font-semibold underline underline-offset-2">
+                  <span className="text-indigo-600 dark:text-indigo-400 font-semibold underline underline-offset-2">
                     Record Settlement Directly
                   </span>
-                  <ArrowRight className="w-3.5 h-3.5 text-indigo-600 ml-0.5" />
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ml-0.5" />
                 </>
               )}
             </button>
@@ -484,36 +483,36 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="max-w-xs w-full p-5 rounded-3xl bg-white border border-slate-200 text-center space-y-4 shadow-2xl animate-in zoom-in-95"
+            className="max-w-xs w-full p-5 rounded-3xl bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] text-center space-y-4 shadow-2xl animate-in zoom-in-95"
           >
             <div className="flex items-center justify-between">
               <div className="text-left">
-                <h3 className="text-sm font-bold text-slate-900">Instant UPI Payment QR</h3>
-                <p className="text-[11px] text-slate-500">Scan with GPay, PhonePe, or Paytm</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Instant UPI Payment QR</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Scan with GPay, PhonePe, or Paytm</p>
               </div>
               <button
                 onClick={() => setShowQrModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#282838] text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* QR Image Container */}
-            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl mx-auto inline-block shadow-inner">
+            {/* QR Image Container (Must keep white padding for optical sensor scanning) */}
+            <div className="p-3.5 bg-white border border-slate-200 dark:border-slate-300 rounded-2xl mx-auto inline-block shadow-md">
               <img
                 src={upiQrCodeUrl}
                 alt="UPI Payment QR Code"
-                className="w-48 h-48 rounded-lg object-contain mx-auto"
+                className="w-48 h-48 rounded-lg object-contain mx-auto bg-white"
               />
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 text-center">
-              <span className="text-[10px] text-slate-500 uppercase font-semibold block">Amount to Settle</span>
-              <div className="text-base font-bold text-slate-900 font-mono">
+            <div className="bg-slate-50 dark:bg-[#20202A] rounded-xl p-2.5 border border-slate-200 dark:border-[#27354A] text-center">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold block">Amount to Settle</span>
+              <div className="text-base font-bold text-slate-900 dark:text-white font-mono">
                 ₹{totalAmount.toFixed(2)}
               </div>
-              <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5">
                 {receivingUpiId}
               </div>
             </div>

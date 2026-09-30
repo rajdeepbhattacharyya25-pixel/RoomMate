@@ -15,10 +15,10 @@ export const BUILD_INFO: BuildMetadata = {
   appName: 'RoomMate',
   version: '1.0.4',
   buildNumber: 10,
-  channel: 'staging' as 'staging' | 'production',
-  buildTimestamp: '2026-09-25T16:25:18.744Z',
-  buildDate: '25 Sept 2026',
-  buildTime: '21:55:18 IST',
+  channel: 'production' as 'staging' | 'production',
+  buildTimestamp: '2026-09-30T18:27:32.188Z',
+  buildDate: '30 Sept 2026',
+  buildTime: '23:57:32 IST',
 };
 
 export default BUILD_INFO;

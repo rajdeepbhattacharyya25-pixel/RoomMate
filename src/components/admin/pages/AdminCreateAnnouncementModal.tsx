@@ -111,7 +111,7 @@ export const AdminCreateAnnouncementModal: React.FC<AdminCreateAnnouncementModal
             <div>
               <h2 className="text-base font-bold text-slate-900">Broadcast Announcement</h2>
               <p className="text-xs text-slate-500">
-                Dispatch platform-wide alerts, maintenance notices, or updates to student flatmates.
+                Dispatch platform-wide alerts, maintenance notices, or updates to resident flatmates.
               </p>
             </div>
           </div>
@@ -156,7 +156,7 @@ export const AdminCreateAnnouncementModal: React.FC<AdminCreateAnnouncementModal
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
-              placeholder="Provide clear details, expected downtime or instructions for students..."
+              placeholder="Provide clear details, expected downtime or instructions for residents..."
               className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-400"
               required
             />
@@ -215,7 +215,7 @@ export const AdminCreateAnnouncementModal: React.FC<AdminCreateAnnouncementModal
             {audience === 'SELECTED_USERS' && (
               <div className="col-span-1 sm:col-span-2 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                  Select Specific Students ({selectedUserIds.length} chosen)
+                  Select Specific Residents ({selectedUserIds.length} chosen)
                 </span>
                 <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
                   {allUsers.map((u) => (
@@ -355,7 +355,7 @@ export const AdminCreateAnnouncementModal: React.FC<AdminCreateAnnouncementModal
                 <Eye className="w-3.5 h-3.5 text-indigo-600" /> Mobile Notification Preview
               </span>
               <span className="font-mono text-slate-500 font-semibold">
-                Est. ~{estimatedRecipients} students
+                Est. ~{estimatedRecipients} residents
               </span>
             </div>
 

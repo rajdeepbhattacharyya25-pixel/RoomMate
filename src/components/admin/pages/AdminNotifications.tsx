@@ -161,7 +161,7 @@ export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Broadcast emergency notices, maintenance schedules, or major feature updates directly to student apps.
+            Broadcast emergency notices, maintenance schedules, or major feature updates directly to resident apps.
           </p>
         </div>
 
@@ -215,7 +215,7 @@ export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
               <div className="p-3 bg-white rounded-xl border border-slate-200">
                 <span className="text-slate-400 text-[11px] block">Confirmed Reach</span>
                 <span className="font-bold text-slate-800 font-mono text-sm">
-                  {selectedAnnouncement.recipientsCount} Students
+                  {selectedAnnouncement.recipientsCount} Residents
                 </span>
               </div>
               <div className="p-3 bg-white rounded-xl border border-slate-200">

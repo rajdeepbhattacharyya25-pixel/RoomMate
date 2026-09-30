@@ -190,6 +190,7 @@ export type Database = {
           join_policy: 'APPROVAL_REQUIRED' | 'INSTANT';
           invite_policy: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived: boolean;
+          is_frozen: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -202,6 +203,7 @@ export type Database = {
           join_policy?: 'APPROVAL_REQUIRED' | 'INSTANT';
           invite_policy?: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived?: boolean;
+          is_frozen?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -214,6 +216,7 @@ export type Database = {
           join_policy?: 'APPROVAL_REQUIRED' | 'INSTANT';
           invite_policy?: 'ALL_MEMBERS' | 'ADMIN_ONLY';
           is_archived?: boolean;
+          is_frozen?: boolean;
           created_at?: string;
           updated_at?: string;
         };

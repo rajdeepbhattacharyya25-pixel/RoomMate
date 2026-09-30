@@ -60,15 +60,15 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Card 1: Frequently Asked Questions */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center space-x-2">
-          <HelpCircle className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <HelpCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Frequently Asked Questions
           </h3>
         </div>
 
-        <div className="space-y-2 divide-y divide-slate-100 pt-1">
+        <div className="space-y-2 divide-y divide-slate-100 dark:divide-[#27354A] pt-1">
           {FAQS.map((faq) => {
             const isExpanded = expandedFaq === faq.id;
             return (
@@ -78,7 +78,7 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
                   onClick={() => toggleFaq(faq.id)}
                   className="w-full flex items-center justify-between text-left py-1 group"
                 >
-                  <span className="text-xs font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors pr-2">
+                  <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors pr-2">
                     {faq.q}
                   </span>
                   {isExpanded ? (
@@ -88,7 +88,7 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
                   )}
                 </button>
                 {isExpanded && (
-                  <p className="text-[11px] text-slate-600 leading-relaxed pt-1.5 pb-1 animate-in fade-in">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed pt-1.5 pb-1 animate-in fade-in">
                     {faq.a}
                   </p>
                 )}
@@ -99,22 +99,22 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
       </div>
 
       {/* Card 2: Report a Problem Modal Trigger */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
             <AlertCircle className="w-4.5 h-4.5" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
               Encountered a Glitch?
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Submit bug reports with diagnostic screenshots
             </p>
           </div>
         </div>
 
-        <p className="text-[11px] text-slate-600 leading-relaxed">
+        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
           If debt numbers don&apos;t align, an image upload fails, or notifications misbehave, let our engineering team know directly.
         </p>
 
@@ -124,29 +124,29 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
             hapticImpact('LIGHT');
             setShowReportModal(true);
           }}
-          className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
+          className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#20202A] dark:hover:bg-[#252532] text-slate-800 dark:text-slate-200 dark:border dark:border-[#27354A] text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
         >
-          <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+          <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
           <span>Report an Issue or Suggest Feature</span>
         </button>
       </div>
 
       {/* Card 3: Support Channels */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center space-x-2">
-          <Mail className="w-4 h-4 text-indigo-600" />
-          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <Mail className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Direct Support Channels
           </h4>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1 text-xs">
-          <div className="text-slate-500 text-[10px] font-medium">Developer & Support Desk</div>
-          <div className="font-mono text-slate-900 font-semibold select-all">
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/70 dark:border-[#27354A] space-y-1 text-xs">
+          <div className="text-slate-500 dark:text-slate-400 text-[10px] font-medium">Developer & Support Desk</div>
+          <div className="font-mono text-slate-900 dark:text-slate-100 font-semibold select-all">
             support@roommate.app
           </div>
-          <p className="text-[10px] text-slate-500 pt-1">
-            Student queries answered within 24 hours during academic terms.
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1">
+            Resident inquiries answered within 24 hours.
           </p>
         </div>
       </div>

@@ -171,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 {allUsers.map((u) => (
                   <option key={u.id} value={u.id} className="bg-slate-900 text-white">
-                    {u.name} ({u.role === 'SUPER_ADMIN' ? '👑 Admin' : '🎓 Student'})
+                    {u.name} ({u.role === 'SUPER_ADMIN' ? '👑 Admin' : '🏠 Resident'})
                   </option>
                 ))}
               </select>

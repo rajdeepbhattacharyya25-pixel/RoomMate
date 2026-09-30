@@ -43,24 +43,24 @@ const FORMAT_OPTIONS: Array<{
     icon: FileText,
     title: 'PDF Report',
     subtitle: 'Detailed room shared expense & settlement statement — best for sharing',
-    iconBg: 'bg-rose-50 border-rose-100',
-    iconColor: 'text-rose-600',
+    iconBg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/50',
+    iconColor: 'text-rose-600 dark:text-rose-400',
   },
   {
     format: 'csv',
     icon: Table2,
     title: 'CSV Spreadsheet',
     subtitle: 'Raw shared expense & roommate split data — best for Excel / Sheets',
-    iconBg: 'bg-emerald-50 border-emerald-100',
-    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/50',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
   },
   {
     format: 'xlsx',
     icon: FileSpreadsheet,
     title: 'Excel Workbook (.xlsx)',
     subtitle: 'Multi-sheet workbook (Summary, Expenses, Settlements, Splits)',
-    iconBg: 'bg-sky-50 border-sky-100',
-    iconColor: 'text-sky-600',
+    iconBg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-100 dark:border-sky-900/50',
+    iconColor: 'text-sky-600 dark:text-sky-400',
   },
 ];
 
@@ -123,7 +123,7 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
         {exportState === 'IDLE' && (
           <>
             <div className="space-y-2.5">
-              <p className="text-xs text-slate-500 font-medium px-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium px-0.5">
                 Choose format to download or share:
               </p>
 
@@ -133,7 +133,7 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
                   <button
                     key={opt.format}
                     onClick={() => handleExport(opt.format)}
-                    className="w-full p-3.5 rounded-2xl bg-white border border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/20 active:scale-[0.98] transition-all text-left flex items-start gap-3.5 shadow-2xs group"
+                    className="w-full p-3.5 rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/20 active:scale-[0.98] transition-all text-left flex items-start gap-3.5 shadow-2xs group"
                   >
                     <div
                       className={`w-10 h-10 rounded-xl border ${opt.iconBg} ${opt.iconColor} flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}
@@ -142,12 +142,12 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {opt.title}
                         </span>
-                        <Download className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                        <Download className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">
                         {opt.subtitle}
                       </p>
                     </div>
@@ -157,10 +157,10 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
             </div>
 
             {/* Privacy & Room Isolation Banner */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-slate-600 leading-relaxed">
-                <span className="font-semibold text-slate-800">Strict Room Privacy: </span>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                <span className="font-semibold text-slate-800 dark:text-white">Strict Room Privacy: </span>
                 Only shared expenses and settlements for {roomName} are exported. Personal Vault expenses are never included.
               </div>
             </div>
@@ -170,14 +170,14 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
         {/* State 2: GENERATING — Loading Spinner */}
         {exportState === 'GENERATING' && (
           <div className="py-10 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-2xs">
               <Loader2 className="w-7 h-7 animate-spin" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Generating {activeFormat?.toUpperCase()} Report...
               </h3>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
                 Compiling shared bills, roommate balances, and itemized splits for {monthLabel}...
               </p>
             </div>
@@ -187,12 +187,12 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
         {/* State 3: SUCCESS — Confirmation & Auto-Close */}
         {exportState === 'SUCCESS' && (
           <div className="py-10 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-2xs">
               <CheckCircle2 className="w-7 h-7 stroke-[2]" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900">Export Successful!</h3>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Export Successful!</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
                 Your report has been generated and downloaded to your device.
               </p>
             </div>
@@ -202,12 +202,12 @@ export const RoomExportBottomSheet: React.FC<RoomExportBottomSheetProps> = ({
         {/* State 4: ERROR — Retry Option */}
         {exportState === 'ERROR' && (
           <div className="py-8 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto shadow-2xs">
               <AlertCircle className="w-7 h-7 stroke-[2]" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900">Couldn't generate report</h3>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Couldn't generate report</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
                 An unexpected error occurred while compiling data. Please try again.
               </p>
             </div>

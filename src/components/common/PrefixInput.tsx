@@ -35,15 +35,15 @@ export const PrefixInput = forwardRef<HTMLInputElement, PrefixInputProps>(
 
     return (
       <div
-        className={`flex items-center bg-slate-50 border rounded-xl overflow-hidden transition-all ${
+        className={`flex items-center bg-slate-50 dark:bg-[#20202A] border rounded-xl overflow-hidden transition-all ${
           hasError
-            ? 'border-rose-400 bg-rose-50/30 ring-2 ring-rose-500/20 focus-within:border-rose-500'
-            : `border-slate-200 focus-within:ring-2 focus-within:bg-white ${focusRing}`
-        } ${disabled ? 'opacity-50 pointer-events-none bg-slate-100' : ''} ${containerClassName}`}
+            ? 'border-rose-400 bg-rose-50/30 dark:bg-rose-950/20 ring-2 ring-rose-500/20 focus-within:border-rose-500'
+            : `border-slate-200 dark:border-[#27354A] focus-within:ring-2 focus-within:bg-white dark:focus-within:bg-[#181820] ${focusRing}`
+        } ${disabled ? 'opacity-50 pointer-events-none bg-slate-100 dark:bg-[#12121A]' : ''} ${containerClassName}`}
       >
         <div
           onClick={() => inputRef.current?.focus()}
-          className={`flex items-center justify-center px-3 py-2.5 bg-slate-100/90 border-r border-slate-200 text-slate-500 font-mono font-bold text-xs select-none shrink-0 cursor-pointer ${prefixClassName}`}
+          className={`flex items-center justify-center px-3 py-2.5 bg-slate-100/90 dark:bg-[#1C1C25] border-r border-slate-200 dark:border-[#27354A] text-slate-500 dark:text-slate-400 font-mono font-bold text-xs select-none shrink-0 cursor-pointer ${prefixClassName}`}
           aria-hidden="true"
         >
           {prefix}
@@ -51,7 +51,7 @@ export const PrefixInput = forwardRef<HTMLInputElement, PrefixInputProps>(
         <input
           ref={inputRef}
           disabled={disabled}
-          className={`w-full px-3 py-2.5 bg-transparent border-0 text-xs font-mono font-medium text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal ${className}`}
+          className={`w-full px-3 py-2.5 bg-transparent border-0 text-xs font-mono font-medium text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal ${className}`}
           {...restProps}
         />
       </div>

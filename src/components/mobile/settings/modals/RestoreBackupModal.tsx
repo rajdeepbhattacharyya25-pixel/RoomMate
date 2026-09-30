@@ -127,20 +127,20 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="restore-modal-title"
-      className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 text-slate-900 animate-in fade-in"
+      className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 text-slate-900 dark:text-slate-100 animate-in fade-in"
     >
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 space-y-5 animate-in slide-in-from-bottom-8 sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-md bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 dark:border-[#27354A] space-y-5 animate-in slide-in-from-bottom-8 sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-[#27354A]/60 pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
               <Upload className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
-              <h3 id="restore-modal-title" className="text-sm font-bold text-slate-900">
+              <h3 id="restore-modal-title" className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Restore Expense Vault
               </h3>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                 Import and recover from an encrypted backup
               </p>
             </div>
@@ -148,7 +148,7 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2638] transition-colors"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -157,8 +157,8 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
 
         {/* Error Alert */}
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-start gap-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-rose-300 text-xs font-medium flex items-start gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
             <span className="leading-relaxed">{error}</span>
           </div>
         )}
@@ -177,26 +177,26 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
-              className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-3xl p-8 flex flex-col items-center text-center space-y-3 bg-slate-50/70 hover:bg-indigo-50/30 transition-all cursor-pointer group"
+              className="w-full border-2 border-dashed border-slate-200 dark:border-[#27354A] hover:border-indigo-500 dark:hover:border-indigo-400 rounded-3xl p-8 flex flex-col items-center text-center space-y-3 bg-slate-50/70 dark:bg-[#181820] hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all cursor-pointer group"
             >
-              <div className="w-14 h-14 rounded-2xl bg-white shadow-xs border border-slate-200/80 flex items-center justify-center text-slate-500 group-hover:text-indigo-600 group-hover:border-indigo-300 transition-all">
+              <div className="w-14 h-14 rounded-2xl bg-white dark:bg-[#20202A] shadow-xs border border-slate-200/80 dark:border-[#27354A] flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:border-indigo-300 transition-all">
                 {isLoading ? (
-                  <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+                  <Loader2 className="w-7 h-7 animate-spin text-indigo-600 dark:text-indigo-400" />
                 ) : (
                   <Upload className="w-7 h-7 stroke-[2]" />
                 )}
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-800">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   {isLoading ? 'Inspecting Backup File...' : 'Choose Backup Archive'}
                 </p>
-                <p className="text-[11px] text-slate-500">
-                  Select a <code className="font-mono text-slate-700">.json</code> file from Google Drive or device
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Select a <code className="font-mono text-slate-700 dark:text-slate-300">.json</code> file from Google Drive or device
                 </p>
               </div>
             </button>
 
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-[11px] text-slate-600 flex items-start gap-2">
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#181820] border border-slate-200/70 dark:border-[#27354A] text-[11px] text-slate-600 dark:text-slate-300 flex items-start gap-2">
               <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
               <span>
                 RoomMate backup files are encrypted with AES-256. You will be prompted to enter the 4-digit PIN you used when creating the backup.
@@ -208,8 +208,8 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
         {/* STEP 2: ENTER PIN */}
         {step === 'ENTER_PIN' && (
           <form onSubmit={handleVerifyPin} className="space-y-4">
-            <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl flex items-center gap-2.5 text-xs text-indigo-900">
-              <FileCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800/40 rounded-2xl flex items-center gap-2.5 text-xs text-indigo-900 dark:text-indigo-200">
+              <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <div className="truncate flex-1">
                 <span className="font-bold">Archive:</span>{' '}
                 <span className="font-mono text-[11px]">{selectedFile?.name}</span>
@@ -217,11 +217,11 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
             </div>
 
             <div className="text-center space-y-1 pt-1">
-              <div className="inline-flex p-2.5 rounded-2xl bg-slate-100 text-slate-700 mb-1">
+              <div className="inline-flex p-2.5 rounded-2xl bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 mb-1">
                 <KeyRound className="w-5 h-5 stroke-[2.2]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900">Enter Decryption PIN</h4>
-              <p className="text-xs text-slate-500">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Enter Decryption PIN</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Enter the 4-digit PIN used to encrypt this backup archive.
               </p>
             </div>
@@ -244,7 +244,7 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
                   setPin('');
                   setError(null);
                 }}
-                className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                className="h-11 rounded-xl bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] transition-colors"
               >
                 Change File
               </button>
@@ -273,50 +273,50 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
         {step === 'PREVIEW' && decryptedPayload && (
           <div className="space-y-4">
             <div className="text-center space-y-1">
-              <div className="inline-flex p-2 rounded-full bg-emerald-50 text-emerald-600 mb-1">
+              <div className="inline-flex p-2 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mb-1">
                 <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
               </div>
-              <h4 className="text-sm font-bold text-slate-900">Backup Verified</h4>
-              <p className="text-xs text-slate-500">
-                Created for <strong className="text-slate-800">{decryptedPayload.manifest.userName}</strong>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Backup Verified</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Created for <strong className="text-slate-800 dark:text-slate-200">{decryptedPayload.manifest.userName}</strong>
               </p>
             </div>
 
             {/* Content Summary Cards */}
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-1 text-center">
-                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500 font-medium">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <div className="p-3 bg-slate-50 dark:bg-[#181820] border border-slate-200/70 dark:border-[#27354A] rounded-2xl space-y-1 text-center">
+                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span>Personal Expenses</span>
                 </div>
-                <div className="text-base font-bold text-slate-900 font-mono">
+                <div className="text-base font-bold text-slate-900 dark:text-slate-100 font-mono">
                   {decryptedPayload.personalExpenses.length} records
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-1 text-center">
-                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500 font-medium">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <div className="p-3 bg-slate-50 dark:bg-[#181820] border border-slate-200/70 dark:border-[#27354A] rounded-2xl space-y-1 text-center">
+                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span>Backup Date</span>
                 </div>
-                <div className="text-xs font-bold text-slate-900 font-mono truncate">
+                <div className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono truncate">
                   {new Date(decryptedPayload.exportedAt).toLocaleDateString()}
                 </div>
               </div>
             </div>
 
             {decryptedPayload.budgetConfig && (
-              <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl text-xs space-y-1">
-                <div className="font-semibold text-slate-800">Monthly Budget Config</div>
-                <div className="text-slate-600 text-[11px]">
+              <div className="p-3 bg-slate-50 dark:bg-[#181820] border border-slate-200/70 dark:border-[#27354A] rounded-2xl text-xs space-y-1">
+                <div className="font-semibold text-slate-800 dark:text-slate-200">Monthly Budget Config</div>
+                <div className="text-slate-600 dark:text-slate-300 text-[11px]">
                   Allowance: <strong>₹{decryptedPayload.budgetConfig.monthlyAllowance.toLocaleString('en-IN')}</strong>
                 </div>
               </div>
             )}
 
-            <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/70 text-[11px] text-amber-900 space-y-1">
+            <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
               <p className="font-semibold">Safe Merge Guarantee:</p>
-              <p className="text-amber-800">
+              <p className="text-amber-800 dark:text-amber-300">
                 These records will be merged into your current personal vault. Duplicate transactions with matching IDs will not be duplicated.
               </p>
             </div>
@@ -326,7 +326,7 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
                 type="button"
                 onClick={() => setStep('ENTER_PIN')}
                 disabled={isLoading}
-                className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                className="h-11 rounded-xl bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] transition-colors"
               >
                 Back
               </button>

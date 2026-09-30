@@ -27,7 +27,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       aria-label="Bottom Navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-2 pt-1.5 w-full md:max-w-[395px] mx-auto transition-all shadow-[0_-2px_10px_rgba(0,0,0,0.03)]"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#12121A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-[#27354A] px-2 pt-1.5 w-full md:max-w-[395px] mx-auto transition-all shadow-[0_-2px_10px_rgba(0,0,0,0.03)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.4)]"
       style={{
         paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
       }}
@@ -38,8 +38,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={() => handleTabClick('dashboard')}
           className={`flex flex-col items-center justify-center min-w-[56px] min-h-[48px] py-1 px-2 rounded-xl transition-all active:scale-95 ${
             activeTab === 'dashboard'
-              ? 'text-indigo-600 font-semibold'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'text-indigo-600 dark:text-indigo-400 font-semibold'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           aria-label="Dashboard"
         >
@@ -52,8 +52,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={() => handleTabClick('vault')}
           className={`flex flex-col items-center justify-center min-w-[56px] min-h-[48px] py-1 px-2 rounded-xl transition-all active:scale-95 ${
             activeTab === 'vault'
-              ? 'text-indigo-600 font-semibold'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'text-indigo-600 dark:text-indigo-400 font-semibold'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           aria-label="Personal Vault"
         >
@@ -68,7 +68,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               hapticImpact('MEDIUM');
               onOpenQuickAction();
             }}
-            className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 active:scale-90 transition-all border-2 border-white"
+            className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 active:scale-90 transition-all border-2 border-white dark:border-[#12121A]"
             aria-label="Quick Add Expense"
           >
             <Plus className="w-6 h-6 stroke-[2.5]" />
@@ -80,8 +80,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={() => handleTabClick('rooms')}
           className={`flex flex-col items-center justify-center min-w-[56px] min-h-[48px] py-1 px-2 rounded-xl transition-all active:scale-95 ${
             activeTab === 'rooms'
-              ? 'text-indigo-600 font-semibold'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'text-indigo-600 dark:text-indigo-400 font-semibold'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           aria-label="Rooms Ledger"
         >
@@ -94,8 +94,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={() => handleTabClick('profile')}
           className={`flex flex-col items-center justify-center min-w-[56px] min-h-[48px] py-1 px-2 rounded-xl transition-all active:scale-95 ${
             activeTab === 'profile'
-              ? 'text-indigo-600 font-semibold'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'text-indigo-600 dark:text-indigo-400 font-semibold'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           aria-label="Settings and Preferences"
         >
@@ -107,7 +107,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* iOS Home Indicator Bar - only shown in desktop simulated frame */}
       {!isNative && (
         <div className="hidden md:flex justify-center pt-1 pb-0.5">
-          <div className="w-32 h-1 bg-slate-300 rounded-full" />
+          <div className="w-32 h-1 bg-slate-300 dark:bg-slate-700 rounded-full" />
         </div>
       )}
     </nav>

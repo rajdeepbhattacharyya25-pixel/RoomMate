@@ -108,36 +108,36 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
   const displayList = isExpanded ? activities : activities.slice(0, 3);
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+    <div className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
             <Activity className="w-3.5 h-3.5" />
           </div>
-          <h3 className="text-xs font-bold text-slate-900">Room Activity</h3>
+          <h3 className="text-xs font-bold text-slate-900 dark:text-white">Room Activity</h3>
         </div>
-        <span className="text-[11px] font-medium text-slate-400">
+        <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
           {activities.length} event{activities.length === 1 ? '' : 's'}
         </span>
       </div>
 
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 dark:divide-[#27354A]/60">
         {displayList.map((item) => {
-          let icon = <Plus className="w-3.5 h-3.5 text-indigo-600" />;
-          let iconBg = 'bg-indigo-50';
+          let icon = <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
+          let iconBg = 'bg-indigo-50 dark:bg-indigo-950/50';
 
           if (item.type === 'SETTLEMENT_RECORDED') {
-            icon = <CreditCard className="w-3.5 h-3.5 text-emerald-600" />;
-            iconBg = 'bg-emerald-50';
+            icon = <CreditCard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+            iconBg = 'bg-emerald-50 dark:bg-emerald-950/50';
           } else if (item.type === 'MEMBER_JOINED') {
-            icon = <Users className="w-3.5 h-3.5 text-blue-600" />;
-            iconBg = 'bg-blue-50';
+            icon = <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />;
+            iconBg = 'bg-blue-50 dark:bg-blue-950/50';
           } else if (item.type === 'MEMBER_LEFT') {
-            icon = <DoorOpen className="w-3.5 h-3.5 text-rose-600" />;
-            iconBg = 'bg-rose-50';
+            icon = <DoorOpen className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
+            iconBg = 'bg-rose-50 dark:bg-rose-950/50';
           } else if (item.type === 'ADMIN_TRANSFERRED') {
-            icon = <Crown className="w-3.5 h-3.5 text-amber-600" />;
-            iconBg = 'bg-amber-50';
+            icon = <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
+            iconBg = 'bg-amber-50 dark:bg-amber-950/50';
           }
 
           const timeStr = new Date(item.timestamp).toLocaleDateString(undefined, {
@@ -152,16 +152,16 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
                   {icon}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-slate-800 text-xs truncate">
-                    <span className="font-bold">{item.actorName}</span>{' '}
-                    <span className="text-slate-600">{item.description}</span>
+                  <p className="text-slate-800 dark:text-slate-200 text-xs truncate">
+                    <span className="font-bold text-slate-900 dark:text-white">{item.actorName}</span>{' '}
+                    <span className="text-slate-600 dark:text-slate-300">{item.description}</span>
                   </p>
-                  <p className="text-[10px] text-slate-400">{timeStr}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{timeStr}</p>
                 </div>
               </div>
 
               {item.amount !== undefined && (
-                <span className="font-mono font-bold text-xs text-slate-900 shrink-0">
+                <span className="font-mono font-bold text-xs text-slate-900 dark:text-white shrink-0">
                   ₹{item.amount.toLocaleString('en-IN')}
                 </span>
               )}
@@ -174,7 +174,7 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full pt-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1"
+          className="w-full pt-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center justify-center gap-1 transition-colors"
         >
           <span>{isExpanded ? 'Show Less' : `View All (${activities.length})`}</span>
           {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}

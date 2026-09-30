@@ -6,6 +6,7 @@ import { liveUpdater } from './services/updater';
 import { crashService } from './lib/crashlytics/crashService';
 import { analytics } from './lib/analytics/posthog';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ThemeProvider } from './context/ThemeContext';
 
 // Initialize live update engine and signal successful boot
 liveUpdater.init().catch(console.error);
@@ -17,7 +18,9 @@ analytics.init();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 );

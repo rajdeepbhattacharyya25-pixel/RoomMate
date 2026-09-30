@@ -238,6 +238,7 @@ export type NotificationActionType =
   | 'REVIEW'
   | 'VIEW_DETAILS'
   | 'VIEW_BALANCE'
+  | 'FORCE_LOGOUT'
   | 'NONE';
 
 export interface InAppNotification {
@@ -264,6 +265,7 @@ export interface InAppNotification {
     category?: string;
     groupCount?: number;
     groupedEventIds?: string[];
+    [key: string]: any;
   };
   eventId?: string; // Strict idempotency key
   isDeleted?: boolean;

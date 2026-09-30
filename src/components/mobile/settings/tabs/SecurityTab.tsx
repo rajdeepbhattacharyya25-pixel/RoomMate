@@ -116,17 +116,17 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Card 1: App Lock & Passcode */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
               <Lock className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 App Lock & Gateway
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Require PIN or Biometrics when opening RoomMate
               </p>
             </div>
@@ -137,7 +137,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
             onClick={handleToggleAppLock}
             aria-label="Toggle app lock"
             className={`w-11 h-6 flex items-center rounded-full px-1 transition-colors shrink-0 ${
-              appLockOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+              appLockOn ? 'bg-indigo-600 justify-end' : 'bg-slate-200 dark:bg-slate-700 justify-start'
             }`}
           >
             <div className="bg-white w-4 h-4 rounded-full shadow-md" />
@@ -145,7 +145,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
         </div>
 
         {appLockOn && (
-          <div className="pt-2 border-t border-slate-100 divide-y divide-slate-100">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
             {/* Lock Timeout Trigger */}
             <div
               onClick={() => setShowLockTimeout(true)}
@@ -157,14 +157,14 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
                   setShowLockTimeout(true);
                 }
               }}
-              className="py-2.5 flex items-center justify-between cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+              className="py-2.5 flex items-center justify-between cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
             >
               <div className="flex items-center space-x-2.5">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <span className="text-xs font-medium text-slate-700">Lock Timeout</span>
+                <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Lock Timeout</span>
               </div>
-              <div className="flex items-center gap-1 text-slate-500 text-xs">
-                <span className="font-semibold text-slate-800">{formatTimeoutLabel(lockTimeout)}</span>
+              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{formatTimeoutLabel(lockTimeout)}</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
             </div>
@@ -180,11 +180,11 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
                   setShowChangePin(true);
                 }
               }}
-              className="py-2.5 flex items-center justify-between cursor-pointer select-none hover:bg-slate-50/70 -mx-2 px-2 rounded-xl transition-colors"
+              className="py-2.5 flex items-center justify-between cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-[#20202A] -mx-2 px-2 rounded-xl transition-colors"
             >
               <div className="flex items-center space-x-2.5">
-                <KeyRound className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-medium text-slate-700">Change 4-Digit PIN</span>
+                <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Change 4-Digit PIN</span>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </div>
@@ -193,17 +193,17 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       </div>
 
       {/* Card 2: Biometric Hardware Authentication */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <Fingerprint className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 Hardware Biometrics
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {bioStatus?.displayName || 'Device Biometric Sensor'}
               </p>
             </div>
@@ -212,27 +212,27 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
               bioStatus?.isAvailable
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-slate-100 text-slate-600 border-slate-200'
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                : 'bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#27354A]'
             }`}
           >
             {bioStatus?.isAvailable ? 'Supported' : 'Unavailable'}
           </span>
         </div>
 
-        <p className="text-[11px] text-slate-600 leading-relaxed">
+        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
           {bioStatus?.detail || 'Detecting hardware biometric capabilities...'}
         </p>
 
         {bioStatus?.isAvailable && (
-          <div className="pt-2 border-t border-slate-100 flex justify-end">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
             <button
               type="button"
               onClick={handleTestBiometrics}
               disabled={isTestingBio}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#282836] text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
             >
-              <Fingerprint className="w-3.5 h-3.5 text-emerald-600" />
+              <Fingerprint className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>{isTestingBio ? 'Prompting...' : 'Test Biometric Unlock'}</span>
             </button>
           </div>
@@ -240,35 +240,35 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       </div>
 
       {/* Card 3: Session Security & Remote Devices */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none transition-colors duration-150">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-4.5 h-4.5" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
               Session & Devices
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Active session for {currentUser.email}
             </p>
           </div>
         </div>
 
-        <p className="text-[11px] text-slate-600 leading-relaxed">
+        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
           If you suspect unauthorized access or left your account logged in on another device, you can invalidate all other active sessions while staying securely signed in on this phone.
         </p>
 
-        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-2">
           <button
             type="button"
             onClick={() => {
               setSignOutMode('others');
               setShowSignOutOthers(true);
             }}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
+            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] hover:bg-slate-100 dark:hover:bg-[#282836] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
           >
-            <LogOut className="w-3.5 h-3.5 text-slate-500" />
+            <LogOut className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             <span>Sign Out Other Devices</span>
           </button>
           <button
@@ -277,31 +277,31 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
               setSignOutMode('all');
               setShowSignOutOthers(true);
             }}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
+            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-200 dark:hover:border-rose-900/50 hover:text-rose-700 dark:hover:text-rose-300 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all"
           >
-            <LogOut className="w-3.5 h-3.5 text-rose-500" />
+            <LogOut className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
             <span>Sign Out All Devices</span>
           </button>
         </div>
       </div>
 
       {/* Card 4: Danger Zone */}
-      <div className="rounded-2xl bg-rose-50/50 border border-rose-200/80 p-4 space-y-3 shadow-2xs">
+      <div className="rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/40 p-4 space-y-3 shadow-2xs transition-colors duration-150">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 flex items-center justify-center shrink-0">
             <AlertTriangle className="w-4.5 h-4.5" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-rose-900 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-rose-900 dark:text-rose-200 uppercase tracking-wider">
               Danger Zone
             </h3>
-            <p className="text-[11px] text-rose-700">
+            <p className="text-[11px] text-rose-700 dark:text-rose-400">
               Permanent account actions
             </p>
           </div>
         </div>
 
-        <p className="text-[11px] text-rose-700 leading-relaxed">
+        <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
           Deleting your account permanently removes your identity, debt records, personal vault data, and UPI information from RoomMate.
         </p>
 
@@ -318,6 +318,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       {/* Modals & Sheets */}
       <ChangePinModal
         isOpen={showChangePin}
+        currentUser={currentUser}
         onClose={() => setShowChangePin(false)}
         onSuccess={() => {
           onShowToast('Security PIN successfully updated!');

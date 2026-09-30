@@ -66,7 +66,7 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
     try {
     // 1. Profiles
     const { data: profiles, error: profErr } = await supabase.from('profiles').select('*');
-    if (profErr || !profiles || profiles.length === 0) {
+    if (profErr || !profiles) {
       console.warn('Could not fetch cloud profiles, falling back to local:', profErr?.message);
       return null;
     }
@@ -107,6 +107,7 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       description: r.description || undefined,
       createdBy: r.created_by,
       isArchived: r.is_archived ?? false,
+      isFrozen: r.is_frozen ?? false,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
@@ -188,26 +189,38 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       createdAt: p.created_at || new Date().toISOString(),
     }));
 
-    // 8. Personal Expenses
-    const { data: rawPersonal } = await supabase
+    // Subscriptions and logs fallback to local/empty
+    const localState = db.getState();
+
+    // 8. Personal Expenses (Merged with local cache to prevent data-loss flicker)
+    const { data: rawPersonal, error: personalErr } = await supabase
       .from('personal_expenses')
       .select('*')
       .order('expense_date', { ascending: false });
 
-    const personalExpenses: PersonalExpense[] = (rawPersonal || []).map((p) => ({
-      id: p.id,
-      userId: p.user_id,
-      title: p.title,
-      amount: Number(p.amount),
-      category: p.category as PersonalExpense['category'],
-      notes: p.notes || undefined,
-      expenseDate: p.expense_date,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    }));
+    const localPersonal = localState.personalExpenses || [];
+    let personalExpenses: PersonalExpense[];
 
-    // Subscriptions and logs fallback to local/empty
-    const localState = db.getState();
+    if ((personalErr || !rawPersonal || rawPersonal.length === 0) && localPersonal.length > 0) {
+      // Retain local personal vault if cloud returned empty/error (e.g. auth reconnecting)
+      personalExpenses = localPersonal;
+    } else {
+      const cloudPersonalMap = new Map((rawPersonal || []).map((p) => [p.id, p]));
+      const cloudExpenses: PersonalExpense[] = (rawPersonal || []).map((p) => ({
+        id: p.id,
+        userId: p.user_id,
+        title: p.title,
+        amount: Number(p.amount),
+        category: p.category as PersonalExpense['category'],
+        notes: p.notes || undefined,
+        expenseDate: p.expense_date,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+      }));
+      // Keep optimistic/un-synced local records that haven't landed in cloud yet
+      const unSyncedLocal = localPersonal.filter((p) => !cloudPersonalMap.has(p.id));
+      personalExpenses = [...cloudExpenses, ...unSyncedLocal];
+    }
 
     // 9. In-App Notifications
     let notifications: InAppNotification[] = localState.notifications || [];
@@ -571,7 +584,23 @@ export async function addPersonalExpenseCloud(data: {
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      const { error } = await supabase.from('personal_expenses').insert({
+      // 1. Try secure SECURITY DEFINER RPC first (works reliably across anon & authenticated sessions)
+      const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('submit_personal_expense_secure', {
+        p_id: localExp.id.length === 36 ? localExp.id : undefined,
+        p_user_id: data.userId,
+        p_title: data.title,
+        p_amount: data.amount,
+        p_category: data.category,
+        p_notes: data.notes || null,
+        p_expense_date: expenseDate,
+      });
+
+      if (!rpcErr && rpcRes?.id) {
+        return localExp;
+      }
+
+      // 2. Fallback to direct table upsert
+      const { error } = await supabase.from('personal_expenses').upsert({
         id: localExp.id.length === 36 ? localExp.id : undefined,
         user_id: data.userId,
         title: data.title,
@@ -579,7 +608,7 @@ export async function addPersonalExpenseCloud(data: {
         category: data.category,
         notes: data.notes || null,
         expense_date: expenseDate,
-      });
+      }, { onConflict: 'id' });
 
       if (error) {
         if ((error as any).code === '23505') {
@@ -610,6 +639,17 @@ export async function deletePersonalExpenseCloud(userId: string, id: string): Pr
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      // 1. Try secure RPC first
+      const { error: rpcErr } = await (supabase.rpc as any)('delete_personal_expense_secure', {
+        p_id: id,
+        p_user_id: userId,
+      });
+
+      if (!rpcErr) {
+        return;
+      }
+
+      // 2. Fallback to direct table delete
       await supabase.from('personal_expenses').delete().eq('id', id);
     } catch (err) {
       console.warn('Async personal expense deletion failed:', err);
@@ -631,6 +671,14 @@ export function subscribeToRoomRealtime(
 
   const channel = supabase
     .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+      (payload) => {
+        console.log('[Realtime] rooms changed:', payload.eventType);
+        onRemoteChange('rooms', payload.eventType);
+      }
+    )
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'shared_expenses', filter: `room_id=eq.${roomId}` },
@@ -661,6 +709,183 @@ export function subscribeToRoomRealtime(
 
   return () => {
     console.log(`[Realtime] Unsubscribing channel: ${channelName}`);
+    supabase.removeChannel(channel);
+  };
+}
+
+// User-Level Realtime Subscriptions (in_app_notifications, profile suspension, platform announcements)
+export function subscribeToUserRealtime(
+  userId: string,
+  onRemoteChange: (table: string, eventType: string, payload?: any) => void
+): () => void {
+  if (!IS_LIVE_SYNC_ENABLED || !userId) {
+    return () => {};
+  }
+
+  const channelName = `user-${userId}`;
+  console.log(`[Realtime] Subscribing user to channel: ${channelName}`);
+
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'in_app_notifications', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        console.log('[Realtime User] in_app_notifications changed:', payload.eventType);
+        onRemoteChange('in_app_notifications', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+      (payload) => {
+        console.log('[Realtime User] profiles changed:', payload.eventType);
+        onRemoteChange('profiles', payload.eventType, payload);
+      }
+    )
+    .subscribe((status) => {
+      console.log(`[Realtime User] Subscription status for ${channelName}:`, status);
+    });
+
+  return () => {
+    console.log(`[Realtime User] Unsubscribing channel: ${channelName}`);
+    supabase.removeChannel(channel);
+  };
+}
+
+// Platform Settings Realtime Subscription (Maintenance mode, limits)
+export function subscribeToPlatformSettingsRealtime(
+  onRemoteChange: (table: string, eventType: string, payload?: any) => void
+): () => void {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return () => {};
+  }
+
+  const channelName = 'platform-settings-realtime-global';
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'platform_settings' },
+      (payload) => {
+        console.log('[Realtime] platform_settings changed:', payload.eventType);
+        onRemoteChange('platform_settings', payload.eventType, payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// Global Realtime Broadcaster for SuperAdmin Platform Synchronization across all entities
+export function subscribeToSuperAdminRealtime(
+  onRemoteChange: (table: string, eventType: string, payload?: any) => void
+): () => void {
+  if (!IS_LIVE_SYNC_ENABLED) {
+    return () => {};
+  }
+
+  const channelName = 'platform-superadmin-global-sync';
+  console.log(`[Realtime] Subscribing SuperAdmin to global channel: ${channelName}`);
+
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'profiles' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] profiles changed:', payload.eventType);
+        onRemoteChange('profiles', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] rooms changed:', payload.eventType);
+        onRemoteChange('rooms', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'room_members' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] room_members changed:', payload.eventType);
+        onRemoteChange('room_members', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'shared_expenses' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] shared_expenses changed:', payload.eventType);
+        onRemoteChange('shared_expenses', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'expense_splits' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] expense_splits changed:', payload.eventType);
+        onRemoteChange('expense_splits', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'settlement_payments' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] settlement_payments changed:', payload.eventType);
+        onRemoteChange('settlement_payments', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'in_app_notifications' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] in_app_notifications changed:', payload.eventType);
+        onRemoteChange('in_app_notifications', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'bug_reports' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] bug_reports changed:', payload.eventType);
+        onRemoteChange('bug_reports', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'system_incidents' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] system_incidents changed:', payload.eventType);
+        onRemoteChange('system_incidents', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'platform_announcements' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] platform_announcements changed:', payload.eventType);
+        onRemoteChange('platform_announcements', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'platform_settings' },
+      (payload) => {
+        console.log('[Realtime SuperAdmin] platform_settings changed:', payload.eventType);
+        onRemoteChange('platform_settings', payload.eventType, payload);
+      }
+    )
+    .subscribe((status) => {
+      console.log(`[Realtime SuperAdmin] Subscription status for ${channelName}:`, status);
+    });
+
+  return () => {
+    console.log(`[Realtime SuperAdmin] Unsubscribing channel: ${channelName}`);
     supabase.removeChannel(channel);
   };
 }
@@ -2087,11 +2312,17 @@ export async function completeProfileOnboarding(
 
       if (error) {
         console.warn('completeProfileOnboarding cloud error:', error.message);
-        return { success: false, error: "Couldn't save your profile to the server. Please try again." };
+        return {
+          success: false,
+          error: error.message || "Couldn't save your profile to the server. Please try again.",
+        };
       }
     } catch (err) {
       console.warn('completeProfileOnboarding exception:', err);
-      return { success: false, error: "Couldn't save your profile to the server. Please try again." };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Couldn't save your profile to the server. Please try again.",
+      };
     }
   }
 
@@ -2167,6 +2398,7 @@ export async function updateProfileUpiId(userId: string, upiId: string): Promise
 }
 
 // Resolve Room Invite (Cloud + Local fallback)
+// Resolve Room Invite (Cloud + Local fallback, hardened with resolve_room_invite RPC)
 export async function resolveInviteCloud(tokenOrCode: string): Promise<{
   room: { id: string; name: string; description?: string; joinPolicy: JoinPolicy; invitePolicy: InvitePolicy };
   memberCount: number;
@@ -2174,10 +2406,62 @@ export async function resolveInviteCloud(tokenOrCode: string): Promise<{
   invite: RoomInvitation;
 }> {
   const clean = tokenOrCode.trim();
-  const cleanUpper = clean.toUpperCase();
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
+      // 1. Attempt atomic SECURITY DEFINER RPC first (bypasses RLS deadlock for non-members)
+      const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('resolve_room_invite', {
+        p_token_or_code: clean,
+      });
+
+      if (!rpcErr && rpcRes?.success && rpcRes?.room && rpcRes?.invite) {
+        const resolved = {
+          room: {
+            id: rpcRes.room.id,
+            name: rpcRes.room.name,
+            description: rpcRes.room.description || undefined,
+            joinPolicy: (rpcRes.room.joinPolicy || 'APPROVAL_REQUIRED') as JoinPolicy,
+            invitePolicy: (rpcRes.room.invitePolicy || 'ALL_MEMBERS') as InvitePolicy,
+          },
+          memberCount: Number(rpcRes.memberCount) || 1,
+          adminName: rpcRes.adminName || 'Room Admin',
+          invite: {
+            id: rpcRes.invite.id,
+            roomId: rpcRes.invite.roomId,
+            inviteCode: rpcRes.invite.inviteCode,
+            token: rpcRes.invite.token,
+            createdBy: rpcRes.invite.createdBy,
+            expiresAt: rpcRes.invite.expiresAt || undefined,
+            isRevoked: Boolean(rpcRes.invite.isRevoked),
+            createdAt: rpcRes.invite.createdAt,
+          },
+        };
+
+        // Cache room and invite into local state
+        const state = db.getState();
+        if (!state.rooms.some((rm) => rm.id === resolved.room.id)) {
+          state.rooms.unshift({
+            ...resolved.room,
+            createdBy: rpcRes.invite.createdBy,
+            isArchived: false,
+            createdAt: rpcRes.invite.createdAt,
+            updatedAt: rpcRes.invite.createdAt,
+          });
+        }
+        if (!state.roomInvitations.some((i) => i.id === resolved.invite.id)) {
+          state.roomInvitations.unshift(resolved.invite);
+        }
+        db.saveState(state);
+
+        return resolved;
+      }
+    } catch (err) {
+      console.warn('resolveInviteCloud RPC error, falling back:', err);
+    }
+
+    // 2. Direct table fallback if RPC is unavailable
+    try {
+      const cleanUpper = clean.toUpperCase();
       const { data: inv, error } = await supabase
         .from('room_invitations')
         .select('*, rooms(*)')
@@ -2198,14 +2482,12 @@ export async function resolveInviteCloud(tokenOrCode: string): Promise<{
           updated_at: string;
         };
 
-        // Fetch active members count
         const { count } = await supabase
           .from('room_members')
           .select('*', { count: 'exact', head: true })
           .eq('room_id', inv.room_id)
           .eq('status', 'ACTIVE');
 
-        // Fetch admin name
         let adminName = 'Room Admin';
         const { data: adminMember } = await supabase
           .from('room_members')
@@ -2241,7 +2523,6 @@ export async function resolveInviteCloud(tokenOrCode: string): Promise<{
           },
         };
 
-        // Cache room and invite into db.state
         const state = db.getState();
         if (!state.rooms.some((rm) => rm.id === resolved.room.id)) {
           state.rooms.unshift({
@@ -2746,7 +3027,7 @@ export async function createInAppNotificationCloud(
     // Only synchronize to Supabase if ID and user_id are valid UUIDs
     if (isUuid(localNotif.id) && isUuid(localNotif.userId)) {
       try {
-        await supabase.from('in_app_notifications').upsert({
+        const { error: insErr } = await supabase.from('in_app_notifications').upsert({
           id: localNotif.id,
           user_id: localNotif.userId,
           room_id: isUuid(localNotif.roomId) ? localNotif.roomId : null,
@@ -2763,6 +3044,20 @@ export async function createInAppNotificationCloud(
           is_deleted: false,
           created_at: localNotif.createdAt,
         });
+
+        if (insErr) {
+          // Fallback to SECURITY DEFINER admin notification RPC
+          await (supabase as any).rpc('admin_send_notification_secure', {
+            p_user_id: localNotif.userId,
+            p_type: localNotif.type,
+            p_title: localNotif.title,
+            p_message: localNotif.message,
+            p_priority: localNotif.priority,
+            p_action_type: localNotif.actionType || 'NONE',
+            p_action_target: localNotif.actionTarget || null,
+            p_metadata: localNotif.metadata || {},
+          });
+        }
       } catch (err) {
         console.warn('createInAppNotificationCloud supabase error:', err);
       }
@@ -2952,8 +3247,24 @@ export async function submitBugReportCloud(
         newReport.updatedAt = data.updated_at;
         // Update local with cloud ID
         saveLocalBugReports(localReports);
-      } else if (error) {
-        console.warn('[RoomMate] Supabase bug report insert notice:', error.message);
+      } else {
+        // Resilient fallback to SECURITY DEFINER RPC
+        const { data: rpcRes } = await (supabase as any).rpc('submit_bug_report_secure', {
+          p_user_id: newReport.userId,
+          p_user_name: newReport.userName,
+          p_user_email: newReport.userEmail,
+          p_user_role: newReport.userRole,
+          p_category: newReport.category,
+          p_severity: newReport.severity,
+          p_description: newReport.description,
+          p_screenshot_url: newReport.screenshotUrl || null,
+          p_diagnostics: newReport.diagnostics || {},
+        });
+        if (rpcRes?.id) {
+          newReport.id = rpcRes.id;
+          newReport.createdAt = rpcRes.created_at || newReport.createdAt;
+          saveLocalBugReports(localReports);
+        }
       }
     } catch (err) {
       console.warn('[RoomMate] Supabase bug report insert network error:', err);
@@ -2971,17 +3282,28 @@ export async function fetchBugReportsCloud(): Promise<BugReport[]> {
   }
 
   try {
+    let rows: Database['public']['Tables']['bug_reports']['Row'][] = [];
     const { data, error } = await supabase
       .from('bug_reports')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data) {
-      console.warn('[RoomMate] Could not fetch cloud bug reports, using local fallback:', error?.message);
-      return local;
+    if (!error && data && data.length > 0) {
+      rows = data as Database['public']['Tables']['bug_reports']['Row'][];
+    } else {
+      // Fallback to SECURITY DEFINER RPC if RLS blocks direct anon/unauthenticated select
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('get_admin_bug_reports');
+      if (!rpcErr && rpcData && rpcData.length > 0) {
+        rows = rpcData as Database['public']['Tables']['bug_reports']['Row'][];
+      }
     }
 
-    const rows = data as Database['public']['Tables']['bug_reports']['Row'][];
+    if (rows.length === 0) {
+      if (error) {
+        console.warn('[RoomMate] Could not fetch cloud bug reports, using local fallback:', error.message);
+      }
+      return local;
+    }
     const cloudReports: BugReport[] = rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
@@ -3056,8 +3378,17 @@ export async function updateBugReportStatusCloud(
         .eq('id', id);
 
       if (error) {
-        console.warn('[RoomMate] Supabase update bug report error:', error.message);
-        return false;
+        console.warn('[RoomMate] Direct bug report update failed, trying superadmin RPC:', error.message);
+        const { error: rpcErr } = await (supabase as any).rpc('superadmin_update_bug_report', {
+          p_id: id,
+          p_status: status,
+          p_admin_notes: adminNotes || null,
+        });
+        if (rpcErr) {
+          console.warn('[RoomMate] Supabase update bug report RPC error:', rpcErr.message);
+          return false;
+        }
+        return true;
       }
       return true;
     } catch (err) {

@@ -1759,9 +1759,14 @@ class MockDatabase {
       }
     }
 
+    const generatedId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : '00000000-0000-4000-8000-' + Math.random().toString(16).substring(2, 14).padEnd(12, '0');
+
     const newNotif: InAppNotification = {
       ...data,
-      id: 'notif-' + Math.random().toString(36).substring(2, 11),
+      id: generatedId,
       createdAt: new Date().toISOString(),
       isDeleted: false,
     };

@@ -30,8 +30,8 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     'relative w-full h-12 rounded-2xl font-semibold text-sm flex items-center justify-center gap-3 transition-all duration-200 active:scale-[0.98] select-none';
   const variantStyles =
     variant === 'primary'
-      ? 'bg-white text-slate-900 shadow-sm border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-      : 'bg-white text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 hover:border-slate-300';
+      ? 'bg-white dark:bg-[#181820] text-slate-900 dark:text-slate-100 shadow-sm border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A] hover:border-slate-300 dark:hover:border-[#334460]'
+      : 'bg-white dark:bg-[#181820] text-slate-700 dark:text-slate-200 shadow-sm border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A] hover:border-slate-300 dark:hover:border-[#334460]';
   const disabledStyles = disabled || loading ? 'opacity-60 cursor-not-allowed pointer-events-none' : 'cursor-pointer';
 
   return (
@@ -44,8 +44,8 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     >
       {loading ? (
         <>
-          <Loader2 className="w-5 h-5 animate-spin text-slate-600" />
-          <span className="text-slate-600 font-medium">Connecting to Google...</span>
+          <Loader2 className="w-5 h-5 animate-spin text-slate-600 dark:text-slate-300" />
+          <span className="text-slate-600 dark:text-slate-300 font-medium">Connecting to Google...</span>
         </>
       ) : (
         <>
@@ -73,7 +73,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
             />
           </svg>
-          <span className="font-semibold text-slate-800">{label}</span>
+          <span className="font-semibold text-slate-800 dark:text-slate-100">{label}</span>
         </>
       )}
     </button>

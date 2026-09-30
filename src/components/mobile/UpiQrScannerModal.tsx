@@ -246,7 +246,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
 
         {/* Mode Selector Tabs */}
         {!scannedResult && (
-          <div className="flex p-1 bg-slate-100 rounded-xl">
+          <div className="flex p-1 bg-slate-100 dark:bg-[#20202A] rounded-xl border border-transparent dark:border-[#27354A]">
             <button
               onClick={() => {
                 hapticSelection();
@@ -254,8 +254,8 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
               }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeMode === 'camera'
-                  ? 'bg-white text-indigo-600 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Camera className="w-3.5 h-3.5" />
@@ -268,8 +268,8 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
               }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeMode === 'upload'
-                  ? 'bg-white text-indigo-600 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Upload className="w-3.5 h-3.5" />
@@ -282,8 +282,8 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
               }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeMode === 'manual'
-                  ? 'bg-white text-indigo-600 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Clipboard className="w-3.5 h-3.5" />
@@ -295,30 +295,30 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
         {/* Scanned Result Card */}
         {scannedResult ? (
           <div className="space-y-4 animate-in fade-in zoom-in-95">
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-slate-900 space-y-3">
-              <div className="flex items-center space-x-2 text-emerald-700">
+            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-slate-900 dark:text-white space-y-3">
+              <div className="flex items-center space-x-2 text-emerald-700 dark:text-emerald-400">
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="text-xs font-bold uppercase tracking-wider">UPI QR Detected!</span>
               </div>
 
-              <div className="space-y-1 bg-white p-3 rounded-xl border border-emerald-100">
-                <div className="text-[11px] text-slate-500 font-medium">Payee Name</div>
-                <div className="text-sm font-bold text-slate-900">{scannedResult.name}</div>
+              <div className="space-y-1 bg-white dark:bg-[#1C1C25] p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Payee Name</div>
+                <div className="text-sm font-bold text-slate-900 dark:text-white">{scannedResult.name}</div>
 
-                <div className="text-[11px] text-slate-500 font-medium pt-1">UPI VPA / ID</div>
-                <div className="text-xs font-mono font-bold text-indigo-600 break-all">{scannedResult.vpa}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-1">UPI VPA / ID</div>
+                <div className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all">{scannedResult.vpa}</div>
 
                 {scannedResult.amount !== undefined && (
                   <>
-                    <div className="text-[11px] text-slate-500 font-medium pt-1">Requested Amount</div>
-                    <div className="text-base font-extrabold text-emerald-700">₹{scannedResult.amount.toFixed(2)}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-1">Requested Amount</div>
+                    <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-400">₹{scannedResult.amount.toFixed(2)}</div>
                   </>
                 )}
 
                 {scannedResult.note && (
                   <>
-                    <div className="text-[11px] text-slate-500 font-medium pt-1">Transaction Note</div>
-                    <div className="text-xs text-slate-700 italic">"{scannedResult.note}"</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-1">Transaction Note</div>
+                    <div className="text-xs text-slate-700 dark:text-slate-300 italic">&quot;{scannedResult.note}&quot;</div>
                   </>
                 )}
               </div>
@@ -332,7 +332,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
                   setScannedResult(null);
                   if (activeMode === 'camera') startCamera();
                 }}
-                className="flex-1 py-3 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors active:scale-98"
+                className="flex-1 py-3 px-3 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-300 border border-transparent dark:border-[#27354A] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors active:scale-98"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Scan Another</span>
@@ -354,7 +354,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
             {/* Camera Scanner View */}
             {activeMode === 'camera' && (
               <div className="space-y-3">
-                <div className="relative w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border-2 border-slate-800 shadow-inner">
+                <div className="relative w-full aspect-square bg-slate-900 dark:bg-[#12121A] rounded-2xl overflow-hidden flex items-center justify-center border-2 border-slate-800 dark:border-[#27354A] shadow-inner">
                   <video
                     ref={videoRef}
                     playsInline
@@ -384,7 +384,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
                   )}
                 </div>
 
-                <p className="text-[11px] text-center text-slate-500">
+                <p className="text-[11px] text-center text-slate-500 dark:text-slate-400">
                   Align the QR code within the frame to scan automatically
                 </p>
               </div>
@@ -406,7 +406,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
 
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full aspect-video border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl bg-slate-50 hover:bg-indigo-50/30 flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all active:scale-98"
+                  className="w-full aspect-video border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-2xl bg-slate-50 dark:bg-[#1C1C25] hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30 flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all active:scale-98"
                 >
                   {previewImage ? (
                     <div className="space-y-2">
@@ -415,17 +415,17 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
                         alt="Uploaded QR"
                         className="max-h-28 mx-auto rounded-lg shadow-xs object-contain"
                       />
-                      <p className="text-[11px] text-indigo-600 font-semibold">Tap to select a different screenshot</p>
+                      <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">Tap to select a different screenshot</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-xs">
+                      <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-xs">
                         <FileImage className="w-6 h-6" />
                       </div>
-                      <div className="text-xs font-bold text-slate-800">
+                      <div className="text-xs font-bold text-slate-800 dark:text-white">
                         Upload QR Code Screenshot
                       </div>
-                      <p className="text-[11px] text-slate-500 max-w-xs">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
                         Select a payment QR screenshot from WhatsApp, GPay, or Gallery
                       </p>
                     </div>
@@ -433,7 +433,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
                 </div>
 
                 {isProcessing && (
-                  <div className="flex items-center justify-center gap-2 text-xs text-indigo-600 font-semibold">
+                  <div className="flex items-center justify-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
                     <RefreshCw className="w-4 h-4 animate-spin" />
                     <span>Analyzing QR code image...</span>
                   </div>
@@ -446,13 +446,13 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
               <form onSubmit={handleManualSubmit} className="space-y-3">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Enter UPI ID or Paste Intent URL
                     </label>
                     <button
                       type="button"
                       onClick={handlePasteClipboard}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1"
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-semibold flex items-center gap-1"
                     >
                       <Clipboard className="w-3 h-3" />
                       <span>Paste Clipboard</span>
@@ -463,7 +463,7 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
                     placeholder="e.g. sneha@okaxis or upi://pay?pa=..."
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                   />
                 </div>
 
@@ -480,8 +480,8 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
 
             {/* Error Message */}
             {cameraError && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start space-x-2 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs flex items-start space-x-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">{cameraError}</div>
               </div>
             )}

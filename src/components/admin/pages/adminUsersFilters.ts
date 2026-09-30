@@ -69,7 +69,7 @@ export function matchesUserOmniSearch(
   // 6. Role match
   if (u.role.toLowerCase().includes(q)) return true;
   if ((q === 'superadmin' || q === 'admin') && u.role === 'SUPER_ADMIN') return true;
-  if (q === 'student' && u.role === 'STUDENT') return true;
+  if ((q === 'student' || q === 'resident') && u.role === 'STUDENT') return true;
 
   // 7. Assigned Room Name match
   const userRoomMemberships = roomMembers.filter((m) => m.userId === u.id);

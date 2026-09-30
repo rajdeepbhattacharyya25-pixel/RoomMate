@@ -76,24 +76,26 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-md bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200/80 dark:border-[#27354A] overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-[#27354A]/60 flex items-center justify-between bg-slate-50/70 dark:bg-[#181820]/70">
           <div className="flex items-center space-x-2">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              isClean ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+              isClean
+                ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
+                : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400'
             }`}>
               {isClean ? <DoorOpen className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Leave Flat / Room</h2>
-              <p className="text-[11px] text-slate-500 font-medium truncate max-w-[200px]">{roomName}</p>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Leave Flat / Room</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[200px]">{roomName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-slate-600 active:scale-95"
+            className="w-8 h-8 rounded-full flex items-center justify-center bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-95"
           >
             <X className="w-4 h-4" />
           </button>
@@ -102,8 +104,8 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
         {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-4">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200 text-xs font-medium flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{errorMsg}</span>
             </div>
           )}
@@ -111,16 +113,16 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
           {/* Admin Blocked from Leaving without Transferring Ownership */}
           {adminBlockedFromLeaving ? (
             <div className="text-center py-4 space-y-3">
-              <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 mx-auto flex items-center justify-center shadow-inner">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 mx-auto flex items-center justify-center shadow-inner">
                 <Crown className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">You are currently the room admin</h3>
-                <p className="text-xs text-slate-600 mt-1 max-w-xs mx-auto leading-relaxed">
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">You are currently the room admin</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-xs mx-auto leading-relaxed">
                   Before leaving <strong>{roomName}</strong>, you must transfer room ownership to another active roommate.
                 </p>
               </div>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 text-left space-y-1">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 text-left space-y-1">
                 <p>• Other active members need a designated admin to manage the room.</p>
                 <p>• You will become a regular roommate first, after which you can exit.</p>
               </div>
@@ -130,16 +132,16 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               {/* Scenario 1: Clean Exit (Zero Obligations) */}
               {isClean && (
                 <div className="text-center py-4 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
                     <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">All Settled ✅</h3>
-                    <p className="text-xs text-slate-600 mt-1 max-w-xs mx-auto leading-relaxed">
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">All Settled ✅</h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-xs mx-auto leading-relaxed">
                       You have no outstanding obligations or pending credits in <strong>{roomName}</strong>. You can exit cleanly.
                     </p>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 text-left">
+                  <div className="p-3 bg-slate-50 dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] rounded-xl text-[11px] text-slate-500 dark:text-slate-400 text-left">
                     • You will be excluded from all future bills added to this room.<br />
                     • You can re-join anytime using the room's invite code.
                   </div>
@@ -149,24 +151,24 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
           {/* Scenario 2: Debtor State (User owes money) */}
           {obligations.totalOwed > 0 && (
             <div className="space-y-3">
-              <div className="p-4 rounded-2xl bg-rose-50/80 border border-rose-200/80 space-y-2.5">
-                <div className="flex items-center gap-2 text-rose-800">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <div className="p-4 rounded-2xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 space-y-2.5">
+                <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
                   <h3 className="text-xs font-bold uppercase tracking-wider">
                     You still owe ₹{obligations.totalOwed.toLocaleString('en-IN')}
                   </h3>
                 </div>
-                <p className="text-xs text-rose-900 leading-relaxed font-medium">
+                <p className="text-xs text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
                   Leaving the room won't cancel this balance. Your <strong>₹{obligations.totalOwed.toLocaleString('en-IN')}</strong> debt will be frozen and can be settled with your former roommates later.
                 </p>
 
                 {/* Breakdown of whom user owes */}
-                <div className="divide-y divide-rose-200/60 pt-1">
+                <div className="divide-y divide-rose-200/60 dark:divide-rose-900/40 pt-1">
                   {obligations.debtsOwed.map((debt, idx) => (
                     <div key={idx} className="py-2 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-rose-950">You owe {debt.toUserName}</span>
+                      <span className="font-semibold text-rose-950 dark:text-rose-200">You owe {debt.toUserName}</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-rose-700">₹{debt.amount.toFixed(2)}</span>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">₹{debt.amount.toFixed(2)}</span>
                         {onStartSettle && (
                           <button
                             type="button"
@@ -201,14 +203,14 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               )}
 
               {/* Explicit Acknowledgment Checkbox */}
-              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer select-none">
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={acknowledged}
                   onChange={(e) => setAcknowledged(e.target.checked)}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                 />
-                <span className="text-[11px] text-slate-700 font-medium leading-tight">
+                <span className="text-[11px] text-slate-700 dark:text-slate-200 font-medium leading-tight">
                   I acknowledge that my <strong>₹{obligations.totalOwed.toLocaleString('en-IN')}</strong> debt remains recorded and visible to my former roommates.
                 </span>
               </label>
@@ -217,22 +219,22 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
 
           {/* Scenario 3: Creditor State (Roommates owe user) */}
           {obligations.totalCredit > 0 && (
-            <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/80 space-y-2.5">
-              <div className="flex items-center gap-2 text-indigo-800">
-                <Info className="w-4 h-4 shrink-0 text-indigo-600" />
+            <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/50 space-y-2.5">
+              <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-300">
+                <Info className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-xs font-bold uppercase tracking-wider">
                   You're owed ₹{obligations.totalCredit.toLocaleString('en-IN')}
                 </h3>
               </div>
-              <p className="text-xs text-indigo-900 leading-relaxed font-medium">
+              <p className="text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">
                 Leaving won't cancel this amount. Your former roommates can still settle with you later.
               </p>
 
-              <div className="divide-y divide-indigo-200/60 pt-1">
+              <div className="divide-y divide-indigo-200/60 dark:divide-indigo-900/40 pt-1">
                 {obligations.creditsOwed.map((credit, idx) => (
-                  <div key={idx} className="py-2 flex items-center justify-between text-xs font-semibold text-indigo-950">
+                  <div key={idx} className="py-2 flex items-center justify-between text-xs font-semibold text-indigo-950 dark:text-indigo-200">
                     <span>{credit.fromUserName} owes you</span>
-                    <span className="font-bold text-emerald-600">+₹{credit.amount.toFixed(2)}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">+₹{credit.amount.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -244,7 +246,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                     const msg = `Hey roommates from ${roomName}! I am leaving the room. Please remember to settle your outstanding tabs with me: ₹${obligations.totalCredit}. Thanks!`;
                     onNudgeRoommates(msg);
                   }}
-                  className="w-full h-9 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                  className="w-full h-9 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 hover:bg-indigo-200 dark:hover:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Remind Roommates on WhatsApp</span>
@@ -259,13 +261,13 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
         {/* Footer Actions */}
         <div
           style={{ paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 16px), 24px)' }}
-          className="p-4 bg-slate-50 border-t border-slate-100 flex items-center gap-2.5"
+          className="p-4 bg-slate-50 dark:bg-[#181820] border-t border-slate-100 dark:border-[#27354A] flex items-center gap-2.5"
         >
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="flex-1 h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 transition-all"
+            className="flex-1 h-11 rounded-xl bg-white dark:bg-[#1C1C25] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-95 transition-all"
           >
             Cancel
           </button>
@@ -297,7 +299,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               type="button"
               onClick={handleLeaveSubmit}
               disabled={!acknowledged || isSubmitting}
-              className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:bg-slate-300 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
+              className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             >
               <span>{isSubmitting ? 'Leaving...' : `Leave with ₹${obligations.totalOwed} debt`}</span>
             </button>
@@ -306,7 +308,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               type="button"
               onClick={handleLeaveSubmit}
               disabled={isSubmitting}
-              className="flex-1 h-11 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
+              className="flex-1 h-11 rounded-xl bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             >
               <span>{isSubmitting ? 'Leaving...' : `Leave with ₹${obligations.totalCredit} credit`}</span>
             </button>

@@ -34,57 +34,63 @@ export function calculateSplits(
   const cleanTotal = round2(totalAmount);
   const count = participantUserIds.length;
 
+  let baseSplits: { userId: string; shareAmount: number }[] = [];
+
   if (method === 'EQUAL') {
     const rawShare = Math.floor((cleanTotal / count) * 100) / 100;
-    const baseSplits = participantUserIds.map((userId) => ({
+    baseSplits = participantUserIds.map((userId) => ({
       userId,
       shareAmount: rawShare,
     }));
-
-    // Calculate remainder cents (e.g. 100 / 3 = 33.33 * 3 = 99.99 -> remainder 0.01)
-    const totalAllocated = round2(rawShare * count);
-    let remainderCents = Math.round((cleanTotal - totalAllocated) * 100);
-
-    // Deterministically assign extra cent to first N members
-    for (let i = 0; i < baseSplits.length && remainderCents > 0; i++) {
-      baseSplits[i].shareAmount = round2(baseSplits[i].shareAmount + 0.01);
-      remainderCents--;
-    }
-
-    return baseSplits;
-  }
-
-  if (method === 'EXACT' && customValues) {
-    return participantUserIds.map((userId) => ({
+  } else if (method === 'EXACT' && customValues) {
+    baseSplits = participantUserIds.map((userId) => ({
       userId,
       shareAmount: round2(customValues[userId] || 0),
     }));
-  }
-
-  if (method === 'PERCENTAGE' && customValues) {
-    return participantUserIds.map((userId) => {
+  } else if (method === 'PERCENTAGE' && customValues) {
+    baseSplits = participantUserIds.map((userId) => {
       const pct = customValues[userId] || 0;
       return {
         userId,
         shareAmount: round2((cleanTotal * pct) / 100),
       };
     });
-  }
-
-  if (method === 'SHARES' && customValues) {
+  } else if (method === 'SHARES' && customValues) {
     const totalShares = Object.values(customValues).reduce((acc, val) => acc + val, 0);
     if (totalShares === 0) return [];
-    return participantUserIds.map((userId) => {
+    baseSplits = participantUserIds.map((userId) => {
       const shares = customValues[userId] || 0;
       return {
         userId,
         shareAmount: round2((cleanTotal * shares) / totalShares),
       };
     });
+  } else {
+    return calculateSplits(cleanTotal, participantUserIds, 'EQUAL');
   }
 
-  // Fallback to equal
-  return calculateSplits(cleanTotal, participantUserIds, 'EQUAL');
+  // Reconcile rounding discrepancies down to the exact cent across all split methods
+  // Ensures sum(splits.shareAmount) === cleanTotal, preventing Postgres RPC SPLIT_SUM_MISMATCH errors
+  const totalAllocated = round2(baseSplits.reduce((acc, s) => acc + s.shareAmount, 0));
+  let remainderCents = Math.round((cleanTotal - totalAllocated) * 100);
+
+  if (remainderCents !== 0 && baseSplits.length > 0) {
+    if (remainderCents > 0) {
+      for (let i = 0; i < baseSplits.length && remainderCents > 0; i++) {
+        baseSplits[i].shareAmount = round2(baseSplits[i].shareAmount + 0.01);
+        remainderCents--;
+      }
+    } else {
+      for (let i = 0; i < baseSplits.length && remainderCents < 0; i++) {
+        if (baseSplits[i].shareAmount >= 0.02) {
+          baseSplits[i].shareAmount = round2(baseSplits[i].shareAmount - 0.01);
+          remainderCents++;
+        }
+      }
+    }
+  }
+
+  return baseSplits;
 }
 
 /**

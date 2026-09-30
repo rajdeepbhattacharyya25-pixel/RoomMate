@@ -52,6 +52,11 @@ import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { OAuthProviderNoticeModal } from './OAuthProviderNoticeModal';
 import { hapticImpact, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
 import { sendLocalJoinRequestNotification } from '../../lib/native/notifications';
+import {
+  decodeQrFromVideoFrame,
+  decodeQrFromImage,
+  cleanAndNormalizeRoomCode,
+} from '../../lib/services/qrDecoder';
 
 interface MobileLoginProps {
   allUsers: User[];
@@ -123,6 +128,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
   // Camera Scanner Refs & States
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -352,26 +358,21 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     }
   };
 
-  // Scan frame loop using native BarcodeDetector
+  // Scan frame loop using dual-engine decoder (BarcodeDetector + jsQR fallback)
   const beginScanLoop = () => {
     if (scanIntervalRef.current) window.clearInterval(scanIntervalRef.current);
     scanIntervalRef.current = window.setInterval(async () => {
       if (!videoRef.current || videoRef.current.readyState < 2 || isResolvingRoom) return;
 
-      if ('BarcodeDetector' in window) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-          const barcodes = await detector.detect(videoRef.current);
-          if (barcodes && barcodes.length > 0) {
-            const raw = barcodes[0].rawValue;
-            handleScannedCode(raw);
-          }
-        } catch {
-          // Frame drop, continue
+      try {
+        const rawPayload = await decodeQrFromVideoFrame(videoRef.current, canvasRef.current);
+        if (rawPayload) {
+          handleScannedCode(rawPayload);
         }
+      } catch {
+        // Frame drop, continue
       }
-    }, 450);
+    }, 400);
   };
 
   // Start or stop camera based on tab and join mode
@@ -385,33 +386,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authTab, joinMode, joinWizardStep]);
 
-  // Extract code/token from raw input or URL
-  const extractTokenOrCode = (input: string): string => {
-    const trimmed = input.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      try {
-        const url = new URL(trimmed);
-        const segments = url.pathname.split('/').filter(Boolean);
-        const joinIdx = segments.indexOf('join');
-        if (joinIdx >= 0 && segments[joinIdx + 1]) {
-          return segments[joinIdx + 1];
-        }
-        const tokenParam = url.searchParams.get('join') || url.searchParams.get('code') || url.searchParams.get('token');
-        if (tokenParam) return tokenParam;
-      } catch {}
-    }
-    if (trimmed.startsWith('roommate://') || trimmed.startsWith('campusflow://')) {
-      try {
-        const url = new URL(trimmed);
-        return url.searchParams.get('join') || url.searchParams.get('code') || url.searchParams.get('token') || trimmed;
-      } catch {}
-    }
-    return trimmed.replace(/^#/, '');
-  };
-
   // Handle scanned QR string from camera or file
   const handleScannedCode = async (rawInput: string) => {
-    const clean = extractTokenOrCode(rawInput);
+    const clean = cleanAndNormalizeRoomCode(rawInput);
     if (!clean) return;
     stopCamera();
     hapticSuccess();
@@ -442,44 +419,35 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     }
   };
 
-  // Handle file upload fallback
+  // Handle file upload fallback with local dual-engine decoding
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setCameraError(null);
     try {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const dataUrl = ev.target?.result as string;
-        const img = new Image();
-        img.src = dataUrl;
-        await img.decode();
-        if ('BarcodeDetector' in window) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-          const barcodes = await detector.detect(img);
-          if (barcodes && barcodes.length > 0) {
-            handleScannedCode(barcodes[0].rawValue);
-            return;
-          }
-        }
-        setCameraError('Could not detect a QR code in this image. Please enter code manually.');
-      };
-      reader.readAsDataURL(file);
+      const res = await decodeQrFromImage(file);
+      if (res.success && res.rawPayload) {
+        handleScannedCode(res.rawPayload);
+        return;
+      }
+      setCameraError(res.errorMessage || 'Could not detect a QR code in this image. Please enter code manually.');
     } catch {
       setCameraError('Failed to process image. Please enter code manually.');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   // Handle manual code entry submit
   const handleManualCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = joinInviteCode.trim().toUpperCase();
+    const clean = cleanAndNormalizeRoomCode(joinInviteCode);
     if (!clean) {
       hapticWarning();
       setErrorMessage('Please enter a 6-character room invite code.');
       return;
     }
+    setJoinInviteCode(clean);
     await resolveAndProceedToConfirmation(clean);
   };
 
@@ -1044,7 +1012,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
   };
 
   return (
-    <main className="w-full min-h-screen bg-[#F9F9FF] text-slate-900 flex flex-col justify-between selection:bg-indigo-100 selection:text-indigo-900 select-none pb-safe pt-safe">
+    <main className="w-full min-h-screen bg-[#F9F9FF] dark:bg-[#0B0B10] text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-indigo-100 selection:text-indigo-900 select-none pb-safe pt-safe">
       {/* Scrollable Center Canvas */}
       <div className="flex-1 w-full max-w-[420px] mx-auto px-4 py-4 flex flex-col justify-start space-y-4">
         
@@ -1068,11 +1036,11 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 if (fallback) fallback.classList.remove('hidden');
               }}
             />
-            <div className="fallback-icon hidden w-24 h-24 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="fallback-icon hidden w-24 h-24 rounded-2xl bg-indigo-50 dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Building className="w-12 h-12 stroke-[2]" />
             </div>
             {/* Emerald Verified Micro Badge */}
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border-2 border-[#F9F9FF] flex items-center justify-center shadow-xs">
+            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white dark:bg-[#0B0B10] border-2 border-[#F9F9FF] dark:border-[#0B0B10] flex items-center justify-center shadow-xs">
               <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
                 <Check className="w-3 h-3 text-white stroke-[3.5]" />
               </div>
@@ -1080,19 +1048,19 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
           </button>
 
           {/* App Title & Subtitle */}
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             RoomMate
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
             Live Together. Spend Smarter.
           </p>
 
           {/* Active Ledger Pill Badge */}
-          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] font-semibold text-slate-700">Student Ledger</span>
-            <span className="text-slate-300 text-[11px]">•</span>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5">
+            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Resident Ledger</span>
+            <span className="text-slate-300 dark:text-slate-600 text-[11px]">•</span>
+            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
               <ShieldCheck className="w-3 h-3" />
               Secured
             </span>
@@ -1100,13 +1068,13 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
           {/* Pending Room Invite Banner */}
           {pendingInviteToken && (
-            <div className="w-full mt-3 p-3 rounded-2xl bg-indigo-50 border border-indigo-200 text-left flex items-start gap-2.5 shadow-2xs animate-in fade-in">
+            <div className="w-full mt-3 p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 text-left flex items-start gap-2.5 shadow-2xs animate-in fade-in">
               <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
                 <Sparkles className="w-3.5 h-3.5" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-indigo-950">Room Invitation Received</div>
-                <div className="text-[11px] text-indigo-700 mt-0.5 leading-snug">
+                <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200">Room Invitation Received</div>
+                <div className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5 leading-snug">
                   Sign in or create your resident account below to accept your invitation.
                 </div>
               </div>
@@ -1114,7 +1082,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
           )}
 
           {/* 2. Interactive 3-Segment Mode Tabs */}
-          <div className="w-full mt-4 bg-slate-100 p-1 rounded-xl border border-slate-200/80 flex items-center justify-between gap-1">
+          <div className="w-full mt-4 bg-slate-100 dark:bg-[#181820] p-1 rounded-xl border border-slate-200/80 dark:border-[#27354A] flex items-center justify-between gap-1">
             <button
               type="button"
               onClick={() => {
@@ -1124,8 +1092,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               }}
               className={`flex-1 py-2 text-center rounded-lg text-xs font-semibold transition-all duration-150 flex items-center justify-center space-x-1 ${
                 authTab === 'signin'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
@@ -1141,8 +1109,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               }}
               className={`flex-1 py-2 text-center rounded-lg text-xs font-semibold transition-all duration-150 flex items-center justify-center space-x-1 ${
                 authTab === 'join'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <KeyRound className="w-3.5 h-3.5" />
@@ -1158,8 +1126,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               }}
               className={`flex-1 py-2 text-center rounded-lg text-xs font-semibold transition-all duration-150 flex items-center justify-center space-x-1 ${
                 authTab === 'create'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -1170,12 +1138,12 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium leading-relaxed animate-in fade-in flex items-start justify-between gap-2">
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-200 text-xs font-medium leading-relaxed animate-in fade-in flex items-start justify-between gap-2">
             <span>{errorMessage}</span>
             <button
               type="button"
               onClick={() => setErrorMessage(null)}
-              className="text-rose-400 hover:text-rose-700 p-0.5"
+              className="text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 p-0.5"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -1186,7 +1154,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
         {/* TAB 1: RESIDENT SIGN IN */}
         {authTab === 'signin' && (
-          <section className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
+          <section className="bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
             {/* Google Sign-In Primary Quick Action */}
             <div className="space-y-3">
               <GoogleSignInButton
@@ -1198,14 +1166,14 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowOAuthNotice(true)}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium hover:underline transition-colors py-0.5"
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium hover:underline transition-colors py-0.5"
                 >
                   Browser redirect issue or have auth link? Tap here
                 </button>
               </div>
               <div className="relative flex items-center justify-center my-1">
-                <div className="border-t border-slate-200 w-full" />
-                <span className="bg-white px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="border-t border-slate-200 dark:border-[#27354A] w-full" />
+                <span className="bg-white dark:bg-[#12121A] px-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   or sign in with credentials
                 </span>
               </div>
@@ -1217,17 +1185,17 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="resident-identifier"
-                    className="block text-xs font-semibold text-slate-700"
+                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                   >
                     Email or Mobile Number
                   </label>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-900/50">
                     <Check className="w-2.5 h-2.5 stroke-[3]" />
                     Resident Verified
                   </span>
                 </div>
                 <div className="relative flex items-center">
-                  <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                   <input
                     id="resident-identifier"
                     type="text"
@@ -1238,7 +1206,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="name@example.com or +91 98765..."
-                    className="w-full h-12 pl-10 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs text-slate-900 font-medium placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none transition-colors"
+                    className="w-full h-12 pl-10 pr-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-base md:text-xs text-slate-900 dark:text-white font-medium placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-600 focus:bg-white dark:focus:bg-[#181820] focus:outline-none transition-colors"
                     required
                   />
                 </div>
@@ -1266,9 +1234,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       onChange={(e) => setRememberDevice(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600" />
+                    <div className="w-9 h-5 bg-slate-200 dark:bg-[#27354A] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600" />
                   </div>
-                  <span className="text-xs text-slate-600 font-medium">
+                  <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
                     Remember this device
                   </span>
                 </label>
@@ -1279,7 +1247,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     setForgotEmail(identifier);
                     setShowForgotPinModal(true);
                   }}
-                  className="text-xs font-semibold text-indigo-600 hover:underline"
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                 >
                   Forgot PIN?
                 </button>
@@ -1311,23 +1279,23 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 type="button"
                 onClick={handleBiometricAuth}
                 disabled={isScanningBiometrics}
-                className="w-full h-11 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] text-indigo-700 border border-indigo-200/60 rounded-xl flex items-center justify-center space-x-2 text-xs font-semibold transition-all duration-150"
+                className="w-full h-11 bg-slate-50 dark:bg-[#1C1C25] hover:bg-slate-100 dark:hover:bg-[#20202A] active:scale-[0.98] text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-900/50 rounded-xl flex items-center justify-center space-x-2 text-xs font-semibold transition-all duration-150"
               >
                 {isScanningBiometrics ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400" />
                     <span>Verifying Biometrics...</span>
                   </>
                 ) : biometricSuccess ? (
                   <>
                     <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
-                    <span className="text-emerald-700">
+                    <span className="text-emerald-700 dark:text-emerald-400">
                       Authenticated via Biometrics
                     </span>
                   </>
                 ) : (
                   <>
-                    <Fingerprint className="w-4 h-4 text-indigo-600" />
+                    <Fingerprint className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     <span>Sign in with Biometrics / Fingerprint</span>
                   </>
                 )}
@@ -1335,7 +1303,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             </div>
 
             {/* Security Verification Badge */}
-            <div className="flex items-center justify-center gap-1.5 pt-1 text-slate-400 text-[11px] font-medium">
+            <div className="flex items-center justify-center gap-1.5 pt-1 text-slate-400 dark:text-slate-500 text-[11px] font-medium">
               <Lock className="w-3 h-3 text-emerald-600" />
               <span>256-bit JWT Verified Session</span>
               <span>•</span>
@@ -1346,24 +1314,24 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
         {/* TAB 2: JOIN VIA ROOM PASS OR QR SCANNER */}
         {authTab === 'join' && (
-          <section className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
+          <section className="bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
             {/* STEP 0: SCAN QR OR ENTER CODE */}
             {joinWizardStep === 'scan_or_code' && (
               <div className="space-y-4">
                 <div className="text-center space-y-1">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-1">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-1">
                     <QrCode className="w-5 h-5" />
                   </div>
-                  <h2 className="text-sm font-bold text-slate-900">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                     Join Flat via Room Pass
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Scan flatmate&apos;s QR code or enter 6-character room key
                   </p>
                 </div>
 
                 {/* Mode Switcher Pill */}
-                <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+                <div className="flex p-1 bg-slate-100 dark:bg-[#181820] rounded-xl gap-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -1373,8 +1341,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     }}
                     className={`flex-1 py-1.5 text-center rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                       joinMode === 'camera'
-                        ? 'bg-white text-indigo-600 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <Camera className="w-3.5 h-3.5" />
@@ -1391,8 +1359,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     }}
                     className={`flex-1 py-1.5 text-center rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                       joinMode === 'code'
-                        ? 'bg-white text-indigo-600 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-[#20202A] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <KeyRound className="w-3.5 h-3.5" />
@@ -1436,8 +1404,8 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
                     {/* Camera Error Message */}
                     {cameraError && (
-                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200 text-xs font-medium flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                         <span>{cameraError}</span>
                       </div>
                     )}
@@ -1447,9 +1415,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex-1 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        className="flex-1 h-10 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#27354A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                       >
-                        <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                        <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                         <span>Upload QR Image</span>
                       </button>
                       <input
@@ -1466,7 +1434,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                           setJoinMode('code');
                           stopCamera();
                         }}
-                        className="px-3 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all"
+                        className="px-3 h-10 rounded-xl bg-slate-50 dark:bg-[#20202A] hover:bg-slate-100 dark:hover:bg-[#27354A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all"
                       >
                         <span>Use Code</span>
                       </button>
@@ -1478,7 +1446,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 {joinMode === 'code' && (
                   <form onSubmit={handleManualCodeSubmit} className="space-y-3.5 animate-in fade-in">
                     <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700 text-center">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 text-center">
                         Room Invite Key
                       </label>
                       <input
@@ -1490,7 +1458,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                         autoCapitalize="characters"
                         autoCorrect="off"
                         spellCheck={false}
-                        className="w-full h-14 text-center text-xl font-mono font-bold tracking-[0.25em] bg-slate-50 border-2 border-indigo-200 focus:border-indigo-600 rounded-2xl uppercase text-indigo-700 focus:outline-none transition-colors"
+                        className="w-full h-14 text-center text-xl font-mono font-bold tracking-[0.25em] bg-slate-50 dark:bg-[#20202A] border-2 border-indigo-200 dark:border-indigo-900/60 focus:border-indigo-600 rounded-2xl uppercase text-indigo-700 dark:text-indigo-300 focus:outline-none transition-colors"
                         required
                         autoFocus
                       />
@@ -1519,7 +1487,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                           setJoinInviteCode('FLAT02');
                           resolveAndProceedToConfirmation('FLAT02');
                         }}
-                        className="text-[11px] text-indigo-600 hover:underline font-medium"
+                        className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
                       >
                         Active Staging Code: <strong className="font-mono font-bold">FLAT02</strong> (Tap to verify)
                       </button>
@@ -1532,50 +1500,50 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             {/* STEP 1: PRIVACY-PRESERVING ROOM CONFIRMATION */}
             {joinWizardStep === 'confirm_room' && (
               <div className="space-y-4 animate-in fade-in">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-[11px] font-bold tracking-wider text-indigo-600 uppercase">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#27354A]/60 pb-2">
+                  <span className="text-[11px] font-bold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">
                     Step 1 of 2 • Room Confirmation
                   </span>
-                  <span className="text-[11px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
                     #{resolvedRoomData?.tokenOrCode || joinInviteCode}
                   </span>
                 </div>
 
                 {/* Verified Room Identity Card */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/50 border border-indigo-100 text-center space-y-3 shadow-xs">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/50 dark:from-[#1C1C25] dark:via-[#181820] dark:to-[#1C1C25] border border-indigo-100 dark:border-[#27354A] text-center space-y-3 shadow-xs">
                   <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto text-xl shadow-sm">
                     🏠
                   </div>
                   <div>
-                    <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
                       You&apos;re Invited to Join
                     </p>
-                    <h3 className="text-base font-bold text-slate-900 mt-0.5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
                       {resolvedRoomData?.room.name}
                     </h3>
                     {resolvedRoomData?.room.description && (
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
                         {resolvedRoomData.room.description}
                       </p>
                     )}
                   </div>
 
                   <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 text-[11px] font-semibold border border-amber-200">
-                      <Crown className="w-3 h-3 text-amber-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[11px] font-semibold border border-amber-200 dark:border-amber-800/60">
+                      <Crown className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                       <span>Admin: {resolvedRoomData?.adminName}</span>
                     </span>
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-800 text-[11px] font-semibold border border-indigo-200">
-                      <Users className="w-3 h-3 text-indigo-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 text-[11px] font-semibold border border-indigo-200 dark:border-indigo-800/60">
+                      <Users className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                       <span>{resolvedRoomData?.memberCount} active flatmates</span>
                     </span>
                   </div>
                 </div>
 
                 {/* Privacy Reassurance Note */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed space-y-1">
-                  <p className="font-semibold text-slate-800 flex items-center gap-1">
-                    <Lock className="w-3 h-3 text-emerald-600" />
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-200/80 dark:border-[#27354A] text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                     <span>Zero Information Exposed Before Approval</span>
                   </p>
                   <p>
@@ -1591,7 +1559,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       setJoinWizardStep('scan_or_code');
                       setResolvedRoomData(null);
                     }}
-                    className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 transition-all"
+                    className="h-11 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#27354A] active:scale-95 transition-all"
                   >
                     Cancel / Back
                   </button>
@@ -1610,11 +1578,11 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             {/* STEP 2: RESIDENT IDENTITY & 4-DIGIT PIN ENTRY */}
             {joinWizardStep === 'resident_info' && (
               <form onSubmit={handleSendJoinRequest} className="space-y-3.5 animate-in fade-in">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <span className="text-[11px] font-bold tracking-wider text-indigo-600 uppercase">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#27354A] pb-2">
+                  <span className="text-[11px] font-bold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">
                     Step 2 of 2 • Resident Identity
                   </span>
-                  <span className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[140px]">
                     {resolvedRoomData?.room.name}
                   </span>
                 </div>
@@ -1630,14 +1598,14 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowOAuthNotice(true)}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium hover:underline transition-colors py-0.5"
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium hover:underline transition-colors py-0.5"
                     >
                       Browser redirect issue or have auth link? Tap here
                     </button>
                   </div>
                   <div className="relative flex items-center justify-center my-1">
-                    <div className="border-t border-slate-200 w-full" />
-                    <span className="bg-white px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <div className="border-t border-slate-200 dark:border-[#27354A] w-full" />
+                    <span className="bg-white dark:bg-[#12121A] px-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                       or enter details manually
                     </span>
                   </div>
@@ -1645,17 +1613,17 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
                 {/* Full Name */}
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Your Full Name
                   </label>
                   <div className="relative flex items-center">
-                    <UserCheck className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <UserCheck className="absolute left-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                     <input
                       type="text"
                       value={joinResidentName}
                       onChange={(e) => setJoinResidentName(e.target.value)}
                       placeholder="e.g. Rahul Sharma"
-                      className="w-full h-11 pl-10 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none transition-colors"
+                      className="w-full h-11 pl-10 pr-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-[#20202A] focus:border-indigo-600 focus:outline-none transition-colors"
                       required
                       autoFocus
                     />
@@ -1664,11 +1632,11 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
                 {/* Email or Mobile */}
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Email or Mobile Number
                   </label>
                   <div className="relative flex items-center">
-                    <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                     <input
                       type="email"
                       inputMode="email"
@@ -1678,7 +1646,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       value={joinResidentEmail}
                       onChange={(e) => setJoinResidentEmail(e.target.value)}
                       placeholder="resident@roommate.app"
-                      className="w-full h-11 pl-10 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none transition-colors"
+                      className="w-full h-11 pl-10 pr-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-[#20202A] focus:border-indigo-600 focus:outline-none transition-colors"
                       required
                     />
                   </div>
@@ -1703,7 +1671,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     type="button"
                     disabled={isSubmittingJoin}
                     onClick={() => setJoinWizardStep('confirm_room')}
-                    className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-50"
+                    className="h-11 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#27354A] active:scale-95 transition-all disabled:opacity-50"
                   >
                     ← Back
                   </button>
@@ -1732,23 +1700,23 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             {joinWizardStep === 'existing_user_auth' && existingUserForJoin && (
               <form onSubmit={handleExistingUserAuthSubmit} className="space-y-4 animate-in fade-in">
                 {/* Identity Reassurance Card */}
-                <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-3">
+                <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
                     {existingUserForJoin.name ? existingUserForJoin.name.charAt(0).toUpperCase() : 'U'}
                   </div>
                   <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-slate-900">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
                       Account Found: {existingUserForJoin.name}
                     </h4>
-                    <p className="text-[11px] text-slate-600 leading-snug">
-                      This email is already registered. Enter your 4-digit PIN to authenticate and request access to <strong>{resolvedRoomData?.room.name}</strong>.
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                      This email is already registered. Enter your 4-digit PIN to authenticate and request access to <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.room.name}</strong>.
                     </p>
                   </div>
                 </div>
 
                 {/* Protection Notice */}
-                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-[11px] text-emerald-800 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>Your account details, existing memberships, and personal expense vault remain strictly private.</span>
                 </div>
 
@@ -1776,7 +1744,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       setExistingUserPin('');
                       setExistingUserAuthError(null);
                     }}
-                    className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-50"
+                    className="h-11 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#27354A] active:scale-95 transition-all disabled:opacity-50"
                   >
                     Back
                   </button>
@@ -1806,27 +1774,27 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               <div className="space-y-4 animate-in fade-in">
                 {/* Visual Icon & Header */}
                 <div className="text-center space-y-2 pt-2">
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-xs">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
                     <Mail className="w-7 h-7" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Check Your Email</h3>
-                    <p className="text-xs text-slate-500 pt-0.5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Check Your Email</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 pt-0.5">
                       We&apos;ve sent a confirmation link to:
                     </p>
-                    <p className="text-xs font-mono font-bold text-indigo-700 pt-1 break-all bg-indigo-50/50 px-3 py-1.5 rounded-lg border border-indigo-100/80 inline-block mt-1">
+                    <p className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 pt-1 break-all bg-indigo-50/50 dark:bg-indigo-950/30 px-3 py-1.5 rounded-lg border border-indigo-100/80 dark:border-indigo-900/40 inline-block mt-1">
                       {joinResidentEmail}
                     </p>
                   </div>
-                  <p className="text-[11px] text-slate-600 leading-relaxed px-2">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed px-2">
                     Please open the email and tap the confirmation link before continuing your room access request.
                   </p>
                 </div>
 
                 {/* Privacy & Two-Stage Security Note */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
-                  <p className="font-semibold text-slate-800 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-200/80 dark:border-[#27354A] text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Two-Stage Security Model</span>
                   </p>
                   <p>
@@ -1836,11 +1804,11 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
                 {/* Verification Error Notice */}
                 {emailVerificationError && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-start gap-2 animate-in fade-in">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-300 text-xs font-medium flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                       <p className="font-semibold">Email not verified yet</p>
-                      <p className="text-[11px] text-amber-800">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
                         {emailVerificationError}
                       </p>
                     </div>
@@ -1855,9 +1823,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       onClick={() => {
                         window.location.href = `mailto:${joinResidentEmail}`;
                       }}
-                      className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 flex items-center justify-center gap-1.5 transition-all"
+                      className="h-11 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#27354A] active:scale-95 flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       <span>Open Email App</span>
                     </button>
 
@@ -1887,7 +1855,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       type="button"
                       disabled={resendCooldown > 0 || isResendingEmail}
                       onClick={handleResendConfirmationEmail}
-                      className="text-xs font-semibold text-indigo-600 hover:underline disabled:opacity-50 disabled:no-underline"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50 disabled:no-underline"
                     >
                       {isResendingEmail ? (
                         'Sending confirmation email…'
@@ -1907,7 +1875,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                         setJoinWizardStep('resident_info');
                         setEmailVerificationError(null);
                       }}
-                      className="text-[11px] text-slate-400 hover:text-slate-600"
+                      className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       Change email address
                     </button>
@@ -1922,15 +1890,15 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 {/* 1. Approved State */}
                 {joinRequestStatus === 'approved' ? (
                   <div className="p-4 text-center space-y-4 animate-in zoom-in-95">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl shadow-sm">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto text-2xl shadow-sm">
                       🎉
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">You&apos;re in!</h3>
-                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                        <strong>{resolvedRoomData?.adminName || 'Admin'}</strong> approved your request to join <strong>{resolvedRoomData?.room.name}</strong>.
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">You&apos;re in!</h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                        <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.adminName || 'Admin'}</strong> approved your request to join <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.room.name}</strong>.
                       </p>
-                      <p className="text-[11px] text-slate-500 mt-1">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                         You can now access your shared room ledger, view split expenses, and record settlement payments.
                       </p>
                     </div>
@@ -1947,20 +1915,20 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 ) : joinRequestStatus === 'declined' ? (
                   /* 2. Declined State */
                   <div className="p-4 text-center space-y-4 animate-in fade-in">
-                    <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-2xl shadow-sm">
+                    <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto text-2xl shadow-sm">
                       ❌
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">Request Declined</h3>
-                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                        Your request to join <strong>{resolvedRoomData?.room.name}</strong> was declined by {resolvedRoomData?.adminName || 'the admin'}.
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Request Declined</h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                        Your request to join <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.room.name}</strong> was declined by {resolvedRoomData?.adminName || 'the admin'}.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleCancelPendingRequest}
-                      className="w-full h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs active:scale-95 transition-all"
+                      className="w-full h-11 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] text-slate-800 dark:text-slate-200 font-semibold text-xs active:scale-95 transition-all"
                     >
                       Back to Join
                     </button>
@@ -1969,45 +1937,45 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                   /* 3. Pending State */
                   <div className="space-y-4">
                     {/* 3-Stage Visual Progress Tracker */}
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <div className="p-3 bg-slate-50 dark:bg-[#181820] rounded-2xl border border-slate-200/80 dark:border-[#27354A] flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>Request Sent</span>
                       </div>
-                      <span className="text-slate-300">───</span>
-                      <div className="flex items-center gap-1.5 text-indigo-700 font-bold animate-pulse">
-                        <Hourglass className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="text-slate-300 dark:text-slate-600">───</span>
+                      <div className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400 font-bold animate-pulse">
+                        <Hourglass className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                         <span>Waiting</span>
                       </div>
-                      <span className="text-slate-300">───</span>
-                      <div className="flex items-center gap-1 text-slate-400 font-medium">
-                        <div className="w-2.5 h-2.5 rounded-full border border-slate-300" />
+                      <span className="text-slate-300 dark:text-slate-600">───</span>
+                      <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-medium">
+                        <div className="w-2.5 h-2.5 rounded-full border border-slate-300 dark:border-slate-600" />
                         <span>Access</span>
                       </div>
                     </div>
 
                     {/* Status Message Card */}
                     <div className="text-center space-y-2 py-2">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto text-xl border border-amber-200/80">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-xl border border-amber-200/80 dark:border-amber-800/40">
                         ⏳
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                         Waiting for Admin Approval
                       </h3>
-                      <p className="text-xs text-slate-600 max-w-xs mx-auto">
-                        Your request has been sent to <strong>{resolvedRoomData?.adminName || 'the admin'}</strong> for <strong>{resolvedRoomData?.room.name}</strong>.
+                      <p className="text-xs text-slate-600 dark:text-slate-300 max-w-xs mx-auto">
+                        Your request has been sent to <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.adminName || 'the admin'}</strong> for <strong className="text-slate-900 dark:text-white">{resolvedRoomData?.room.name}</strong>.
                       </p>
                     </div>
 
                     {/* Help Note */}
-                    <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 leading-relaxed">
+                    <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-[11px] text-indigo-900 dark:text-indigo-300 leading-relaxed">
                       💡 <strong>You can safely leave this screen or close the app.</strong> We will notify you the moment your request is approved.
                     </div>
 
                     <button
                       type="button"
                       onClick={handleCancelPendingRequest}
-                      className="w-full h-10 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-800 font-semibold text-xs active:scale-95 transition-all"
+                      className="w-full h-10 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-semibold text-xs active:scale-95 transition-all"
                     >
                       Cancel Request & Return
                     </button>
@@ -2020,15 +1988,15 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
         {/* TAB 3: NEW RESIDENT REGISTRATION */}
         {authTab === 'create' && (
-          <section className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <section className="bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-[#27354A]">
               <div className="flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4 text-indigo-600" />
-                <h2 className="text-xs font-bold text-slate-900">
+                <UserPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h2 className="text-xs font-bold text-slate-900 dark:text-white">
                   Register New Resident
                 </h2>
               </div>
-              <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 rounded-full">
+              <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-100/50 dark:border-indigo-900/30">
                 New Account
               </span>
             </div>
@@ -2036,29 +2004,29 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             {createEmailVerificationPending ? (
               <div className="space-y-4 animate-in fade-in py-2">
                 <div className="text-center space-y-2">
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-xs">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
                     <Mail className="w-7 h-7" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Check Your Email</h3>
-                    <p className="text-xs text-slate-500 pt-0.5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Check Your Email</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 pt-0.5">
                       We&apos;ve sent a confirmation link to:
                     </p>
-                    <p className="text-xs font-mono font-bold text-indigo-700 pt-1 break-all bg-indigo-50/50 px-3 py-1.5 rounded-lg border border-indigo-100/80 inline-block mt-1">
+                    <p className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 pt-1 break-all bg-indigo-50/50 dark:bg-indigo-950/30 px-3 py-1.5 rounded-lg border border-indigo-100/80 dark:border-indigo-900/40 inline-block mt-1">
                       {createdUserPending?.email || newResidentEmail}
                     </p>
                   </div>
-                  <p className="text-[11px] text-slate-600 leading-relaxed px-2">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed px-2">
                     Please open the email and tap the confirmation link to complete your account setup.
                   </p>
                 </div>
 
                 {emailVerificationError && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-start gap-2 animate-in fade-in">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-300 text-xs font-medium flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold">Email not verified yet</p>
-                      <p className="text-[11px] text-amber-800">{emailVerificationError}</p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">{emailVerificationError}</p>
                     </div>
                   </div>
                 )}
@@ -2070,9 +2038,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       onClick={() => {
                         window.location.href = `mailto:${createdUserPending?.email || newResidentEmail}`;
                       }}
-                      className="h-11 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 active:scale-95 flex items-center justify-center gap-1.5 transition-all"
+                      className="h-11 rounded-xl bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#27354A] active:scale-95 flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       <span>Open Email App</span>
                     </button>
 
@@ -2101,7 +2069,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       type="button"
                       disabled={resendCooldown > 0 || isResendingEmail}
                       onClick={() => handleResendConfirmationEmail()}
-                      className="text-xs font-semibold text-indigo-600 hover:underline disabled:opacity-50 disabled:no-underline"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50 disabled:no-underline"
                     >
                       {isResendingEmail ? (
                         'Sending confirmation email…'
@@ -2120,7 +2088,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                         setCreateEmailVerificationPending(false);
                         setEmailVerificationError(null);
                       }}
-                      className="text-[11px] text-slate-400 hover:text-slate-600"
+                      className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       Change registration details
                     </button>
@@ -2138,14 +2106,14 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowOAuthNotice(true)}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium hover:underline transition-colors py-0.5"
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium hover:underline transition-colors py-0.5"
                   >
                     Browser redirect issue or have auth link? Tap here
                   </button>
                 </div>
                 <div className="relative flex items-center justify-center my-1">
-                  <div className="border-t border-slate-200 w-full" />
-                  <span className="bg-white px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="border-t border-slate-200 dark:border-[#27354A] w-full" />
+                  <span className="bg-white dark:bg-[#12121A] px-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     or register with email
                   </span>
                 </div>
@@ -2153,7 +2121,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 <form onSubmit={handleCreateResident} className="space-y-3">
                 {/* Full Name */}
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Full Name
                   </label>
                   <input
@@ -2162,14 +2130,14 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     value={newResidentName}
                     onChange={(e) => setNewResidentName(e.target.value)}
                     placeholder="e.g. Rahul Sharma"
-                    className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none transition-colors"
+                    className="w-full h-11 px-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-base md:text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-[#20202A] focus:border-indigo-600 focus:outline-none transition-colors"
                     required
                   />
                 </div>
 
                 {/* Email / Mobile */}
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Email Address
                   </label>
                   <input
@@ -2181,7 +2149,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     value={newResidentEmail}
                     onChange={(e) => setNewResidentEmail(e.target.value)}
                     placeholder="resident@roommate.app"
-                    className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none transition-colors"
+                    className="w-full h-11 px-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-base md:text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-[#20202A] focus:border-indigo-600 focus:outline-none transition-colors"
                     required
                   />
                 </div>
@@ -2189,14 +2157,14 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                 {/* Passcode / PIN Creation */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-slate-700">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                       Create 4-Digit Passcode
                     </label>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={handleApplySuggestion}
-                        className="text-[10px] text-indigo-600 hover:underline font-semibold flex items-center gap-0.5"
+                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-0.5"
                       >
                         <Sparkles className="w-3 h-3 text-amber-500" />
                         <span>Auto-PIN ({suggestedPassword})</span>
@@ -2204,7 +2172,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       <button
                         type="button"
                         onClick={handleRefreshSuggestion}
-                        className="p-0.5 text-slate-400 hover:text-indigo-600"
+                        className="p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                         title="Regenerate"
                       >
                         <RefreshCw className="w-3 h-3" />
@@ -2253,13 +2221,13 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               hapticImpact('LIGHT');
               setAuthTab('join');
             }}
-            className="w-full py-2.5 px-4 rounded-xl border border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 flex items-center justify-between text-indigo-700 transition-colors"
+            className="w-full py-2.5 px-4 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-500/40 hover:border-indigo-500 dark:hover:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 flex items-center justify-between text-indigo-700 dark:text-indigo-300 transition-colors"
           >
             <div className="flex items-center gap-2 text-xs font-semibold">
-              <Key className="w-4 h-4 text-indigo-600" />
+              <Key className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Have an invite code?</span>
             </div>
-            <span className="text-xs font-bold text-indigo-600 flex items-center">
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center">
               Join with Room Key
               <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </span>
@@ -2268,11 +2236,11 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
         {/* 6. Footer & Security Compliance Notice */}
         <footer className="pt-2 pb-4 text-center space-y-1.5">
-          <div className="flex items-center justify-center space-x-1.5 text-slate-400 text-[11px] font-medium">
+          <div className="flex items-center justify-center space-x-1.5 text-slate-400 dark:text-slate-500 text-[11px] font-medium">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
             <span>Private Ledger • 256-bit Encrypted Vault</span>
           </div>
-          <p className="text-[10px] text-slate-400">
+          <p className="text-[10px] text-slate-400 dark:text-slate-500">
             RoomMate Technologies • Authorized Flatmates Only
           </p>
         </footer>
@@ -2280,16 +2248,16 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
       {/* Forgot PIN Recovery Modal */}
       {showForgotPinModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-xs bg-white border border-slate-200 rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-xs bg-white dark:bg-[#12121A] border border-slate-200 dark:border-[#27354A] rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                   <HelpCircle className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Reset PIN</h3>
-                  <p className="text-[11px] text-slate-500">RoomMate Keycard</p>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Reset PIN</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">RoomMate Keycard</p>
                 </div>
               </div>
               <button
@@ -2298,20 +2266,20 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                   setShowForgotPinModal(false);
                   setForgotSuccess(null);
                 }}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] text-slate-600 dark:text-slate-300 flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {forgotSuccess ? (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold text-center">
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 text-xs font-semibold text-center">
                 {forgotSuccess}
               </div>
             ) : (
               <form onSubmit={handleForgotPinSubmit} className="space-y-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Your Email or Mobile
                   </label>
                   <input
@@ -2323,7 +2291,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="resident@roommate.app"
-                    className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs text-slate-900 focus:outline-none focus:border-indigo-600 transition-colors"
+                    className="w-full h-11 px-3 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-base md:text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 transition-colors"
                     required
                   />
                 </div>
@@ -2353,46 +2321,46 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
       {/* Discrete JWT Debug Inspection Modal (Triggered by 5 taps on RoomMate logo) */}
       {inspectingJwt && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl p-5 space-y-3.5 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+        <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-sm bg-white dark:bg-[#12121A] border border-slate-200 dark:border-[#27354A] rounded-3xl p-5 space-y-3.5 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#27354A] pb-2">
               <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   Resident JWT Session (Dev Debug)
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setInspectingJwt(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-300 flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left font-mono text-[10px] text-slate-700 space-y-1 overflow-x-auto">
+            <div className="p-3 bg-slate-50 dark:bg-[#181820] rounded-xl border border-slate-200 dark:border-[#27354A] text-left font-mono text-[10px] text-slate-700 dark:text-slate-300 space-y-1 overflow-x-auto">
               <div>
-                <strong className="text-slate-900">iss:</strong> {inspectingJwt.iss}
+                <strong className="text-slate-900 dark:text-white">iss:</strong> {inspectingJwt.iss}
               </div>
               <div>
-                <strong className="text-slate-900">sub:</strong> {inspectingJwt.sub}
+                <strong className="text-slate-900 dark:text-white">sub:</strong> {inspectingJwt.sub}
               </div>
               <div>
-                <strong className="text-slate-900">name:</strong> {inspectingJwt.name}
+                <strong className="text-slate-900 dark:text-white">name:</strong> {inspectingJwt.name}
               </div>
               <div>
-                <strong className="text-slate-900">email:</strong> {inspectingJwt.email}
+                <strong className="text-slate-900 dark:text-white">email:</strong> {inspectingJwt.email}
               </div>
               <div>
-                <strong className="text-slate-900">role:</strong> {inspectingJwt.role}
+                <strong className="text-slate-900 dark:text-white">role:</strong> {inspectingJwt.role}
               </div>
               <div>
-                <strong className="text-slate-900">biometricVerified:</strong>{' '}
+                <strong className="text-slate-900 dark:text-white">biometricVerified:</strong>{' '}
                 {String(inspectingJwt.biometricVerified)}
               </div>
               <div>
-                <strong className="text-slate-900">exp:</strong>{' '}
+                <strong className="text-slate-900 dark:text-white">exp:</strong>{' '}
                 {new Date(inspectingJwt.exp * 1000).toLocaleString()}
               </div>
             </div>
@@ -2400,7 +2368,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
             <button
               type="button"
               onClick={() => setInspectingJwt(null)}
-              className="w-full h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+              className="w-full h-10 bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#27354A] text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl"
             >
               Close
             </button>

@@ -334,6 +334,23 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
             expenseDate?: string;
           };
 
+          // 1. Try secure RPC first
+          const { error: rpcErr } = await (supabase.rpc as any)('submit_personal_expense_secure', {
+            p_id: data.localId && data.localId.length === 36 ? data.localId : undefined,
+            p_user_id: data.userId,
+            p_title: data.title,
+            p_amount: data.amount,
+            p_category: data.category,
+            p_notes: data.notes || null,
+            p_expense_date: data.expenseDate || new Date().toISOString().split('T')[0],
+          });
+
+          if (!rpcErr) {
+            success = true;
+            break;
+          }
+
+          // 2. Fallback to direct upsert
           const { error } = await supabase.from('personal_expenses').upsert(
             {
               id: data.localId && data.localId.length === 36 ? data.localId : undefined,
@@ -353,7 +370,21 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
         }
 
         case 'DELETE_PERSONAL_EXPENSE': {
-          const data = item.payload as { id: string };
+          const data = item.payload as { id: string; userId?: string };
+
+          // 1. Try secure RPC first if userId available
+          if (data.userId) {
+            const { error: rpcErr } = await (supabase.rpc as any)('delete_personal_expense_secure', {
+              p_id: data.id,
+              p_user_id: data.userId,
+            });
+            if (!rpcErr) {
+              success = true;
+              break;
+            }
+          }
+
+          // 2. Fallback to direct delete
           const { error } = await supabase.from('personal_expenses').delete().eq('id', data.id);
           if (error) throw error;
           success = true;

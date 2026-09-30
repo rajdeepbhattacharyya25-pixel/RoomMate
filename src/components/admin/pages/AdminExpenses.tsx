@@ -146,7 +146,7 @@ export const AdminExpenses: React.FC<AdminExpensesProps> = ({
       <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-slate-700 flex items-center gap-2.5">
         <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
         <span>
-          <b>Privacy Rule Enforced:</b> Individual student personal expenses are strictly private user data. The
+          <b>Privacy Rule Enforced:</b> Individual resident personal expenses are strictly private user data. The
           SuperAdmin console only exposes shared room expenses and multi-person splits.
         </span>
       </div>

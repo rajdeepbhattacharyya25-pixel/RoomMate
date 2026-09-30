@@ -82,17 +82,17 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
 
     return (
       <div
-        className={`flex items-center bg-slate-50 border transition-all overflow-hidden ${
+        className={`flex items-center bg-slate-50 dark:bg-[#20202A] border transition-all overflow-hidden ${
           sizeConfig.container
         } ${
           hasError
-            ? 'border-rose-400 bg-rose-50/30 ring-2 ring-rose-500/20 focus-within:border-rose-500'
-            : 'border-slate-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:bg-white'
-        } ${disabled ? 'opacity-50 pointer-events-none bg-slate-100' : ''} ${containerClassName}`}
+            ? 'border-rose-400 bg-rose-50/30 dark:bg-rose-950/20 ring-2 ring-rose-500/20 focus-within:border-rose-500'
+            : 'border-slate-200 dark:border-[#27354A] focus-within:border-indigo-500 dark:focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:bg-white dark:focus-within:bg-[#181820]'
+        } ${disabled ? 'opacity-50 pointer-events-none bg-slate-100 dark:bg-[#12121A]' : ''} ${containerClassName}`}
       >
         <div
           onClick={() => inputRef.current?.focus()}
-          className={`flex items-center justify-center shrink-0 select-none cursor-pointer border-r border-slate-200 bg-slate-100/90 text-indigo-600 transition-colors ${sizeConfig.prefix} ${prefixClassName}`}
+          className={`flex items-center justify-center shrink-0 select-none cursor-pointer border-r border-slate-200 dark:border-[#27354A] bg-slate-100/90 dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 transition-colors ${sizeConfig.prefix} ${prefixClassName}`}
           aria-hidden="true"
         >
           {currencySymbol}
@@ -106,7 +106,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
           onChange={handleChange}
           disabled={disabled}
           placeholder={placeholder}
-          className={`w-full bg-transparent border-0 outline-none tabular-nums text-slate-900 placeholder:text-slate-400 placeholder:font-normal ${sizeConfig.input} ${className}`}
+          className={`w-full bg-transparent border-0 outline-none tabular-nums text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal ${sizeConfig.input} ${className}`}
           {...restProps}
         />
         {showClear && stringVal && !disabled && (
@@ -114,7 +114,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             type="button"
             onClick={handleClear}
             aria-label="Clear amount"
-            className={`text-slate-400 hover:text-slate-600 active:scale-95 transition-all rounded-lg hover:bg-slate-200/60 shrink-0 ${sizeConfig.clearBtn}`}
+            className={`text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-95 transition-all rounded-lg hover:bg-slate-200/60 dark:hover:bg-[#27354A] shrink-0 ${sizeConfig.clearBtn}`}
           >
             <X className={sizeConfig.clearIcon} />
           </button>

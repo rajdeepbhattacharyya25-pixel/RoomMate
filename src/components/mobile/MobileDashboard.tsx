@@ -229,18 +229,18 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     switch (category.toLowerCase()) {
       case 'wi-fi':
       case 'wifi':
-        return <Wifi className="w-5 h-5 text-indigo-600" />;
+        return <Wifi className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />;
       case 'groceries':
-        return <ShoppingBag className="w-5 h-5 text-amber-600" />;
+        return <ShoppingBag className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
       case 'electricity':
       case 'utilities':
-        return <Zap className="w-5 h-5 text-amber-500" />;
+        return <Zap className="w-5 h-5 text-amber-500 dark:text-amber-400" />;
       case 'food':
-        return <Utensils className="w-5 h-5 text-emerald-600" />;
+        return <Utensils className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />;
       case 'rent':
-        return <Home className="w-5 h-5 text-blue-600" />;
+        return <Home className="w-5 h-5 text-blue-600 dark:text-blue-400" />;
       default:
-        return <Receipt className="w-5 h-5 text-slate-600" />;
+        return <Receipt className="w-5 h-5 text-slate-600 dark:text-slate-400" />;
     }
   };
 
@@ -248,18 +248,18 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     switch (category.toLowerCase()) {
       case 'wi-fi':
       case 'wifi':
-        return 'bg-indigo-50';
+        return 'bg-indigo-50 dark:bg-indigo-950/40';
       case 'groceries':
-        return 'bg-amber-50';
+        return 'bg-amber-50 dark:bg-amber-950/40';
       case 'electricity':
       case 'utilities':
-        return 'bg-amber-50';
+        return 'bg-amber-50 dark:bg-amber-950/40';
       case 'food':
-        return 'bg-emerald-50';
+        return 'bg-emerald-50 dark:bg-emerald-950/40';
       case 'rent':
-        return 'bg-blue-50';
+        return 'bg-blue-50 dark:bg-blue-950/40';
       default:
-        return 'bg-slate-100';
+        return 'bg-slate-100 dark:bg-[#20202A]';
     }
   };
 
@@ -268,12 +268,12 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const { isOnline, isReconnecting, pendingSyncCount } = useNetworkStatus();
 
   return (
-    <div className="space-y-4 pb-28 px-4 pt-3 bg-[#F9F9FF] min-h-full">
+    <div className="space-y-4 pb-28 px-4 pt-3 bg-[#F9F9FF] dark:bg-[#0B0B10] min-h-full">
       {/* Header / Profile Row */}
       <header className="pt-1 pb-1 flex flex-col space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               Hi {displayName}
             </h1>
           </div>
@@ -284,14 +284,14 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                 onClick={onOpenCloudSyncSheet || onOpenSupabaseModal}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-2xs active:scale-95 transition-all ${
                   !isOnline
-                    ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                    : 'bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#20202A]'
                 }`}
                 title={!isOnline ? 'Offline Mode - Operating on Local Vault' : 'Cloud Backup & Sync'}
               >
                 {!isOnline ? (
                   <>
-                    <WifiOff className="w-3 h-3 text-amber-600" />
+                    <WifiOff className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                     <span>{pendingSyncCount > 0 ? `${pendingSyncCount} Queued` : 'Offline Vault'}</span>
                   </>
                 ) : (
@@ -318,7 +318,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             />
 
             {/* Profile Avatar Circle */}
-            <div className="w-9 h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-indigo-700 font-bold text-sm shadow-xs overflow-hidden">
+            <div className="w-9 h-9 rounded-full border border-slate-200 dark:border-[#27354A] bg-white dark:bg-[#181820] flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-sm shadow-xs overflow-hidden">
               {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
             </div>
           </div>
@@ -336,7 +336,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                   if (r) onSelectRoom(r);
                 }}
                 aria-label="Active Room"
-                className="appearance-none inline-flex items-center space-x-1.5 pl-3 pr-7 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                className="appearance-none inline-flex items-center space-x-1.5 pl-3 pr-7 py-1 bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] rounded-full text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#20202A] transition-colors cursor-pointer shadow-2xs"
               >
                 {rooms
                   .filter((r) =>
@@ -350,14 +350,14 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                     </option>
                   ))}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2.5 pointer-events-none" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 absolute right-2.5 pointer-events-none" />
             </div>
           ) : (
             <button
               onClick={onNavigateToRooms}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 bg-white border border-dashed border-indigo-300 text-indigo-700 rounded-full text-xs font-medium hover:bg-indigo-50 transition-colors shadow-2xs"
+              className="inline-flex items-center space-x-1.5 px-3 py-1 bg-white dark:bg-[#181820] border border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors shadow-2xs"
             >
-              <Plus className="w-3 h-3 text-indigo-600" />
+              <Plus className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
               <span>Create or Join Room</span>
             </button>
           )}
@@ -365,18 +365,18 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       </header>
 
       {/* Net Balance Hero Card (Apple Wallet / Splitwise Style) */}
-      <section className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <section className="bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] rounded-2xl p-4.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {netBalance >= 0 ? 'Overall, you are owed' : 'Overall, you owe'}
           </span>
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-700">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="w-4 h-4" />
           </span>
         </div>
 
         <div className="mt-1 flex items-baseline">
-          <span className={`text-3xl font-extrabold tracking-tight tabular-nums ${isPositive ? 'text-emerald-700' : 'text-rose-600'}`}>
+          <span className={`text-3xl font-extrabold tracking-tight tabular-nums ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
             {netBalance === 0
               ? '₹0'
               : isPositive
@@ -385,7 +385,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           </span>
         </div>
 
-        <div className="mt-1 flex items-center space-x-1.5 text-slate-500 text-[11px]">
+        <div className="mt-1 flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
           <span>
             {owedToMe > 0
               ? `${roommateBalances.filter((r) => r.balance > 0).length} roommate(s) owe you`
@@ -398,26 +398,26 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         </div>
 
         {/* Micro breakdown indicators */}
-        <div className="mt-3.5 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+        <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-[#27354A]/60 grid grid-cols-2 gap-2 text-xs">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <ArrowDownLeft className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-[10px] text-slate-400">Owed to you</div>
-              <div className="font-semibold text-slate-900 tabular-nums">
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">Owed to you</div>
+              <div className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 ₹{formatInr(owedToMe)}
               </div>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <ArrowUpRight className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-[10px] text-slate-400">You owe others</div>
-              <div className="font-semibold text-slate-900 tabular-nums">
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">You owe others</div>
+              <div className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 ₹{formatInr(iOwe)}
               </div>
             </div>
@@ -444,10 +444,10 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             hapticImpact('MEDIUM');
             onOpenSettleUp();
           }}
-          className="flex items-center justify-center space-x-2 h-12 bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 rounded-full font-semibold text-sm shadow-xs active:scale-[0.96] transition-transform"
+          className="flex items-center justify-center space-x-2 h-12 bg-white dark:bg-[#181820] border border-slate-200 dark:border-[#27354A] text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-[#20202A] rounded-full font-semibold text-sm shadow-xs active:scale-[0.96] transition-transform"
           type="button"
         >
-          <Handshake className="w-4.5 h-4.5 text-slate-600" />
+          <Handshake className="w-4.5 h-4.5 text-slate-600 dark:text-slate-400" />
           <span>Settle Up</span>
         </button>
       </section>
@@ -455,12 +455,12 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       {/* Roommates in Room Section */}
       <section className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between pb-0.5">
-          <h2 className="text-sm font-bold text-slate-900">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
             {activeRoom ? `Roommates in ${activeRoom.name}` : 'Shared Room Ledger'}
           </h2>
           <button
             onClick={onNavigateToRooms}
-            className="text-xs text-indigo-600 font-semibold hover:underline"
+            className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
             type="button"
           >
             {activeRoom ? 'See all' : 'Explore'}
@@ -468,14 +468,14 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         </div>
 
         {/* Inset List Container */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)]">
+        <div className="bg-white dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] rounded-2xl overflow-hidden divide-y divide-slate-100 dark:divide-[#27354A]/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none">
           {!activeRoom ? (
             <div className="p-6 text-center flex flex-col items-center">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 shadow-2xs">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2 shadow-2xs">
                 <Home className="w-5 h-5" />
               </div>
-              <p className="text-xs font-bold text-slate-800 mb-0.5">No Active Room Yet</p>
-              <p className="text-[11px] text-slate-500 max-w-[260px] mb-3 leading-relaxed">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-0.5">No Active Room Yet</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[260px] mb-3 leading-relaxed">
                 Create a room for your flat, PG, or hostel, or join your flatmates using their 6-character room code.
               </p>
               <button
@@ -495,33 +495,33 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               const owesMe = rm.balance > 0;
               const iOweHim = rm.balance < 0;
               const avatarColors = [
-                'bg-purple-100 text-purple-700',
-                'bg-amber-100 text-amber-800',
-                'bg-pink-100 text-pink-700',
-                'bg-emerald-100 text-emerald-800',
+                'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300',
+                'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300',
+                'bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300',
+                'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300',
               ];
               const colorClass = avatarColors[idx % avatarColors.length];
 
               return (
                 <div
                   key={rm.id}
-                  className="flex items-center justify-between p-3.5 hover:bg-slate-50/80 transition-colors"
+                  className="flex items-center justify-between p-3.5 hover:bg-slate-50/80 dark:hover:bg-[#20202A]/60 transition-colors"
                 >
                   <div className="flex items-center space-x-3">
                     <div
-                      className={`w-9 h-9 rounded-full ${colorClass} flex items-center justify-center font-bold text-xs border border-black/5`}
+                      className={`w-9 h-9 rounded-full ${colorClass} flex items-center justify-center font-bold text-xs border border-black/5 dark:border-white/10`}
                     >
                       {rm.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-slate-900">{rm.name}</span>
+                      <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">{rm.name}</span>
                       <span className="text-[11px] font-medium">
                         {owesMe ? (
-                          <span className="text-emerald-700">owes you ₹{formatInr(rm.balance)}</span>
+                          <span className="text-emerald-700 dark:text-emerald-400">owes you ₹{formatInr(rm.balance)}</span>
                         ) : iOweHim ? (
-                          <span className="text-rose-600">you owe ₹{formatInr(Math.abs(rm.balance))}</span>
+                          <span className="text-rose-600 dark:text-rose-400">you owe ₹{formatInr(Math.abs(rm.balance))}</span>
                         ) : (
-                          <span className="text-slate-400">settled up</span>
+                          <span className="text-slate-400 dark:text-slate-500">settled up</span>
                         )}
                       </span>
                     </div>
@@ -547,7 +547,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                           setNudgeTarget({ debtor, amount: rm.balance, items: relevantItems });
                         }
                       }}
-                      className="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all border border-emerald-200 shadow-2xs"
+                      className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all border border-emerald-200 dark:border-emerald-800/40 shadow-2xs"
                       type="button"
                       title="Nudge on WhatsApp"
                     >
@@ -560,11 +560,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             })
           ) : (
             <div className="p-6 text-center flex flex-col items-center">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 shadow-2xs">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2 shadow-2xs">
                 <UserPlus className="w-5 h-5" />
               </div>
-              <p className="text-xs font-bold text-slate-800 mb-0.5">Invite Your Roommates</p>
-              <p className="text-[11px] text-slate-500 max-w-[240px] mb-3 leading-relaxed">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-0.5">Invite Your Roommates</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[240px] mb-3 leading-relaxed">
                 Add roommates to {activeRoom?.name || 'this room'} to start tracking shared expenses together.
               </p>
               <button
@@ -573,9 +573,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                   hapticImpact('LIGHT');
                   onNavigateToRooms();
                 }}
-                className="px-3.5 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
+                className="px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-200 dark:border-indigo-800/40 flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs"
               >
-                <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 <span>Invite / View Room Code</span>
               </button>
             </div>
@@ -586,16 +586,16 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       {/* Personal Vault Weekly & Monthly Spend Card */}
       <section
         onClick={onNavigateToVault}
-        className="rounded-2xl bg-white border border-slate-200/80 p-4 cursor-pointer hover:border-indigo-300 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] active:scale-[0.99] transition-all"
+        className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] p-4 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none active:scale-[0.99] transition-all"
       >
         <div className="flex items-center justify-between text-xs mb-2.5">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Lock className="w-3.5 h-3.5" />
             </div>
-            <span className="font-semibold text-slate-900">Personal Spending Insights</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-100">Personal Spending Insights</span>
           </div>
-          <div className="flex items-center text-indigo-600 text-[11px] font-semibold">
+          <div className="flex items-center text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold">
             <span>View Vault</span>
             <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
           </div>
@@ -604,33 +604,33 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         {/* Dual Grid: This Week vs This Month */}
         <div className="grid grid-cols-2 gap-2.5 pt-0.5">
           {/* This Week */}
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-100 dark:border-[#27354A]/60">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider block">
               This Week
             </span>
-            <span className="text-base font-bold text-slate-900 tabular-nums block mt-0.5">
+            <span className="text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums block mt-0.5">
               ₹{formatInr(thisWeekPersonal)}
             </span>
-            <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 overflow-hidden">
+            <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <div
                 className="h-full bg-indigo-600 rounded-full"
                 style={{ width: `${weeklyBudgetPercentage}%` }}
               />
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">
               of ₹{formatInr(weeklyAllowance)} budget
             </span>
           </div>
 
           {/* This Month */}
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#181820] border border-slate-100 dark:border-[#27354A]/60">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider block">
               This Month
             </span>
-            <span className="text-base font-bold text-slate-900 tabular-nums block mt-0.5">
+            <span className="text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums block mt-0.5">
               ₹{formatInr(thisMonthPersonal)}
             </span>
-            <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 overflow-hidden">
+            <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <div
                 className={`h-full rounded-full ${
                   monthlyBudgetPercentage > 85 ? 'bg-rose-500' : 'bg-emerald-600'
@@ -638,7 +638,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                 style={{ width: `${monthlyBudgetPercentage}%` }}
               />
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">
               of ₹{formatInr(monthlyAllowance)} allowance
             </span>
           </div>
@@ -648,16 +648,16 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       {/* Recent Activity Section */}
       <section className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between pb-0.5">
-          <h2 className="text-sm font-bold text-slate-900">Recent Activity</h2>
-          <span className="text-xs text-slate-400">This Month</span>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Recent Activity</h2>
+          <span className="text-xs text-slate-400 dark:text-slate-500">This Month</span>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl divide-y divide-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] overflow-hidden">
+        <div className="bg-white dark:bg-[#1C1C25] border border-slate-200/80 dark:border-[#27354A] rounded-2xl divide-y divide-slate-100 dark:divide-[#27354A]/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden">
           {recentTransactions.length > 0 ? (
             recentTransactions.map((tx) => (
               <div
                 key={tx.id}
-                className="flex items-center justify-between p-3.5 hover:bg-slate-50/80 transition-colors"
+                className="flex items-center justify-between p-3.5 hover:bg-slate-50/80 dark:hover:bg-[#20202A]/60 transition-colors"
               >
                 <div className="flex items-center space-x-3">
                   <div
@@ -666,8 +666,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                     {getCategoryIcon(tx.category)}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold text-slate-900">{tx.title}</span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">{tx.title}</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       {tx.isCurrentUserPayer
                         ? `You paid ₹${formatInr(tx.amount)}`
                         : `${tx.paidBy} paid ₹${formatInr(tx.amount)}`}
@@ -678,24 +678,24 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                 <div className="flex flex-col items-end">
                   <span
                     className={`text-xs font-bold tabular-nums ${
-                      tx.impactAmount >= 0 ? 'text-emerald-700' : 'text-slate-900'
+                      tx.impactAmount >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'
                     }`}
                   >
                     {tx.impactAmount >= 0
                       ? `+₹${formatInr(tx.impactAmount)}`
                       : `-₹${formatInr(Math.abs(tx.impactAmount))}`}
                   </span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
                     {tx.impactAmount >= 0 ? 'you lent' : 'you borrowed'}
                   </span>
                 </div>
               </div>
             ))
           ) : (
-            <div className="p-6 text-center text-xs text-slate-400 space-y-1.5">
-              <Receipt className="w-7 h-7 text-slate-300 mx-auto" />
-              <p className="font-semibold text-slate-700">No shared expenses recorded yet</p>
-              <p className="text-[11px] text-slate-500">Tap "+ Add Bill" above to split rent, groceries, or Wi-Fi.</p>
+            <div className="p-6 text-center text-xs text-slate-400 dark:text-slate-500 space-y-1.5">
+              <Receipt className="w-7 h-7 text-slate-300 dark:text-slate-600 mx-auto" />
+              <p className="font-semibold text-slate-700 dark:text-slate-300">No shared expenses recorded yet</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Tap "+ Add Bill" above to split rent, groceries, or Wi-Fi.</p>
             </div>
           )}
         </div>

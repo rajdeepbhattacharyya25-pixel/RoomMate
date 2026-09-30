@@ -270,7 +270,7 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Student bug reports, crash logs, feature feedback, and direct contact inquiries.
+            Resident bug reports, crash logs, feature feedback, and direct contact inquiries.
           </p>
         </div>
 

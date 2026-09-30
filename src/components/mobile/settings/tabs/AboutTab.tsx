@@ -102,7 +102,7 @@ export const AboutTab: React.FC<AboutTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Card 1: App Branding & Live Updates */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] overflow-hidden">
         {/* Header with App Name & Channel Pill */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
@@ -111,18 +111,18 @@ export const AboutTab: React.FC<AboutTabProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-bold text-slate-900 tracking-tight">{BUILD_INFO.appName}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">{BUILD_INFO.appName}</span>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     BUILD_INFO.channel === 'staging'
-                      ? 'bg-amber-100/80 text-amber-800 border-amber-300'
-                      : 'bg-emerald-100/80 text-emerald-800 border-emerald-300'
+                      ? 'bg-amber-100/80 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                      : 'bg-emerald-100/80 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
                   }`}
                 >
                   {BUILD_INFO.channel.toUpperCase()}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500">Live Together. Spend Smarter.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Live Together. Spend Smarter.</p>
             </div>
           </div>
 
@@ -130,12 +130,12 @@ export const AboutTab: React.FC<AboutTabProps> = ({
             type="button"
             onClick={handleManualCheck}
             disabled={updaterState.checking || isManualChecking}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold flex items-center space-x-1.5 active:scale-95 transition-all disabled:opacity-60"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#20202A] dark:hover:bg-[#252532] text-slate-700 dark:text-slate-200 dark:border dark:border-[#27354A] text-[11px] font-semibold flex items-center space-x-1.5 active:scale-95 transition-all disabled:opacity-60"
             title="Check for Over-The-Air Updates"
           >
             <RefreshCw
               className={`w-3.5 h-3.5 ${
-                updaterState.checking || isManualChecking ? 'animate-spin text-indigo-600' : 'text-slate-500'
+                updaterState.checking || isManualChecking ? 'animate-spin text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
               }`}
             />
             <span>{updaterState.checking || isManualChecking ? 'Checking...' : 'Check Update'}</span>
@@ -143,7 +143,7 @@ export const AboutTab: React.FC<AboutTabProps> = ({
         </div>
 
         {/* Version Grid: Installed App vs Live Bundle */}
-        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-left">
+        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-[#27354A] text-left">
           {/* Installed App Card (Tap 5 times for Developer Mode) */}
           <button
             type="button"
@@ -153,34 +153,34 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                 onShowToast(res.message);
               }
             }}
-            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-98 transition-all border border-slate-100/90 space-y-1 text-left w-full cursor-pointer select-none"
+            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-[#20202A] dark:hover:bg-[#252532] active:scale-98 transition-all border border-slate-100/90 dark:border-[#27354A] space-y-1 text-left w-full cursor-pointer select-none"
             title="Tap 5 times to toggle Developer Mode"
           >
-            <div className="flex items-center justify-between text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
               <div className="flex items-center space-x-1.5">
                 <Smartphone className="w-3.5 h-3.5 text-slate-400" />
                 <span>Installed App</span>
               </div>
               {isDevMode && (
-                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
                   DEV
                 </span>
               )}
             </div>
-            <div className="text-xs font-bold text-slate-800">v{BUILD_INFO.version}</div>
-            <div className="text-[10px] text-slate-500">Build code: {BUILD_INFO.buildNumber}</div>
+            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">v{BUILD_INFO.version}</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">Build code: {BUILD_INFO.buildNumber}</div>
           </button>
 
           {/* Live Bundle Card */}
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100/90 space-y-1">
-            <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
-              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-100/90 dark:border-[#27354A] space-y-1">
+            <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+              <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               <span>Live Bundle</span>
             </div>
-            <div className="text-xs font-bold text-slate-800">
+            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
               v{updaterState.activeBundleVersion || BUILD_INFO.version}
             </div>
-            <div className="text-[10px] text-slate-500">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
               {updaterState.activeBundleVersion &&
               updaterState.activeBundleVersion !== 'builtin' &&
               updaterState.activeBundleVersion !== BUILD_INFO.version
@@ -191,12 +191,12 @@ export const AboutTab: React.FC<AboutTabProps> = ({
         </div>
 
         {/* Build Timestamp Info */}
-        <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between px-1 text-[11px] text-slate-500 dark:text-slate-400">
           <div className="flex items-center space-x-1.5">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>Built on:</span>
           </div>
-          <span className="font-medium text-slate-700 font-mono text-[10px]">
+          <span className="font-medium text-slate-700 dark:text-slate-300 font-mono text-[10px]">
             {BUILD_INFO.buildDate} • {BUILD_INFO.buildTime}
           </span>
         </div>
@@ -223,29 +223,29 @@ export const AboutTab: React.FC<AboutTabProps> = ({
 
         {/* Staging Developer Diagnostic Panel (Gated to STAGING Channel) */}
         {BUILD_INFO.channel === 'staging' && (
-          <div className="rounded-xl bg-amber-50/70 border border-amber-200/90 p-3 space-y-2 text-left">
+          <div className="rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/90 dark:border-amber-900/50 p-3 space-y-2 text-left">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center space-x-1.5">
-                <Info className="w-3.5 h-3.5 text-amber-600" />
+              <span className="text-[10px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center space-x-1.5">
+                <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>Staging OTA Diagnostics</span>
               </span>
-              <span className="text-[9px] font-mono bg-amber-200/60 text-amber-800 px-1.5 py-0.5 rounded">
+              <span className="text-[9px] font-mono bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded">
                 Live Channel
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
               <div>
-                <span className="text-slate-500">OTA Endpoint:</span>{' '}
-                <span className="font-semibold text-emerald-700 font-mono">Supabase Storage</span>
+                <span className="text-slate-500 dark:text-slate-400">OTA Endpoint:</span>{' '}
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400 font-mono">Supabase Storage</span>
               </div>
               <div>
-                <span className="text-slate-500">Channel Guard:</span>{' '}
-                <span className="font-semibold text-amber-800 font-mono">STAGING ONLY</span>
+                <span className="text-slate-500 dark:text-slate-400">Channel Guard:</span>{' '}
+                <span className="font-semibold text-amber-800 dark:text-amber-300 font-mono">STAGING ONLY</span>
               </div>
               <div>
-                <span className="text-slate-500">Last Checked:</span>{' '}
-                <span className="font-semibold text-slate-700 font-mono">
+                <span className="text-slate-500 dark:text-slate-400">Last Checked:</span>{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">
                   {updaterState.lastCheckedAt
                     ? new Date(updaterState.lastCheckedAt).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -256,8 +256,8 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                 </span>
               </div>
               <div>
-                <span className="text-slate-500">Status:</span>{' '}
-                <span className="font-semibold text-slate-800">
+                <span className="text-slate-500 dark:text-slate-400">Status:</span>{' '}
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
                   {updaterState.checking
                     ? 'Checking remote...'
                     : updaterState.downloading
@@ -275,8 +275,8 @@ export const AboutTab: React.FC<AboutTabProps> = ({
             {updaterState.activeBundleVersion &&
               updaterState.activeBundleVersion !== 'builtin' &&
               updaterState.activeBundleVersion !== BUILD_INFO.version && (
-                <div className="pt-2 border-t border-amber-200/80 flex items-center justify-between">
-                  <span className="text-amber-900 font-medium text-[10px]">
+                <div className="pt-2 border-t border-amber-200/80 dark:border-amber-900/50 flex items-center justify-between">
+                  <span className="text-amber-900 dark:text-amber-200 font-medium text-[10px]">
                     OTA Bundle active (v{updaterState.activeBundleVersion})
                   </span>
                   <button
@@ -294,36 +294,36 @@ export const AboutTab: React.FC<AboutTabProps> = ({
 
       {/* Card 2: Developer Tools (Gated to Dev Mode or 5-Tap Unlock) */}
       {isDevMode && (
-        <div className="rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs overflow-hidden">
+        <div className="rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/90 dark:border-amber-900/40 shadow-2xs overflow-hidden">
           <button
             type="button"
             onClick={() => setDevToolsOpen(!devToolsOpen)}
-            className="w-full p-4 flex items-center justify-between text-left hover:bg-amber-100/50 transition-colors"
+            className="w-full p-4 flex items-center justify-between text-left hover:bg-amber-100/50 dark:hover:bg-amber-950/40 transition-colors"
           >
             <div className="flex items-center space-x-2.5">
-              <Code className="w-4 h-4 text-amber-700" />
+              <Code className="w-4 h-4 text-amber-700 dark:text-amber-400" />
               <div>
-                <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                <span className="text-xs font-bold text-amber-950 dark:text-amber-200 uppercase tracking-wider">
                   Developer & Staging Tools
                 </span>
-                <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 border border-amber-300">
+                <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
                   🛠️ Active
                 </span>
               </div>
             </div>
             {devToolsOpen ? (
-              <ChevronUp className="w-4 h-4 text-amber-700" />
+              <ChevronUp className="w-4 h-4 text-amber-700 dark:text-amber-400" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-amber-700" />
+              <ChevronDown className="w-4 h-4 text-amber-700 dark:text-amber-400" />
             )}
           </button>
 
           {devToolsOpen && (
-            <div className="p-4 pt-1 border-t border-amber-200/80 space-y-3.5 bg-amber-50/30">
+            <div className="p-4 pt-1 border-t border-amber-200/80 dark:border-amber-900/40 space-y-3.5 bg-amber-50/30 dark:bg-[#12121A]/50">
               {/* Persona Switcher */}
               {allUsers.length > 0 && onSwitchUser && (
                 <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
+                  <div className="text-[11px] font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5" />
                     <span>Switch Testing Persona:</span>
                   </div>
@@ -341,20 +341,20 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                           }}
                           className={`min-h-[42px] p-2 rounded-xl border text-left flex items-center space-x-2 transition-all ${
                             isSelected
-                              ? 'bg-amber-200/80 border-amber-400 text-amber-950 font-bold shadow-2xs'
-                              : 'bg-white border-amber-200 text-slate-700 hover:bg-amber-100/40'
+                              ? 'bg-amber-200/80 dark:bg-amber-900/60 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-100 font-bold shadow-2xs'
+                              : 'bg-white dark:bg-[#1C1C25] border-amber-200 dark:border-amber-900/40 text-slate-700 dark:text-slate-200 hover:bg-amber-100/40 dark:hover:bg-[#252532]'
                           }`}
                         >
                           <div
                             className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
-                              isSelected ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800'
+                              isSelected ? 'bg-amber-800 text-white' : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
                             }`}
                           >
                             {u.name.charAt(0)}
                           </div>
                           <div className="truncate">
                             <div className="text-xs font-semibold truncate">{u.name}</div>
-                            <div className="text-[10px] text-amber-700 truncate">
+                            <div className="text-[10px] text-amber-700 dark:text-amber-400 truncate">
                               {u.role === 'SUPER_ADMIN' ? 'Admin' : 'Resident'}
                             </div>
                           </div>
@@ -366,18 +366,18 @@ export const AboutTab: React.FC<AboutTabProps> = ({
               )}
 
               {/* Developer Actions (Supabase, Security Audit, Reset) */}
-              <div className="space-y-2 pt-1 border-t border-amber-200/60">
+              <div className="space-y-2 pt-1 border-t border-amber-200/60 dark:border-amber-900/40">
                 {onOpenSupabaseModal && (
                   <button
                     type="button"
                     onClick={onOpenSupabaseModal}
-                    className="w-full p-2.5 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50/70 transition-all text-xs font-medium text-slate-900 flex items-center justify-between shadow-2xs"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1C1C25] border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 transition-all text-xs font-medium text-slate-900 dark:text-slate-100 flex items-center justify-between shadow-2xs"
                   >
                     <div className="flex items-center space-x-2">
-                      <Database className="w-4 h-4 text-indigo-600" />
-                      <span className="font-semibold text-indigo-950">Supabase Backend Hub & SQL</span>
+                      <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className="font-semibold text-indigo-950 dark:text-indigo-200">Supabase Backend Hub & SQL</span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
                       10 Tables + RLS
                     </span>
                   </button>
@@ -387,13 +387,13 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                   <button
                     type="button"
                     onClick={onOpenSecurityAudit}
-                    className="w-full p-2.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-50/80 transition-all text-xs font-medium text-slate-900 flex items-center justify-between"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1C1C25] border border-amber-200 dark:border-amber-900/40 hover:bg-amber-50/80 dark:hover:bg-[#252532] transition-all text-xs font-medium text-slate-900 dark:text-slate-100 flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       <span>Vault Security & RLS Audit (Dev)</span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   </button>
                 )}
 
@@ -406,13 +406,13 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                         onShowToast('Demo storage reset to seed records');
                       }
                     }}
-                    className="w-full p-2.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-50/80 transition-all text-xs font-medium text-slate-700 flex items-center justify-between"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1C1C25] border border-amber-200 dark:border-amber-900/40 hover:bg-amber-50/80 dark:hover:bg-[#252532] transition-all text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-2">
-                      <RefreshCw className="w-4 h-4 text-slate-500" />
+                      <RefreshCw className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                       <span>Reset Demo Storage (Dev)</span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   </button>
                 )}
 
@@ -424,13 +424,13 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                     await crashService.testNonFatalError();
                     onShowToast('🧪 Recorded diagnostic non-fatal to Crashlytics');
                   }}
-                  className="w-full p-2.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-50/80 transition-all text-xs font-medium text-slate-700 flex items-center justify-between"
+                  className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1C1C25] border border-amber-200 dark:border-amber-900/40 hover:bg-amber-50/80 dark:hover:bg-[#252532] transition-all text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center justify-between"
                 >
                   <div className="flex items-center space-x-2">
-                    <Flame className="w-4 h-4 text-amber-500" />
+                    <Flame className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                     <span>Record Non-Fatal Diagnostic (Dev)</span>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold">
                     Test Event
                   </span>
                 </button>
@@ -447,13 +447,13 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                       await crashService.testCrash();
                     }
                   }}
-                  className="w-full p-2.5 rounded-xl bg-rose-50/70 border border-rose-200 hover:bg-rose-100/70 transition-all text-xs font-medium text-rose-700 flex items-center justify-between"
+                  className="w-full p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100/70 dark:hover:bg-rose-950/50 transition-all text-xs font-medium text-rose-700 dark:text-rose-300 flex items-center justify-between"
                 >
                   <div className="flex items-center space-x-2">
-                    <Flame className="w-4 h-4 text-rose-600" />
-                    <span className="font-semibold text-rose-800">Trigger Fatal Crash (Dev Only)</span>
+                    <Flame className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    <span className="font-semibold text-rose-800 dark:text-rose-200">Trigger Fatal Crash (Dev Only)</span>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-bold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold">
                     Force Exit
                   </span>
                 </button>
@@ -464,7 +464,7 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                     setDeveloperMode(false);
                     onShowToast('🔒 Developer Mode Disabled');
                   }}
-                  className="w-full text-center text-[10px] text-amber-700 hover:text-amber-900 py-1 font-semibold transition-colors"
+                  className="w-full text-center text-[10px] text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 py-1 font-semibold transition-colors"
                 >
                   Hide Developer Tools (Tap Version to Re-enable)
                 </button>
@@ -476,17 +476,17 @@ export const AboutTab: React.FC<AboutTabProps> = ({
 
       {/* Card 3: User Logout & Lock Vault */}
       {onLogout && (
-        <div className="rounded-2xl bg-white border border-slate-200/90 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] overflow-hidden">
           <button
             type="button"
             onClick={handleConfirmLogout}
-            className="w-full p-4 flex items-center justify-between text-left hover:bg-rose-50/50 transition-all text-xs font-bold text-rose-600 active:bg-rose-100/40"
+            className="w-full p-4 flex items-center justify-between text-left hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-all text-xs font-bold text-rose-600 dark:text-rose-400 active:bg-rose-100/40 dark:active:bg-rose-950/40"
           >
             <div className="flex items-center space-x-2.5">
-              <LogOut className="w-4 h-4 text-rose-500" />
+              <LogOut className="w-4 h-4 text-rose-500 dark:text-rose-400" />
               <span>Log Out & Lock Vault</span>
             </div>
-            <div className="flex items-center gap-1 text-[11px] text-slate-400 font-normal">
+            <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 font-normal">
               <KeyRound className="w-3.5 h-3.5" />
               <span>Sign In Screen</span>
             </div>

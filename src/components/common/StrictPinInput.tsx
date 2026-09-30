@@ -119,18 +119,18 @@ export const StrictPinInput: React.FC<StrictPinInputProps> = ({
       {(label || sublabel) && (
         <div className="flex items-center justify-between">
           {label && (
-            <label htmlFor={id} className="block text-xs font-semibold text-slate-700">
+            <label htmlFor={id} className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
               {label}
             </label>
           )}
           {sublabel && (
-            <span className="text-[10px] text-slate-400 font-medium">{sublabel}</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{sublabel}</span>
           )}
         </div>
       )}
 
       <div className="relative flex items-center">
-        <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+        <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
 
         <input
           id={id}
@@ -147,13 +147,13 @@ export const StrictPinInput: React.FC<StrictPinInputProps> = ({
           autoFocus={autoFocus}
           disabled={disabled}
           required={required}
-          className={`w-full h-12 pl-10 ${showToggle ? 'pr-10' : 'pr-3'} bg-slate-50 border ${
+          className={`w-full h-12 pl-10 ${showToggle ? 'pr-10' : 'pr-3'} bg-slate-50 dark:bg-[#20202A] border ${
             activeError
-              ? 'border-rose-400 focus:border-rose-600 bg-rose-50/20'
+              ? 'border-rose-400 focus:border-rose-600 bg-rose-50/20 dark:bg-rose-950/20'
               : value.length === 4
               ? 'border-indigo-500 focus:border-indigo-600'
-              : 'border-slate-200 focus:border-indigo-600'
-          } rounded-xl text-base md:text-sm text-slate-900 font-mono tracking-widest focus:bg-white focus:outline-none transition-colors font-semibold ${
+              : 'border-slate-200 dark:border-[#27354A] focus:border-indigo-600 dark:focus:border-indigo-500'
+          } rounded-xl text-base md:text-sm text-slate-900 dark:text-slate-100 font-mono tracking-widest focus:bg-white dark:focus:bg-[#181820] focus:outline-none transition-colors font-semibold ${
             centerText ? 'text-center' : ''
           } disabled:opacity-60 disabled:cursor-not-allowed`}
         />
@@ -164,7 +164,7 @@ export const StrictPinInput: React.FC<StrictPinInputProps> = ({
             onClick={() => setShowPin(!showPin)}
             disabled={disabled}
             tabIndex={-1}
-            className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+            className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus:outline-none"
             aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
           >
             {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -184,9 +184,9 @@ export const StrictPinInput: React.FC<StrictPinInputProps> = ({
                 className={`h-2 rounded-full transition-all duration-200 ${
                   isFilled
                     ? isComplete
-                      ? 'w-4 bg-emerald-500 shadow-xs shadow-emerald-300'
-                      : 'w-3.5 bg-indigo-600'
-                    : 'w-2 bg-slate-200'
+                      ? 'w-4 bg-emerald-500 shadow-xs shadow-emerald-300 dark:shadow-emerald-900'
+                      : 'w-3.5 bg-indigo-600 dark:bg-indigo-500'
+                    : 'w-2 bg-slate-200 dark:bg-slate-700'
                 }`}
               />
             );
@@ -196,12 +196,12 @@ export const StrictPinInput: React.FC<StrictPinInputProps> = ({
 
       {/* Inline Warning / Error / Helper */}
       {activeError ? (
-        <p className="text-[11px] text-rose-600 flex items-center gap-1 font-medium animate-in fade-in">
+        <p className="text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1 font-medium animate-in fade-in">
           <AlertCircle className="w-3 h-3 shrink-0" />
           <span>{activeError}</span>
         </p>
       ) : helperText ? (
-        <p className="text-[10px] text-slate-500 leading-normal">{helperText}</p>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">{helperText}</p>
       ) : null}
     </div>
   );

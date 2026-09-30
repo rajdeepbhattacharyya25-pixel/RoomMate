@@ -184,7 +184,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({
           }`}
         >
           {u.role === 'SUPER_ADMIN' && <Shield className="w-3 h-3" />}
-          <span>{u.role === 'SUPER_ADMIN' ? 'SuperAdmin' : 'Student'}</span>
+          <span>{u.role === 'SUPER_ADMIN' ? 'SuperAdmin' : 'Resident'}</span>
         </span>
       ),
     },
@@ -496,7 +496,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({
               title="Filter by platform role"
             >
               <option value="all">All Roles</option>
-              <option value="STUDENT">Students</option>
+              <option value="STUDENT">Residents</option>
               <option value="SUPER_ADMIN">SuperAdmins</option>
             </select>
 

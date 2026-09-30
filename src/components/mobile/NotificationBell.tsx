@@ -63,17 +63,21 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
       }
       className={`relative p-2 rounded-full border transition-all active:scale-95 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${
         hasHighPriorityUnread
-          ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 shadow-2xs'
+          ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 shadow-2xs'
           : unreadCount > 0
-          ? 'bg-indigo-50/70 border-indigo-200 text-indigo-600 hover:bg-indigo-100 shadow-2xs'
-          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
+          ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-2xs'
+          : 'bg-white dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#20202A] hover:text-slate-900 dark:hover:text-white shadow-2xs'
       } ${className}`}
       title={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
     >
       {/* Bell Icon with dynamic wiggle / urgent shake */}
       <Bell
         className={`w-4 h-4 transition-transform ${bellAnimationClass} ${
-          hasHighPriorityUnread ? 'text-rose-600' : unreadCount > 0 ? 'text-indigo-600' : 'text-slate-600'
+          hasHighPriorityUnread
+            ? 'text-rose-600 dark:text-rose-400'
+            : unreadCount > 0
+            ? 'text-indigo-600 dark:text-indigo-400'
+            : 'text-slate-600 dark:text-slate-300'
         }`}
       />
 
@@ -88,8 +92,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
           key={badgeLabel}
           className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center border shadow-xs animate-badge-pop tabular-nums ${
             hasHighPriorityUnread
-              ? 'bg-rose-600 text-white border-white animate-urgent-pulse'
-              : 'bg-indigo-600 text-white border-white'
+              ? 'bg-rose-600 text-white border-white dark:border-[#12121A] animate-urgent-pulse'
+              : 'bg-indigo-600 text-white border-white dark:border-[#12121A]'
           }`}
         >
           {badgeLabel}

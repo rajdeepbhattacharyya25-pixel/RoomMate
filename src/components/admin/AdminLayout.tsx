@@ -20,6 +20,7 @@ interface AdminLayoutProps {
   onSwitchToMobile?: () => void;
   onLogout?: () => void;
   isCloudLive?: boolean;
+  onForceCloudSync?: () => Promise<void> | void;
   toasts?: ToastMessage[];
   onDismissToast?: (id: string) => void;
   children: React.ReactNode;
@@ -40,6 +41,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onSwitchToMobile,
   onLogout,
   isCloudLive = true,
+  onForceCloudSync,
   toasts = [],
   onDismissToast,
   children,
@@ -95,6 +97,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           notifications={notifications}
           onDismissNotification={onDismissNotification}
           onMarkAllNotificationsRead={onMarkAllNotificationsRead}
+          onForceCloudSync={onForceCloudSync}
         />
 
         {/* Dynamic Page Viewport */}

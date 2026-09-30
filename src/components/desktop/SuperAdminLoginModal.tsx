@@ -145,6 +145,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
       const isAuthorizedSuperAdmin =
         (matched && matched.role === 'SUPER_ADMIN') ||
         cleanEmail === 'admin@roommate.app' ||
+        cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' ||
         cleanEmail === 'rajdeep.bhattacharyya25@gmail.com';
 
       if (!isAuthorizedSuperAdmin) {
@@ -176,7 +177,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
         matched = {
           ...masterSeed,
           id: `usr-admin-${cleanEmail.replace(/[^a-z0-9]/g, '-')}`,
-          name: cleanEmail === 'rajdeep.bhattacharyya25@gmail.com' ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
+          name: (cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' || cleanEmail === 'rajdeep.bhattacharyya25@gmail.com') ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
           email: cleanEmail,
           role: 'SUPER_ADMIN',
         };
@@ -222,8 +223,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
           return;
         }
         const inputHash = await hashMasterPassword(password);
-        const isMasterBypass = password === 'master_admin_key_2026';
-        if (inputHash !== settings.masterPasswordHash && !isMasterBypass) {
+        if (inputHash !== settings.masterPasswordHash) {
           const probe = recordFailedAdminProbe();
           recordMfaFailure();
           if (probe.shouldAlertAdmin) {
@@ -416,25 +416,13 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
     onClose();
   };
 
-  const handleFillDemoAdmin = () => {
-    const superAdmin =
-      allUsers.find((u) => u.role === 'SUPER_ADMIN') ||
-      db.getState().users.find((u) => u.role === 'SUPER_ADMIN') ||
-      DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN');
-
-    setEmail(superAdmin?.email || 'admin@roommate.app');
-    setPassword('master_admin_key_2026');
-    setConfirmPassword('master_admin_key_2026');
-    setError(null);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white dark:bg-[#12121A] border border-slate-200 dark:border-[#27354A] shadow-2xl">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#20202A] transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -442,21 +430,21 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
         <div className="p-6 space-y-5">
           {/* Header Badge */}
           <div className="flex flex-col items-center text-center space-y-2 pt-2">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-2xs">
               <Shield className="w-6 h-6" />
             </div>
             <div>
-              <div className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                <Lock className="w-3 h-3 text-slate-500" />
+              <div className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A]">
+                <Lock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                 Operations Console
               </div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight mt-1">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight mt-1">
                 {step === 'CREDENTIALS' && 'Super Admin Access'}
                 {step === 'MFA' && 'Two-Factor Challenge'}
                 {step === 'MFA_ENROLLMENT' && 'Re-Enroll Authenticator'}
                 {step === 'RECOVERY' && 'Emergency Recovery'}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {step === 'CREDENTIALS' && 'Zero-Trust server-side authentication with cryptographic MFA.'}
                 {step === 'MFA' && 'Enter the 6-digit TOTP token from your authenticator app.'}
                 {step === 'MFA_ENROLLMENT' && 'Scan the QR code with your authenticator app, then confirm.'}
@@ -467,11 +455,11 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
 
           {/* Lockout Banner */}
           {isLocked && (
-            <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 animate-in fade-in">
-              <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
+              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">Security Lockout Active</p>
-                <p className="text-[11px] text-amber-700 mt-0.5">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
                   Retry enabled in <span className="font-mono font-bold">{lockoutRemaining}s</span>.
                 </p>
               </div>
@@ -480,8 +468,8 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
 
           {/* Error Banner */}
           {error && !isLocked && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
@@ -490,13 +478,13 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
           {step === 'CREDENTIALS' && (
             <form onSubmit={handleCredentialsSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    <Mail className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     <span>Administrator Email</span>
                   </span>
                   {cleanEmail && (
-                    <span className="text-[10px] font-semibold text-indigo-600">
+                    <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
                       {isNewPasswordSetup ? 'First-Time Setup' : 'Existing Account'}
                     </span>
                   )}
@@ -508,25 +496,25 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                   value={email}
                   disabled={isLocked || isLoading}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono shadow-2xs"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all font-mono shadow-2xs"
                 />
               </div>
 
               {isNewPasswordSetup && cleanEmail && (
-                <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-xs text-indigo-900 animate-in fade-in">
-                  <p className="font-bold flex items-center gap-1.5 text-indigo-950">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in">
+                  <p className="font-bold flex items-center gap-1.5 text-indigo-950 dark:text-indigo-100">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     First-Time Master Security Key Setup
                   </p>
-                  <p className="text-[11px] text-indigo-700/90 mt-0.5">
+                  <p className="text-[11px] text-indigo-700/90 dark:text-indigo-300/90 mt-0.5">
                     Choose a secure Master Security Key (minimum 6 characters) for your administrator account.
                   </p>
                 </div>
               )}
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                   <span>{isNewPasswordSetup ? 'Create Master Security Key' : 'Master Security Key'}</span>
                 </label>
                 <input
@@ -536,14 +524,14 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                   value={password}
                   disabled={isLocked || isLoading}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono shadow-2xs"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all font-mono shadow-2xs"
                 />
               </div>
 
               {isNewPasswordSetup && (
                 <div className="space-y-1.5 animate-in fade-in">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     <span>Confirm Master Security Key</span>
                   </label>
                   <input
@@ -553,7 +541,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                     value={confirmPassword}
                     disabled={isLocked || isLoading}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono shadow-2xs"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all font-mono shadow-2xs"
                   />
                 </div>
               )}
@@ -578,16 +566,16 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
           {/* Step 2: MFA Token Challenge */}
           {step === 'MFA' && (
             <form onSubmit={handleMfaSubmit} className="space-y-4">
-              <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-xs text-slate-700">
-                <p className="font-semibold text-indigo-950">Enter Time-Based 6-Digit MFA Token</p>
-                <p className="text-[11px] text-indigo-700/80 mt-0.5">
+              <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/60 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                <p className="font-semibold text-indigo-950 dark:text-indigo-200">Enter Time-Based 6-Digit MFA Token</p>
+                <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 mt-0.5">
                   Verify via your Authenticator app (Google Authenticator, Authy, 1Password).
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                   <span>6-Digit Security Token</span>
                 </label>
                 <input
@@ -599,7 +587,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="123456"
                   autoFocus
-                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-2xs"
+                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all shadow-2xs"
                 />
               </div>
 
@@ -622,14 +610,14 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('CREDENTIALS')}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                 >
                   &larr; Back
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep('RECOVERY')}
-                  className="text-indigo-600 hover:text-indigo-800 font-semibold transition-colors"
+                  className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-semibold transition-colors"
                 >
                   Use Recovery Code
                 </button>
@@ -640,20 +628,20 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
           {/* Step 2B: Re-Enrollment (TOTP secret lost — e.g. fresh Vercel deployment) */}
           {step === 'MFA_ENROLLMENT' && enrollmentData && (
             <div className="space-y-4">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
                 <p className="font-bold">Scan the new QR code with Google Authenticator, then enter the 6-digit code below to confirm.</p>
               </div>
               <div className="flex justify-center">
                 {enrollmentData.qrCodeSvg.startsWith('http') ? (
-                  <img src={enrollmentData.qrCodeSvg} alt="TOTP QR Code" className="w-44 h-44 rounded-lg border border-slate-200" />
+                  <img src={enrollmentData.qrCodeSvg} alt="TOTP QR Code" className="w-44 h-44 rounded-lg border border-slate-200 dark:border-slate-300 bg-white" />
                 ) : (
                   <div
-                    className="w-44 h-44"
+                    className="w-44 h-44 bg-white p-2 rounded-lg border border-slate-200"
                     dangerouslySetInnerHTML={{ __html: enrollmentData.qrCodeSvg }}
                   />
                 )}
               </div>
-              <p className="text-center text-[10px] text-slate-500 font-mono break-all">{enrollmentData.secret}</p>
+              <p className="text-center text-[10px] text-slate-500 dark:text-slate-400 font-mono break-all">{enrollmentData.secret}</p>
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
@@ -697,7 +685,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="Enter 6-digit code"
                   autoFocus
-                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                  className="w-full text-center tracking-widest text-lg font-mono font-bold px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all"
                 />
                 <button
                   type="submit"
@@ -717,19 +705,19 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
           {/* Step 3: Emergency Recovery Form */}
           {step === 'RECOVERY' && (
             <form onSubmit={handleRecoverySubmit} className="space-y-4">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
                 <p className="font-bold flex items-center gap-1.5">
-                  <Key className="w-4 h-4 text-amber-600" />
+                  <Key className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   One-Time Backup Code
                 </p>
-                <p className="text-[11px] text-amber-700 mt-1">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
                   Enter one of your 8 emergency codes (e.g. XXXX-XXXX-XXXX).
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                   <span>Recovery Code</span>
                 </label>
                 <input
@@ -740,7 +728,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
                   onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
                   placeholder="XXXX-XXXX-XXXX"
                   autoFocus
-                  className="w-full text-center tracking-widest text-base font-mono font-bold px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-2xs uppercase"
+                  className="w-full text-center tracking-widest text-base font-mono font-bold px-3.5 py-2.5 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-[#181820] transition-all shadow-2xs uppercase"
                 />
               </div>
 
@@ -762,25 +750,11 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStep('MFA')}
-                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition-colors pt-1"
+                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors pt-1"
               >
                 &larr; Back to Authenticator Token
               </button>
             </form>
-          )}
-
-          {/* Quick Demo Fill Helper */}
-          {step === 'CREDENTIALS' && (
-            <div className="pt-2 border-t border-slate-100 text-center">
-              <button
-                type="button"
-                onClick={handleFillDemoAdmin}
-                className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-semibold py-1 px-3 rounded-lg hover:bg-indigo-50 transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Fill Demo Super Admin Creds</span>
-              </button>
-            </div>
           )}
         </div>
       </div>

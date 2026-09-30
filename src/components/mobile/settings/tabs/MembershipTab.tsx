@@ -65,22 +65,22 @@ export const MembershipTab: React.FC<MembershipTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Current Plan Header Card */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-              isPro ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'
+              isPro ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300'
             }`}>
-              {isPro ? <Sparkles className="w-5 h-5 text-indigo-600" /> : <CreditCard className="w-5 h-5" />}
+              {isPro ? <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> : <CreditCard className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="text-sm font-bold text-slate-900">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   {isPro ? 'Resident Pro Plan' : 'Free Resident Tier'}
                 </h3>
               </div>
-              <p className="text-[11px] text-slate-500">
-                {isPro ? 'Full access to all roommate features' : 'Basic student ledger access'}
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {isPro ? 'Full access to all roommate features' : 'Basic resident ledger access'}
               </p>
             </div>
           </div>
@@ -88,8 +88,8 @@ export const MembershipTab: React.FC<MembershipTabProps> = ({
           <span
             className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
               isPro
-                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                : 'bg-slate-100 text-slate-700 border-slate-200'
+                ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                : 'bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#27354A]'
             }`}
           >
             {isPro ? 'PRO ACTIVE' : 'FREE'}
@@ -97,14 +97,14 @@ export const MembershipTab: React.FC<MembershipTabProps> = ({
         </div>
 
         {isPro ? (
-          <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950 dark:text-indigo-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Membership Active & Cloud Synced</span>
             </div>
-            <p className="text-[11px] text-slate-600">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
               Billing renewal:{' '}
-              <span className="font-semibold text-slate-800">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
                 {subscription?.currentPeriodEnd
                   ? new Date(subscription.currentPeriodEnd).toLocaleDateString(undefined, {
                       day: 'numeric',
@@ -117,8 +117,8 @@ export const MembershipTab: React.FC<MembershipTabProps> = ({
             </p>
           </div>
         ) : (
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 leading-relaxed">
-            You are on the standard student plan. Upgrade to <strong>Resident Pro (₹49/mo)</strong> to unlock limitless rooms and advanced financial reports.
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/80 dark:border-[#27354A] text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            You are on the standard resident plan. Upgrade to <strong className="text-slate-900 dark:text-white">Resident Pro (₹49/mo)</strong> to unlock limitless rooms and advanced financial reports.
           </div>
         )}
 
@@ -135,28 +135,28 @@ export const MembershipTab: React.FC<MembershipTabProps> = ({
       </div>
 
       {/* Perks Comparison Card */}
-      <div className="rounded-2xl bg-white border border-slate-200/90 p-4 space-y-3.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
+      <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center space-x-2">
           <Zap className="w-4 h-4 text-amber-500" />
-          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
             Resident Pro Benefits
           </h4>
         </div>
 
-        <div className="space-y-3 divide-y divide-slate-100">
+        <div className="space-y-3 divide-y divide-slate-100 dark:divide-[#27354A]">
           {PRO_PERKS.map((perk, idx) => {
             const Icon = perk.icon;
             return (
               <div key={idx} className={`pt-3 first:pt-0 flex items-start space-x-3`}>
-                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
                   <Icon className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                     <span>{perk.title}</span>
-                    {isPro && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                    {isPro && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
                     {perk.desc}
                   </p>
                 </div>

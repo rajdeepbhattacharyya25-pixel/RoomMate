@@ -2,16 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { KeyRound, X, Check, AlertCircle } from 'lucide-react';
 import { StrictPinInput } from '../../../common/StrictPinInput';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
-import { validateStrict4DigitPin } from '../../../../lib/auth/jwtService';
+import { validateStrict4DigitPin, hashPin } from '../../../../lib/auth/jwtService';
+import { supabase } from '../../../../lib/supabase/client';
+import { IS_LIVE_SYNC_ENABLED } from '../../../../lib/storage/cloudStorageAdapter';
+import { User } from '../../../../types';
 
 interface ChangePinModalProps {
   isOpen: boolean;
+  currentUser?: User;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export const ChangePinModal: React.FC<ChangePinModalProps> = ({
   isOpen,
+  currentUser,
   onClose,
   onSuccess,
 }) => {
@@ -24,6 +29,7 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
   const getStoredPin = (): string => {
     if (typeof localStorage === 'undefined') return '1234';
     return (
+      (currentUser?.id ? localStorage.getItem(`roommate_vault_pin_${currentUser.id}`) : null) ||
       localStorage.getItem('roommate_vault_pin') ||
       localStorage.getItem('campusflow_vault_pin') ||
       '1234'
@@ -81,6 +87,24 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
     try {
       localStorage.setItem('roommate_vault_pin', newPin);
       localStorage.setItem('campusflow_vault_pin', newPin);
+      if (currentUser?.id) {
+        localStorage.setItem(`roommate_vault_pin_${currentUser.id}`, newPin);
+      }
+
+      // Synchronize Supabase Auth password if live sync is active
+      if (IS_LIVE_SYNC_ENABLED) {
+        hashPin(newPin)
+          .then(async (hashedPin) => {
+            const authPassword = `RoomMate_${hashedPin.slice(0, 16)}!`;
+            try {
+              await supabase.auth.updateUser({ password: authPassword });
+            } catch {
+              // Non-fatal if offline or unauthenticated
+            }
+          })
+          .catch(() => {});
+      }
+
       hapticSuccess();
       onSuccess();
       onClose();
@@ -95,21 +119,21 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="change-pin-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in select-none"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in select-none"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 space-y-4 animate-in slide-in-from-bottom-6 duration-200"
+        className="w-full sm:max-w-md bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 dark:border-[#27354A] space-y-4 animate-in slide-in-from-bottom-6 duration-200"
       >
-        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-[#27354A]">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <KeyRound className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h3 id="change-pin-title" className="text-sm font-bold text-slate-900">Change Vault PIN</h3>
-              <p className="text-[11px] text-slate-500">
+              <h3 id="change-pin-title" className="text-sm font-bold text-slate-900 dark:text-slate-100">Change Vault PIN</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {step === 'VERIFY_OLD' && 'Step 1 of 3: Enter current PIN'}
                 {step === 'ENTER_NEW' && 'Step 2 of 3: Choose a 4-digit PIN'}
                 {step === 'CONFIRM_NEW' && 'Step 3 of 3: Confirm new PIN'}
@@ -120,14 +144,14 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#20202A] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {error && (
-          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
+          <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -149,7 +173,7 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 active:scale-98 transition-all"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-98 transition-all"
               >
                 Cancel
               </button>
@@ -180,7 +204,7 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStep('VERIFY_OLD')}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 active:scale-98 transition-all"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-98 transition-all"
               >
                 Back
               </button>
@@ -211,7 +235,7 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStep('ENTER_NEW')}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 active:scale-98 transition-all"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#27354A] text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-98 transition-all"
               >
                 Back
               </button>

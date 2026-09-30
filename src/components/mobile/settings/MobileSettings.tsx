@@ -123,30 +123,30 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
   }, [activeCategory]);
 
   return (
-    <div className="flex flex-col min-h-full bg-[#F8FAFC] pb-nav-safe">
+    <div className="flex flex-col min-h-full bg-[#F8FAFC] dark:bg-[#0B0B10] text-[#111827] dark:text-[#F8FAFC] pb-nav-safe transition-colors duration-150">
       {/* Toast Alert */}
       {statusMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 dark:bg-[#1C1C25] text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 dark:border-[#27354A] animate-in fade-in slide-in-from-top-2">
           <Check className="w-3.5 h-3.5 text-emerald-400" />
           <span>{statusMessage}</span>
         </div>
       )}
 
       {/* Sticky Settings Header */}
-      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 pt-3 pb-2.5">
+      <div className="sticky top-0 z-30 bg-white/90 dark:bg-[#12121A]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-[#27354A] px-4 pt-3 pb-2.5 transition-colors duration-150">
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <SettingsIcon className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">Settings</h1>
-              <p className="text-[11px] text-slate-500">Preferences, security & identity</p>
+              <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">Settings</h1>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Preferences, security & identity</p>
             </div>
           </div>
 
           <div className="text-right">
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#181820] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#27354A]">
               {currentUser.role === 'SUPER_ADMIN' ? 'Admin' : 'Resident'}
             </span>
           </div>
@@ -168,11 +168,11 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
                 onClick={() => handleSelectCategory(cat.id)}
                 className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap transition-all active:scale-95 shrink-0 ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                    ? 'bg-indigo-600 dark:bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-[#181820] text-slate-600 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-[#20202A] hover:text-slate-900 dark:hover:text-slate-200 border border-transparent dark:border-[#27354A]'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
                 <span>{cat.label}</span>
               </button>
             );
