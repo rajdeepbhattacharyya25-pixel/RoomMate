@@ -53,6 +53,8 @@ android/.externalNativeBuild/
 
 # Compiled binaries, AAB bundles, and local APK builds
 *.apk
+!public/RoomMate-v1.0.4-prod.apk
+!public/RoomMate-latest.apk
 *.aab
 *.exe
 snyk.exe

@@ -16,8 +16,8 @@ const QRCode = require('qrcode');
 const { PNG } = require('pngjs');
 const jsQR = require('jsqr');
 
-// Target landing page URL with action=download trigger
-const TARGET_URL = 'https://roommate26.vercel.app/?action=download';
+// Target landing page URL with direct automatic download endpoint
+const TARGET_URL = 'https://roommate26.vercel.app/download';
 const APP_VERSION = 'v1.0.4';
 const BUILD_NUMBER = 'Build 10';
 const FILE_SIZE = '7.29 MB';

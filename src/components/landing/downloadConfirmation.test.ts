@@ -160,7 +160,7 @@ describe('Branded QR Code & Automated Download Confirmation Flow', () => {
       // Verify that jsQR can decode the QR code within the generated branded card
       const decoded = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
       expect(decoded).not.toBeNull();
-      expect(decoded?.data).toBe('https://roommate26.vercel.app/?action=download');
+      expect(decoded?.data).toBe('https://roommate26.vercel.app/download');
     });
 
     it('root copy of the QR PNG exists for direct local file access', () => {

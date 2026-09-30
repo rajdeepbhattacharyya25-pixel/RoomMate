@@ -11,7 +11,7 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ isOpen, onClose }) => 
 
   if (!isOpen) return null;
 
-  const downloadTargetUrl = 'https://roommate26.vercel.app/?action=download';
+  const downloadTargetUrl = 'https://roommate26.vercel.app/download';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(downloadTargetUrl);
@@ -71,7 +71,7 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ isOpen, onClose }) => 
         {/* Build Specs Pill */}
         <div className="mb-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-surface border border-brand-border text-[11px] font-medium text-brand-slate">
           <Smartphone className="w-3.5 h-3.5 text-brand" />
-          <span>v1.0.4 (Build 10) • Staging Release • 7.29 MB</span>
+          <span>v1.0.4 (Build 10) • Production Release • 7.29 MB</span>
         </div>
 
         {/* Action Controls */}
