@@ -29,6 +29,8 @@ backups/
 *.sql.gz
 artifacts/**/*.sql
 artifacts/**/*.sql.sha256
+artifacts/keyframes/
+artifacts/*.mp4
 
 
 # Scratch and internal verification scripts containing credentials

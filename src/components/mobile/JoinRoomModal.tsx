@@ -18,10 +18,14 @@ import {
   ShieldCheck,
   MessageCircle,
   WifiOff,
+  Loader2,
 } from 'lucide-react';
 import { Room, User, JoinPolicy, InvitePolicy, RoomInvitation } from '../../types';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { hapticImpact, hapticSuccess, hapticWarning, hapticSelection } from '../../lib/native/haptics';
+import { supabase } from '../../lib/supabase/client';
+import { checkJoinRequestStatusCloud } from '../../lib/storage/cloudStorageAdapter';
+import confetti from 'canvas-confetti';
 import {
   decodeQrFromVideoFrame,
   decodeQrFromImage,
@@ -42,6 +46,7 @@ interface JoinRoomModalProps {
     status: 'JOINED' | 'PENDING' | 'ALREADY_MEMBER';
     room: Room;
     message?: string;
+    requestId?: string;
   }>;
   onRoomJoined: (room: Room) => void;
   initialCode?: string;
@@ -50,7 +55,7 @@ interface JoinRoomModalProps {
 export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   isOpen,
   onClose,
-  currentUser: _currentUser,
+  currentUser,
   onResolveInvite,
   onRequestJoin,
   onRoomJoined,
@@ -334,6 +339,123 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
     window.open(shareUrl, '_blank');
   };
 
+  const hasAutoJoinedRef = useRef(false);
+
+  // Live Realtime listener & Fallback Polling for instant join approval
+  useEffect(() => {
+    if (!isOpen || joinResult?.status !== 'PENDING' || !joinResult.room?.id) return;
+    hasAutoJoinedRef.current = false;
+
+    let isMounted = true;
+    const targetRoom = joinResult.room;
+    const requestId = (joinResult as any).requestId;
+
+    const triggerApprovalSuccess = (approvedRoom: Room) => {
+      if (hasAutoJoinedRef.current) return;
+      hasAutoJoinedRef.current = true;
+      hapticSuccess();
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#6366F1', '#10B981', '#F59E0B'],
+        });
+      } catch {}
+
+      setJoinResult({
+        status: 'JOINED',
+        room: approvedRoom,
+        message: `Welcome to ${approvedRoom.name}!`,
+      });
+
+      setTimeout(() => {
+        if (isMounted) {
+          onClose();
+          onRoomJoined(approvedRoom);
+        }
+      }, 850);
+    };
+
+    // 1. Live Realtime channel listener
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel(`modal-join-${targetRoom.id}-${currentUser.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'room_join_requests',
+          },
+          (payload: any) => {
+            if (!isMounted) return;
+            const updated = payload?.new;
+            if (
+              (requestId && updated?.id === requestId) ||
+              (updated?.user_id === currentUser.id && updated?.room_id === targetRoom.id)
+            ) {
+              if (updated.status === 'APPROVED') {
+                triggerApprovalSuccess(targetRoom);
+              } else if (updated.status === 'DECLINED') {
+                hapticWarning();
+                setErrorMessage('Your request to join this room was declined.');
+                setJoinResult(null);
+              }
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'room_members',
+            filter: `user_id=eq.${currentUser.id}`,
+          },
+          (payload: any) => {
+            if (!isMounted) return;
+            if (payload?.new?.room_id === targetRoom.id && payload?.new?.status === 'ACTIVE') {
+              triggerApprovalSuccess(targetRoom);
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime channel error in JoinRoomModal:', err);
+    }
+
+    // 2. High-Frequency Polling fallback
+    const interval = setInterval(async () => {
+      if (!isMounted || hasAutoJoinedRef.current) return;
+      try {
+        const res = await checkJoinRequestStatusCloud(requestId || '', {
+          roomId: targetRoom.id,
+          userId: currentUser.id,
+        });
+        if (!isMounted || hasAutoJoinedRef.current) return;
+        if (res.status === 'APPROVED') {
+          triggerApprovalSuccess(res.room || targetRoom);
+        } else if (res.status === 'DECLINED') {
+          hapticWarning();
+          setErrorMessage('Your request to join this room was declined.');
+          setJoinResult(null);
+        }
+      } catch (err) {
+        console.warn('Polling checkJoinRequestStatusCloud in modal error:', err);
+      }
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [isOpen, joinResult?.status, joinResult?.room?.id, currentUser.id, onClose, onRoomJoined]);
+
   return (
     <MobileBottomSheet
       isOpen={isOpen}
@@ -431,6 +553,10 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                     Your request to join <strong>{joinResult.room.name}</strong> was submitted. You will be notified as soon as the room admin approves your request.
                   </p>
+                  <div className="flex items-center justify-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold pt-2 animate-pulse">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Waiting for admin live approval...</span>
+                  </div>
                 </div>
                 <button
                   type="button"

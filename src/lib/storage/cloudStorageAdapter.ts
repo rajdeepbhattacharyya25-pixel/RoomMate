@@ -660,7 +660,7 @@ export async function deletePersonalExpenseCloud(userId: string, id: string): Pr
 // Realtime Subscriptions Handler for Multi-Client Synchronization
 export function subscribeToRoomRealtime(
   roomId: string,
-  onRemoteChange: (table: string, eventType: string) => void
+  onRemoteChange: (table: string, eventType: string, payload?: any) => void
 ): () => void {
   if (!IS_LIVE_SYNC_ENABLED || !roomId) {
     return () => {};
@@ -676,7 +676,7 @@ export function subscribeToRoomRealtime(
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
       (payload) => {
         console.log('[Realtime] rooms changed:', payload.eventType);
-        onRemoteChange('rooms', payload.eventType);
+        onRemoteChange('rooms', payload.eventType, payload);
       }
     )
     .on(
@@ -684,7 +684,7 @@ export function subscribeToRoomRealtime(
       { event: '*', schema: 'public', table: 'shared_expenses', filter: `room_id=eq.${roomId}` },
       (payload) => {
         console.log('[Realtime] shared_expenses changed:', payload.eventType);
-        onRemoteChange('shared_expenses', payload.eventType);
+        onRemoteChange('shared_expenses', payload.eventType, payload);
       }
     )
     .on(
@@ -692,7 +692,7 @@ export function subscribeToRoomRealtime(
       { event: '*', schema: 'public', table: 'settlement_payments', filter: `room_id=eq.${roomId}` },
       (payload) => {
         console.log('[Realtime] settlement_payments changed:', payload.eventType);
-        onRemoteChange('settlement_payments', payload.eventType);
+        onRemoteChange('settlement_payments', payload.eventType, payload);
       }
     )
     .on(
@@ -700,7 +700,39 @@ export function subscribeToRoomRealtime(
       { event: '*', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` },
       (payload) => {
         console.log('[Realtime] room_members changed:', payload.eventType);
-        onRemoteChange('room_members', payload.eventType);
+        onRemoteChange('room_members', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'room_join_requests', filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        console.log('[Realtime] room_join_requests changed:', payload.eventType);
+        onRemoteChange('room_join_requests', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'expense_splits' },
+      (payload) => {
+        console.log('[Realtime] expense_splits changed:', payload.eventType);
+        onRemoteChange('expense_splits', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'room_invitations', filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        console.log('[Realtime] room_invitations changed:', payload.eventType);
+        onRemoteChange('room_invitations', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'profiles' },
+      (payload) => {
+        console.log('[Realtime] profiles changed:', payload.eventType);
+        onRemoteChange('profiles', payload.eventType, payload);
       }
     )
     .subscribe((status) => {
@@ -713,7 +745,7 @@ export function subscribeToRoomRealtime(
   };
 }
 
-// User-Level Realtime Subscriptions (in_app_notifications, profile suspension, platform announcements)
+// User-Level Realtime Subscriptions (in_app_notifications, profile suspension, room_join_requests, room_members, personal_expenses)
 export function subscribeToUserRealtime(
   userId: string,
   onRemoteChange: (table: string, eventType: string, payload?: any) => void
@@ -743,6 +775,30 @@ export function subscribeToUserRealtime(
         onRemoteChange('profiles', payload.eventType, payload);
       }
     )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'room_join_requests', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        console.log('[Realtime User] room_join_requests changed:', payload.eventType);
+        onRemoteChange('room_join_requests', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'room_members', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        console.log('[Realtime User] room_members changed:', payload.eventType);
+        onRemoteChange('room_members', payload.eventType, payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'personal_expenses', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        console.log('[Realtime User] personal_expenses changed:', payload.eventType);
+        onRemoteChange('personal_expenses', payload.eventType, payload);
+      }
+    )
     .subscribe((status) => {
       console.log(`[Realtime User] Subscription status for ${channelName}:`, status);
     });
@@ -750,6 +806,47 @@ export function subscribeToUserRealtime(
   return () => {
     console.log(`[Realtime User] Unsubscribing channel: ${channelName}`);
     supabase.removeChannel(channel);
+  };
+}
+
+// Admin Realtime Subscription across all administered rooms
+export function subscribeToAdminRoomsRealtime(
+  roomIds: string[],
+  onRemoteChange: (table: string, eventType: string, payload?: any) => void
+): () => void {
+  if (!IS_LIVE_SYNC_ENABLED || !roomIds || roomIds.length === 0) {
+    return () => {};
+  }
+
+  const unsubs = roomIds.map((rId) => {
+    const chName = `admin-room-${rId}`;
+    const ch = supabase
+      .channel(chName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'room_join_requests', filter: `room_id=eq.${rId}` },
+        (payload) => {
+          console.log(`[Realtime Admin] room_join_requests on ${rId}:`, payload.eventType);
+          onRemoteChange('room_join_requests', payload.eventType, payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'room_members', filter: `room_id=eq.${rId}` },
+        (payload) => {
+          console.log(`[Realtime Admin] room_members on ${rId}:`, payload.eventType);
+          onRemoteChange('room_members', payload.eventType, payload);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  });
+
+  return () => {
+    unsubs.forEach((u) => u());
   };
 }
 
@@ -2576,6 +2673,8 @@ export async function requestJoinRoomCloud(
         room_id: string;
         room_name: string;
         message?: string;
+        request_id?: string;
+        requestId?: string;
       };
 
       const { data: cloudRoom } = await supabase
@@ -2625,14 +2724,39 @@ export async function requestJoinRoomCloud(
         });
       }
 
+      let capturedRequestId = rpcRes.request_id || rpcRes.requestId;
+
       if (rpcRes.status === 'PENDING') {
+        // If RPC didn't return request_id directly, query Supabase for the newly upserted join request
+        if (!capturedRequestId) {
+          try {
+            const { data: activeCloudReq } = await supabase
+              .from('room_join_requests')
+              .select('id')
+              .eq('room_id', targetRoom.id)
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (activeCloudReq?.id) {
+              capturedRequestId = activeCloudReq.id;
+            }
+          } catch (e) {
+            console.warn('[requestJoinRoomCloud] Fallback query for request ID failed:', e);
+          }
+        }
+
+        const effectiveReqId = capturedRequestId || ('req-' + Math.random().toString(36).substr(2, 9));
+
         // Track pending request locally
         const existingReq = state.roomJoinRequests.find(
           (r) => r.roomId === targetRoom.id && r.userId === userId && r.status === 'PENDING'
         );
-        if (!existingReq) {
+        if (existingReq) {
+          if (capturedRequestId) existingReq.id = capturedRequestId;
+        } else {
           state.roomJoinRequests.unshift({
-            id: 'req-' + Math.random().toString(36).substr(2, 9),
+            id: effectiveReqId,
             roomId: targetRoom.id,
             userId,
             status: 'PENDING',
@@ -2647,6 +2771,7 @@ export async function requestJoinRoomCloud(
         status: rpcRes.status,
         room: targetRoom,
         message: rpcRes.message || (rpcRes.status === 'JOINED' ? `Welcome to ${targetRoom.name}!` : `Request sent to ${targetRoom.name}`),
+        requestId: capturedRequestId,
       };
     }
   }
@@ -2658,8 +2783,11 @@ export async function requestJoinRoomCloud(
 // Alias for explicit Phase 2B nomenclature
 export const joinRoomByInviteCloud = requestJoinRoomCloud;
 
-// Check Join Request Status (Cloud + Local fallback)
-export async function checkJoinRequestStatusCloud(requestId: string): Promise<{
+// Check Join Request Status (Cloud + Local fallback with dual-layer fallback query)
+export async function checkJoinRequestStatusCloud(
+  requestId: string,
+  fallback?: { roomId?: string; userId?: string }
+): Promise<{
   status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'NOT_FOUND';
   room?: Room;
   adminName?: string;
@@ -2671,13 +2799,64 @@ export async function checkJoinRequestStatusCloud(requestId: string): Promise<{
 
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      const { data, error } = await supabase
-        .from('room_join_requests')
-        .select('*')
-        .eq('id', requestId)
-        .maybeSingle();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId);
+      let data: any = null;
 
-      if (!error && data) {
+      if (isUuid) {
+        const { data: directData } = await supabase
+          .from('room_join_requests')
+          .select('*')
+          .eq('id', requestId)
+          .maybeSingle();
+        data = directData;
+      }
+
+      // If not resolved by direct UUID and fallback coordinates are provided, lookup by (room_id, user_id)
+      if (!data && fallback?.roomId && fallback?.userId) {
+        const { data: fallbackData } = await supabase
+          .from('room_join_requests')
+          .select('*')
+          .eq('room_id', fallback.roomId)
+          .eq('user_id', fallback.userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        data = fallbackData;
+      }
+
+      // Dual-Layer Safety: Also check room_members table. If the member is active, approval already happened!
+      if (fallback?.roomId && fallback?.userId) {
+        const { data: memberData } = await supabase
+          .from('room_members')
+          .select('status, room_id')
+          .eq('room_id', fallback.roomId)
+          .eq('user_id', fallback.userId)
+          .eq('status', 'ACTIVE')
+          .maybeSingle();
+
+        if (memberData) {
+          const { data: roomData } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('id', memberData.room_id)
+            .single();
+
+          if (roomData) {
+            const mappedRoom: Room = {
+              id: roomData.id,
+              name: roomData.name,
+              description: roomData.description || undefined,
+              createdBy: roomData.created_by,
+              isArchived: roomData.is_archived ?? false,
+              createdAt: roomData.created_at,
+              updatedAt: roomData.updated_at,
+            };
+            return { status: 'APPROVED', room: mappedRoom, adminName: localRes.adminName };
+          }
+        }
+      }
+
+      if (data) {
         if (data.status === 'APPROVED') {
           const { data: roomData } = await supabase
             .from('rooms')
@@ -2770,8 +2949,16 @@ export async function approveJoinRequestCloud(
           localReq.status = 'APPROVED';
         }
 
+        const resolvedReq: RoomJoinRequest = localReq || {
+          id: reqData.id,
+          roomId: reqData.room_id,
+          userId: reqData.user_id,
+          status: 'APPROVED',
+          createdAt: reqData.created_at || new Date().toISOString(),
+        };
+
         db.saveState(state);
-        return { success: true, room: roomObj, request: localReq };
+        return { success: true, room: roomObj, request: resolvedReq };
       }
     } catch (err) {
       console.warn('approveJoinRequestCloud cloud error, trying local fallback:', err);

@@ -52,6 +52,8 @@ import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { OAuthProviderNoticeModal } from './OAuthProviderNoticeModal';
 import { hapticImpact, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
 import { sendLocalJoinRequestNotification } from '../../lib/native/notifications';
+import { supabase } from '../../lib/supabase/client';
+import confetti from 'canvas-confetti';
 import {
   decodeQrFromVideoFrame,
   decodeQrFromImage,
@@ -769,6 +771,32 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     }
   };
 
+  // Flag to avoid duplicate auto-entry triggers
+  const hasAutoEnteredRef = useRef(false);
+
+  // Instant Live Approval Celebration & Auto-Navigation
+  const handleLiveApprovalAndAutoEnter = () => {
+    if (hasAutoEnteredRef.current) return;
+    hasAutoEnteredRef.current = true;
+
+    hapticSuccess();
+    try {
+      confetti({
+        particleCount: 90,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#6366F1', '#10B981', '#F59E0B', '#8B5CF6'],
+      });
+    } catch {}
+
+    setJoinRequestStatus('approved');
+
+    // Automatically transition into the room ledger after a brief celebratory delay
+    setTimeout(() => {
+      handleEnterApprovedRoom();
+    }, 850);
+  };
+
   // Cancel pending request and return to join screen
   const handleCancelPendingRequest = () => {
     localStorage.removeItem('roommate_active_join_request');
@@ -777,19 +805,84 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     setJoinWizardStep('scan_or_code');
   };
 
-  // Status Polling when waiting for Admin approval
+  // Realtime Live Subscription & High-Frequency Fallback Polling when waiting for Admin approval
   useEffect(() => {
-    if (authTab !== 'join' || joinWizardStep !== 'waiting' || !activeJoinRequestId) return;
+    if (authTab !== 'join' || joinWizardStep !== 'waiting') return;
+    hasAutoEnteredRef.current = false;
 
     let isMounted = true;
+    const activeUserId = pendingJoinUser?.id;
+    const activeRoomId = resolvedRoomData?.room?.id;
+
+    // 1. Live Supabase Realtime Channel Subscription
+    let realtimeChannel: any = null;
+    try {
+      const channelId = `live-join-${activeJoinRequestId || activeUserId || Date.now()}`;
+      realtimeChannel = supabase
+        .channel(channelId)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'room_join_requests',
+          },
+          (payload: any) => {
+            if (!isMounted) return;
+            const updated = payload?.new;
+            const isMatch =
+              (activeJoinRequestId && updated?.id === activeJoinRequestId) ||
+              (activeUserId && updated?.user_id === activeUserId && activeRoomId && updated?.room_id === activeRoomId);
+
+            if (isMatch) {
+              if (updated.status === 'APPROVED') {
+                handleLiveApprovalAndAutoEnter();
+              } else if (updated.status === 'DECLINED') {
+                hapticWarning();
+                setJoinRequestStatus('declined');
+              }
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'room_members',
+          },
+          (payload: any) => {
+            if (!isMounted) return;
+            const newMember = payload?.new;
+            if (
+              activeUserId &&
+              newMember?.user_id === activeUserId &&
+              activeRoomId &&
+              newMember?.room_id === activeRoomId
+            ) {
+              if (newMember.status === 'ACTIVE') {
+                handleLiveApprovalAndAutoEnter();
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime join subscription error, falling back to polling:', err);
+    }
+
+    // 2. High-Frequency Polling fallback (runs every 2 seconds)
     const interval = setInterval(async () => {
+      if (!isMounted || hasAutoEnteredRef.current) return;
       try {
-        const res = await checkJoinRequestStatusCloud(activeJoinRequestId);
-        if (!isMounted) return;
+        const res = await checkJoinRequestStatusCloud(
+          activeJoinRequestId || '',
+          { roomId: activeRoomId, userId: activeUserId }
+        );
+        if (!isMounted || hasAutoEnteredRef.current) return;
 
         if (res.status === 'APPROVED') {
-          hapticSuccess();
-          setJoinRequestStatus('approved');
+          handleLiveApprovalAndAutoEnter();
         } else if (res.status === 'DECLINED') {
           hapticWarning();
           setJoinRequestStatus('declined');
@@ -797,13 +890,16 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
       } catch (err) {
         console.warn('Polling checkJoinRequestStatusCloud error:', err);
       }
-    }, 2500);
+    }, 2000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
     };
-  }, [authTab, joinWizardStep, activeJoinRequestId]);
+  }, [authTab, joinWizardStep, activeJoinRequestId, pendingJoinUser?.id, resolvedRoomData?.room?.id]);
 
   // Restore pending request from localStorage or detect deep link on mount
   useEffect(() => {
@@ -1908,8 +2004,9 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
                       onClick={handleEnterApprovedRoom}
                       className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm"
                     >
-                      <span>Enter Room Ledger</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Entering Room Ledger...</span>
+                      <ArrowRight className="w-4 h-4 ml-1" />
                     </button>
                   </div>
                 ) : joinRequestStatus === 'declined' ? (

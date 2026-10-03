@@ -20,6 +20,7 @@ import {
   deletePersonalExpenseCloud,
   subscribeToRoomRealtime,
   subscribeToUserRealtime,
+  subscribeToAdminRoomsRealtime,
   subscribeToPlatformSettingsRealtime,
   fetchPlatformSettingsCloud,
   subscribeToSuperAdminRealtime,
@@ -57,6 +58,7 @@ import { CloudSyncSheet } from './components/mobile/CloudSyncSheet';
 import { sendLocalJoinApprovalNotification } from './lib/native/notifications';
 import { MobileLayout } from './components/mobile/MobileLayout';
 import { MobileLogin } from './components/mobile/MobileLogin';
+import { JoinRequestReviewModal } from './components/mobile/JoinRequestReviewModal';
 import { AppLockGateway } from './components/mobile/AppLockGateway';
 import { GooglePinSetupModal } from './components/mobile/GooglePinSetupModal';
 import { FirstLoginOnboardingModal } from './components/mobile/FirstLoginOnboardingModal';
@@ -69,7 +71,7 @@ import {
   createResidentToken,
   storeResidentSession,
 } from './lib/auth/jwtService';
-import { hapticSuccess, hapticImpact } from './lib/native/haptics';
+import { hapticSuccess, hapticImpact, hapticWarning } from './lib/native/haptics';
 import {
   initNativeNotifications,
   sendLocalExpenseNotification,
@@ -172,6 +174,7 @@ export function AppContent() {
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
   const [remoteSyncToast, setRemoteSyncToast] = useState<string | null>(null);
   const [roomJoinRequests, setRoomJoinRequests] = useState<Array<RoomJoinRequest & { user: User }>>([]);
+  const [liveAdminReviewRequest, setLiveAdminReviewRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
   const [pendingJoinInviteCode, setPendingJoinInviteCode] = useState<string | null>(null);
   const [googlePinSetupUser, setGooglePinSetupUser] = useState<User | null>(null);
   const [profileOnboardingUser, setProfileOnboardingUser] = useState<{
@@ -363,16 +366,77 @@ export function AppContent() {
   useEffect(() => {
     if (!IS_LIVE_SYNC_ENABLED || !activeRoom?.id) return;
 
-    const unsubscribe = subscribeToRoomRealtime(activeRoom.id, (table, eventType) => {
+    const unsubscribe = subscribeToRoomRealtime(activeRoom.id, (table, eventType, payload) => {
       fetchCloudDatabaseState().then((cloudState) => {
         if (cloudState) {
           setDbState(cloudState);
-          const readableTable = table === 'shared_expenses' ? 'Expense' : table === 'settlement_payments' ? 'Settlement' : table === 'in_app_notifications' ? 'Notification' : table;
+          const readableTable =
+            table === 'shared_expenses'
+              ? 'Expense'
+              : table === 'expense_splits'
+              ? 'Expense Split'
+              : table === 'settlement_payments'
+              ? 'Settlement'
+              : table === 'room_join_requests'
+              ? 'Join Request'
+              : table === 'room_members'
+              ? 'Member'
+              : table === 'room_invitations'
+              ? 'Invite Code'
+              : table === 'profiles'
+              ? 'Profile'
+              : table === 'in_app_notifications'
+              ? 'Notification'
+              : table;
           setRemoteSyncToast(`Realtime Sync: ${readableTable} ${eventType.toLowerCase()}d`);
           setTimeout(() => setRemoteSyncToast(null), 3500);
 
           if (table === 'in_app_notifications') {
             playNotificationSound();
+          }
+
+          // Handle live room archival or deletion
+          if (table === 'rooms') {
+            const currentRoomInCloud = cloudState.rooms.find((r) => r.id === activeRoom.id);
+            if (!currentRoomInCloud || currentRoomInCloud.isArchived) {
+              hapticWarning();
+              setActiveRoom(null);
+              setRemoteSyncToast(`📁 ${activeRoom.name} was archived by administration`);
+              setTimeout(() => setRemoteSyncToast(null), 4000);
+              return;
+            } else if (currentRoomInCloud.name !== activeRoom.name) {
+              setActiveRoom(currentRoomInCloud);
+            }
+          }
+
+          // Live Admin Auto-Popup for Join Requests on Active Room
+          if (table === 'room_join_requests') {
+            fetchJoinRequests();
+            const isAdmin =
+              activeRoom.createdBy === currentUser.id ||
+              cloudState.roomMembers.some(
+                (m) => m.roomId === activeRoom.id && m.userId === currentUser.id && m.role === 'ROOM_ADMIN'
+              );
+            if (isAdmin && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+              const reqId = payload?.new?.id;
+              const pendingReq = cloudState.roomJoinRequests.find(
+                (r) => (reqId ? r.id === reqId : true) && r.roomId === activeRoom.id && r.status === 'PENDING'
+              );
+              if (pendingReq) {
+                const reqUser =
+                  cloudState.users.find((u) => u.id === pendingReq.userId) ||
+                  ({ id: pendingReq.userId, name: 'Roommate Candidate', email: 'roommate@app' } as any);
+                playNotificationSound();
+                hapticImpact('HEAVY');
+                setLiveAdminReviewRequest({
+                  ...pendingReq,
+                  user: reqUser,
+                  room: activeRoom,
+                });
+                setRemoteSyncToast(`🔔 Join request from ${reqUser.name}`);
+                setTimeout(() => setRemoteSyncToast(null), 4000);
+              }
+            }
           }
 
           // Dispatch native notification when remote flatmates make a change
@@ -406,7 +470,7 @@ export function AppContent() {
     return () => {
       unsubscribe();
     };
-  }, [activeRoom?.id, currentUser.id, currentUser.name, activeRoom?.name]);
+  }, [activeRoom?.id, currentUser.id, currentUser.name, activeRoom?.name, fetchJoinRequests]);
 
   // 3. Realtime Global SuperAdmin Subscriptions (Syncs all mobile room & expense events across platform)
   useEffect(() => {
@@ -443,7 +507,7 @@ export function AppContent() {
     };
   }, [currentUser.role]);
 
-  // 4. Realtime User-Level Subscriptions (In-App Notifications, Suspension, Session Invalidation)
+  // 4. Realtime User-Level Subscriptions (In-App Notifications, Suspension, Room Memberships, Join Requests)
   useEffect(() => {
     if (!IS_LIVE_SYNC_ENABLED || !isAuthenticated || !currentUser?.id) return;
 
@@ -457,9 +521,32 @@ export function AppContent() {
         fetchCloudDatabaseState().then((cloudState) => {
           if (cloudState) {
             setDbState(cloudState);
+            // If an admin notification for join request arrived, auto-open review modal
+            if (payload?.new?.type === 'ROOM_JOIN_REQUEST' || payload?.new?.action_type === 'REVIEW_JOIN_REQUEST') {
+              hapticImpact('HEAVY');
+              const targetReqId = payload.new.action_target;
+              const foundReq =
+                cloudState.roomJoinRequests.find((r) => r.id === targetReqId && r.status === 'PENDING') ||
+                cloudState.roomJoinRequests.find(
+                  (r) =>
+                    r.status === 'PENDING' &&
+                    cloudState.rooms.some((rm) => rm.id === r.roomId && rm.createdBy === currentUser.id)
+                );
+              if (foundReq) {
+                const targetRoom = cloudState.rooms.find((rm) => rm.id === foundReq.roomId);
+                const reqUser =
+                  cloudState.users.find((u) => u.id === foundReq.userId) ||
+                  ({ id: foundReq.userId, name: payload.new.metadata?.requesterName || 'Roommate Candidate', email: 'roommate@app' } as any);
+                setLiveAdminReviewRequest({
+                  ...foundReq,
+                  user: reqUser,
+                  room: targetRoom,
+                });
+              }
+            }
           }
         });
-        setRemoteSyncToast('🔔 New In-App Notification Received');
+        setRemoteSyncToast(payload?.new?.title ? `🔔 ${payload.new.title}` : '🔔 New In-App Notification Received');
         setTimeout(() => setRemoteSyncToast(null), 3500);
       } else if (table === 'profiles') {
         if (payload?.new) {
@@ -474,13 +561,132 @@ export function AppContent() {
             setTimeout(() => setRemoteSyncToast(null), 4000);
           }
         }
+      } else if (table === 'personal_expenses') {
+        // Multi-device sync: silently refresh cloud state in the background
+        fetchCloudDatabaseState().then((cloudState) => {
+          if (cloudState) {
+            setDbState(cloudState);
+          }
+        });
+      } else if (table === 'room_join_requests') {
+        fetchCloudDatabaseState().then((cloudState) => {
+          if (cloudState) {
+            setDbState(cloudState);
+            if (payload?.new?.user_id === currentUser.id && payload?.new?.status === 'APPROVED') {
+              playNotificationSound();
+              hapticSuccess();
+              setRemoteSyncToast('🎉 Your room join request was approved!');
+              setTimeout(() => setRemoteSyncToast(null), 4000);
+              const approvedRoom = cloudState.rooms.find((r) => r.id === payload.new.room_id);
+              if (approvedRoom) {
+                setActiveRoom(approvedRoom);
+              }
+            }
+          }
+        });
+      } else if (table === 'room_members') {
+        fetchCloudDatabaseState().then((cloudState) => {
+          if (cloudState) {
+            setDbState(cloudState);
+            const targetUserId = payload?.new?.user_id || payload?.old?.user_id;
+            const targetRoomId = payload?.new?.room_id || payload?.old?.room_id;
+
+            if (targetUserId === currentUser.id) {
+              const status = payload?.new?.status;
+              const isEvicted = status === 'LEFT' || status === 'REMOVED' || eventType === 'DELETE';
+
+              if (isEvicted && activeRoom && activeRoom.id === targetRoomId) {
+                hapticWarning();
+                const evictedRoom = cloudState.rooms.find((r) => r.id === targetRoomId) || activeRoom;
+                setActiveRoom(null);
+                setRemoteSyncToast(`⚠️ You are no longer a member of ${evictedRoom.name}`);
+                setTimeout(() => setRemoteSyncToast(null), 4000);
+
+                // Smoothly redirect to remaining active room if one exists
+                const remainingMembership = cloudState.roomMembers.find(
+                  (m) => m.userId === currentUser.id && m.status === 'ACTIVE' && m.roomId !== targetRoomId
+                );
+                if (remainingMembership) {
+                  const nextRoom = cloudState.rooms.find((r) => r.id === remainingMembership.roomId);
+                  if (nextRoom) {
+                    setActiveRoom(nextRoom);
+                  }
+                }
+              } else if (status === 'ACTIVE') {
+                const joinedRoom = cloudState.rooms.find((r) => r.id === payload.new.room_id);
+                if (joinedRoom && (!activeRoom || activeRoom.id !== joinedRoom.id)) {
+                  playNotificationSound();
+                  hapticSuccess();
+                  setRemoteSyncToast(`🏠 Welcome to ${joinedRoom.name}!`);
+                  setTimeout(() => setRemoteSyncToast(null), 4000);
+                  setActiveRoom(joinedRoom);
+                }
+              }
+            }
+          }
+        });
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [isAuthenticated, currentUser?.id]);
+  }, [isAuthenticated, currentUser?.id, activeRoom?.id]);
+
+  // 4b. Realtime Admin Subscriptions across ALL Administered Rooms
+  const adminRoomsKey = dbState.rooms
+    .filter(
+      (r) =>
+        r.createdBy === currentUser.id ||
+        dbState.roomMembers.some(
+          (m) => m.roomId === r.id && m.userId === currentUser.id && m.role === 'ROOM_ADMIN'
+        )
+    )
+    .map((r) => r.id)
+    .sort()
+    .join(',');
+
+  useEffect(() => {
+    if (!IS_LIVE_SYNC_ENABLED || !isAuthenticated || !currentUser?.id || !adminRoomsKey) return;
+
+    const adminRoomIds = adminRoomsKey.split(',');
+
+    const unsubscribe = subscribeToAdminRoomsRealtime(adminRoomIds, (table, eventType, payload) => {
+      if (table === 'room_join_requests' && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+        fetchCloudDatabaseState().then((cloudState) => {
+          if (cloudState) {
+            setDbState(cloudState);
+            const reqId = payload?.new?.id;
+            const pendingReq = cloudState.roomJoinRequests.find(
+              (r) =>
+                (reqId ? r.id === reqId : true) &&
+                r.status === 'PENDING' &&
+                adminRoomIds.includes(r.roomId)
+            );
+            if (pendingReq) {
+              const targetRoom = cloudState.rooms.find((rm) => rm.id === pendingReq.roomId);
+              const reqUser =
+                cloudState.users.find((u) => u.id === pendingReq.userId) ||
+                ({ id: pendingReq.userId, name: 'Roommate Candidate', email: 'roommate@app' } as any);
+              playNotificationSound();
+              hapticImpact('HEAVY');
+              setLiveAdminReviewRequest({
+                ...pendingReq,
+                user: reqUser,
+                room: targetRoom,
+              });
+              setRemoteSyncToast(`🔔 Join request for ${targetRoom?.name || 'Flat'}!`);
+              setTimeout(() => setRemoteSyncToast(null), 4000);
+            }
+          }
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isAuthenticated, currentUser?.id, adminRoomsKey]);
 
   // 5. Realtime Platform Settings & Maintenance Mode Subscriptions
   useEffect(() => {
@@ -1629,6 +1835,24 @@ export function AppContent() {
           />
         )}
 
+        {/* Live Admin Join Request Review Modal */}
+        {liveAdminReviewRequest && (
+          <JoinRequestReviewModal
+            isOpen={!!liveAdminReviewRequest}
+            onClose={() => setLiveAdminReviewRequest(null)}
+            request={liveAdminReviewRequest}
+            roomName={liveAdminReviewRequest.room?.name || 'Room'}
+            onApprove={async (reqId) => {
+              await handleApproveJoinRequest(reqId);
+              setLiveAdminReviewRequest(null);
+            }}
+            onDecline={async (reqId) => {
+              await handleDeclineJoinRequest(reqId);
+              setLiveAdminReviewRequest(null);
+            }}
+          />
+        )}
+
         {/* OTA In-App Live Update Toast */}
         <UpdateNotificationToast />
       </div>
@@ -1829,6 +2053,24 @@ export function AppContent() {
           isOpen={showSupabaseModal}
           onClose={() => setShowSupabaseModal(false)}
           onStateSynced={refreshState}
+        />
+      )}
+
+      {/* Live Admin Join Request Review Modal (Desktop) */}
+      {liveAdminReviewRequest && (
+        <JoinRequestReviewModal
+          isOpen={!!liveAdminReviewRequest}
+          onClose={() => setLiveAdminReviewRequest(null)}
+          request={liveAdminReviewRequest}
+          roomName={liveAdminReviewRequest.room?.name || 'Room'}
+          onApprove={async (reqId) => {
+            await handleApproveJoinRequest(reqId);
+            setLiveAdminReviewRequest(null);
+          }}
+          onDecline={async (reqId) => {
+            await handleDeclineJoinRequest(reqId);
+            setLiveAdminReviewRequest(null);
+          }}
         />
       )}
 
