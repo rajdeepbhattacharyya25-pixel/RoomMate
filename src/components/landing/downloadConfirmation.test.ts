@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { PNG } from 'pngjs';
@@ -52,11 +52,32 @@ describe('Branded QR Code & Automated Download Confirmation Flow', () => {
       expect(mode).toBe('desktop');
     });
 
-    it('returns "mobile" for normal mobile visits without download triggers', () => {
+    it('returns "desktop" (landing page) for normal mobile web visits so visitors can explore features and download the APK', () => {
       setMockWindow('https://roommate26.vercel.app/', 390);
 
       const mode = getInitialDeviceMode();
-      expect(mode).toBe('mobile');
+      expect(mode).toBe('desktop');
+    });
+
+    it('returns "mobile" when ?view=mobile or ?view=app is present', () => {
+      setMockWindow('https://roommate26.vercel.app/?view=mobile', 390);
+      expect(getInitialDeviceMode()).toBe('mobile');
+
+      setMockWindow('https://roommate26.vercel.app/?view=app', 390);
+      expect(getInitialDeviceMode()).toBe('mobile');
+    });
+
+    it('returns "mobile" for room join invitation links (?join= or ?code=)', () => {
+      setMockWindow('https://roommate26.vercel.app/?join=ROOM123', 390);
+      expect(getInitialDeviceMode()).toBe('mobile');
+
+      setMockWindow('https://roommate26.vercel.app/?code=ROOM123', 390);
+      expect(getInitialDeviceMode()).toBe('mobile');
+    });
+
+    it('returns "mobile" for auth email verification callback (?verified=true)', () => {
+      setMockWindow('https://roommate26.vercel.app/?verified=true', 390);
+      expect(getInitialDeviceMode()).toBe('mobile');
     });
   });
 

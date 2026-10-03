@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  ShieldCheck,
   CheckCircle2,
   RefreshCw,
   Trash2,
@@ -28,6 +27,7 @@ import {
   getGoogleClientId,
 } from '../../../../lib/services/googleDriveService';
 import { hapticSuccess, hapticWarning, hapticImpact, hapticSelection } from '../../../../lib/native/haptics';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface GoogleDriveBackupModalProps {
   isOpen: boolean;
@@ -42,6 +42,9 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
   onClose,
   onShowToast,
 }) => {
+  // Dismiss Google Drive backup modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [accounts, setAccounts] = useState<GoogleDriveAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<GoogleDriveAccount | null>(null);
   const [showRecentAccounts, setShowRecentAccounts] = useState<boolean>(false);

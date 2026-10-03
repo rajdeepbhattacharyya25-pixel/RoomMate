@@ -3,17 +3,22 @@ import { ArrowRight, Shield, Users, Lock, Sparkles, CheckCircle2, EyeOff, Refres
 import { useMouseTilt } from '../../lib/hooks/useMouseTilt';
 import { useInView } from '../../lib/hooks/useInView';
 import { useCountUp } from '../../lib/hooks/useCountUp';
+import { User } from '../../types';
 
 interface HeroSectionProps {
   onOpenMobilePreview: () => void;
   onDownloadApk: () => void;
   onOpenGuide: () => void;
+  isAuthenticated?: boolean;
+  currentUser?: User;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onOpenMobilePreview,
   onDownloadApk,
   onOpenGuide,
+  isAuthenticated = false,
+  currentUser: _currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<'personal' | 'shared'>('personal');
   const { ref: tiltRef, style: tiltStyle } = useMouseTilt({ maxTilt: 4, scale: 1.005 });
@@ -62,7 +67,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             type="button"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-full bg-brand hover:bg-brand-dark text-white font-semibold text-sm transition-all duration-200 shadow-fin-card hover:shadow-fin-card-hover group active:scale-95 cursor-pointer"
           >
-            <span>Get Started Free</span>
+            <span>{isAuthenticated ? 'Go to Dashboard' : 'Get Started Free'}</span>
             <ArrowRight className="w-4 h-4 transform transition-transform group-hover:translate-x-1" />
           </button>
 

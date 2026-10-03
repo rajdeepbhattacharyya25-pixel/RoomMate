@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
-type BackHandler = () => boolean; // return true if handled (consumed), false if not
+export type BackHandler = () => boolean; // return true if handled (consumed), false if not
 
 const handlers: BackHandler[] = [];
 let lastBackPressTime = 0;
@@ -22,6 +23,25 @@ export function registerBackButtonHandler(handler: BackHandler): () => void {
 }
 
 /**
+ * React hook to register an Android hardware back button / back gesture handler.
+ * Automatically manages registration lifecycle and cleans up on unmount or when inactive.
+ * Handlers are invoked in LIFO order (top-most active modal/drawer handles Back first).
+ * Returning false allows the event to propagate downward; returning void or true consumes it.
+ */
+export function useBackButton(onBack: () => boolean | void, active: boolean = true): void {
+  const handlerRef = useRef(onBack);
+  handlerRef.current = onBack;
+
+  useEffect(() => {
+    if (!active) return;
+    return registerBackButtonHandler(() => {
+      const res = handlerRef.current();
+      return res !== false;
+    });
+  }, [active]);
+}
+
+/**
  * Initializes the global native Android back button dispatcher.
  */
 export function setupBackButtonListener(onExitRequested?: (message: string) => void): () => void {
@@ -33,9 +53,13 @@ export function setupBackButtonListener(onExitRequested?: (message: string) => v
     const listenerPromise = CapApp.addListener('backButton', () => {
       // 1. Run through handlers in reverse order (LIFO - top modal/drawer first)
       for (let i = handlers.length - 1; i >= 0; i--) {
-        const handled = handlers[i]();
-        if (handled) {
-          return;
+        try {
+          const handled = handlers[i]();
+          if (handled) {
+            return;
+          }
+        } catch (handlerErr) {
+          console.warn('[BackButton] Error in back button handler, continuing stack propagation:', handlerErr);
         }
       }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '../../types';
 import {
   checkNativeBiometrics,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { StrictPinInput } from '../common/StrictPinInput';
 import { validateStrict4DigitPin } from '../../lib/auth/jwtService';
+import { registerBackButtonHandler } from '../../lib/native/backButton';
 
 interface AppLockGatewayProps {
   isOpen: boolean;
@@ -41,43 +42,66 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPrompting, setIsPrompting] = useState(false);
 
+  // Single-shot auto-prompt guard per lock presentation
+  const hasAutoPromptedRef = useRef(false);
+  const isPromptingRef = useRef(false);
+  const onUnlockRef = useRef(onUnlock);
+  onUnlockRef.current = onUnlock;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   const triggerBiometricAuth = useCallback(async (bioName?: string) => {
-    if (isPrompting) return;
+    if (isPromptingRef.current) return;
+    isPromptingRef.current = true;
     setIsPrompting(true);
     setErrorMessage(null);
 
     const label = bioName || biometricStatus?.displayName || 'Biometrics';
-    const reason = `Unlock RoomMate Vault with ${label} for ${currentUser.name}`;
+    const reason = `Unlock RoomMate Vault with ${label} for ${currentUserRef.current.name}`;
 
     try {
       const success = await authenticateResidentBiometrics(reason);
       if (success) {
-        await hapticSuccess();
+        hapticSuccess().catch(() => {});
         setPin('');
         setErrorMessage(null);
         setShowPinFallback(false);
-        onUnlock();
+        onUnlockRef.current();
       } else {
-        await hapticWarning();
+        hapticWarning().catch(() => {});
         setErrorMessage('Biometric verification cancelled or unrecognized. Try again or enter your PIN.');
       }
     } catch {
-      await hapticWarning();
+      hapticWarning().catch(() => {});
       setErrorMessage('Biometric authentication failed. Please enter your PIN.');
     } finally {
+      isPromptingRef.current = false;
       setIsPrompting(false);
     }
-  }, [isPrompting, biometricStatus?.displayName, currentUser.name, onUnlock]);
+  }, [biometricStatus?.displayName]);
 
-  // Check biometric capability and auto-trigger on initial display
+  // Check biometric capability and auto-trigger ONCE on initial presentation
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // Reset lock session states when gateway is dismissed
+      hasAutoPromptedRef.current = false;
+      isPromptingRef.current = false;
+      setPin('');
+      setErrorMessage(null);
+      setShowPinFallback(false);
+      return;
+    }
+
+    if (hasAutoPromptedRef.current) {
+      return;
+    }
+    hasAutoPromptedRef.current = true;
 
     let isMounted = true;
     checkNativeBiometrics().then((status) => {
       if (!isMounted) return;
       setBiometricStatus(status);
-      // Auto-trigger biometric challenge once mounted
+      // Auto-trigger biometric challenge once per lock session
       triggerBiometricAuth(status.displayName);
     });
 
@@ -86,11 +110,23 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
     };
   }, [isOpen, triggerBiometricAuth]);
 
+  // Handle hardware back button when AppLockGateway is open
+  useEffect(() => {
+    if (!isOpen) return;
+    return registerBackButtonHandler(() => {
+      if (showPinFallback) {
+        setShowPinFallback(false);
+        return true; // Consume event and return to biometric screen
+      }
+      return false; // Allow default double-tap back to exit app
+    });
+  }, [isOpen, showPinFallback]);
+
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const validation = validateStrict4DigitPin(pin);
     if (!validation.isValid) {
-      await hapticWarning();
+      hapticWarning().catch(() => {});
       setErrorMessage(validation.error || 'PIN must be exactly 4 digits.');
       return;
     }
@@ -99,10 +135,10 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
     const storedPin = localStorage.getItem('roommate_vault_pin') || localStorage.getItem('campusflow_vault_pin') || '1234';
 
     if (validation.sanitized === storedPin || validation.sanitized === '1234' || validation.sanitized === '0000') {
-      await hapticSuccess();
-      onUnlock();
+      hapticSuccess().catch(() => {});
+      onUnlockRef.current();
     } else {
-      await hapticWarning();
+      hapticWarning().catch(() => {});
       setErrorMessage('Incorrect PIN. Default demo PIN is 1234.');
       setPin('');
     }
@@ -236,8 +272,8 @@ export const AppLockGateway: React.FC<AppLockGatewayProps> = ({
                     if (completedPin.length === 4) {
                       const storedPin = localStorage.getItem('roommate_vault_pin') || localStorage.getItem('campusflow_vault_pin') || '1234';
                       if (completedPin === storedPin || completedPin === '1234' || completedPin === '0000') {
-                        hapticSuccess();
-                        onUnlock();
+                        hapticSuccess().catch(() => {});
+                        onUnlockRef.current();
                       }
                     }
                   }}

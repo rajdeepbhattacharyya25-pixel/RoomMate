@@ -63,6 +63,7 @@ import { RoomSettingsModal } from './RoomSettingsModal';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
 import { JoinRoomModal } from './JoinRoomModal';
 import { JoinRequestReviewModal } from './JoinRequestReviewModal';
+import { useBackButton } from '../../lib/native/backButton';
 import { RoomActivitySection } from './RoomActivitySection';
 import { CurrencyInput } from '../common/CurrencyInput';
 import {
@@ -221,6 +222,12 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [reviewingJoinRequest, setReviewingJoinRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
+
+  // Dismiss Create Room dialog on Android hardware back button
+  useBackButton(() => {
+    setShowCreateRoomModal(false);
+    return true;
+  }, showCreateRoomModal);
 
   // Auto-open JoinRoomModal if a pending deep link / QR join code is triggered
   useEffect(() => {
@@ -424,23 +431,21 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
     }
   }, [activeRoom, rooms, onSelectRoom]);
 
-  // Initialize participants reliably on mount and room switch
+  // Initialize and synchronize participants when room changes or room members update
   useEffect(() => {
-    if (activeUserObjects.length > 0 && selectedParticipants.length === 0) {
-      setSelectedParticipants(activeUserObjects.map((u) => u.id));
-    }
-  }, [activeUserObjects, selectedParticipants.length]);
+    if (!activeRoom?.id) return;
+    const currentActiveIds = roomMembers
+      .filter((m) => m.roomId === activeRoom.id && m.status === 'ACTIVE')
+      .map((m) => m.userId);
 
-  useEffect(() => {
-    if (activeRoom?.id) {
-      const currentActiveIds = roomMembers
-        .filter((m) => m.roomId === activeRoom.id && m.status === 'ACTIVE')
-        .map((m) => m.userId);
-      if (currentActiveIds.length > 0) {
-        setSelectedParticipants(currentActiveIds);
+    setSelectedParticipants((prev) => {
+      if (prev.length === 0) {
+        return currentActiveIds;
       }
-    }
-  }, [activeRoom?.id]);
+      const valid = prev.filter((id) => currentActiveIds.includes(id));
+      return valid.length > 0 ? valid : currentActiveIds;
+    });
+  }, [activeRoom?.id, roomMembers]);
 
   // Room Summary & Debts
   const summary = activeRoom
@@ -577,6 +582,14 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
     if (newErrors.participants) {
       setSplitValidationErrors(newErrors);
+      hapticWarning();
+      return;
+    }
+
+    if (splitMethod !== 'EQUAL' && !splitValidation.isValid) {
+      setSplitValidationErrors({
+        amount: splitValidation.message || 'Please allocate the full bill amount across selected roommates.',
+      });
       hapticWarning();
       return;
     }
@@ -1585,7 +1598,12 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         headerRight={
           <button
             onClick={() => handleCreateSplit()}
-            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-transparent dark:border-indigo-800/40 active:scale-95 transition-all"
+            disabled={splitMethod !== 'EQUAL' && !splitValidation.isValid}
+            className={`text-xs font-bold px-2.5 py-1 rounded-lg border border-transparent transition-all ${
+              splitMethod !== 'EQUAL' && !splitValidation.isValid
+                ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
+                : 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 dark:border-indigo-800/40 active:scale-95'
+            }`}
             type="button"
           >
             Save
@@ -2142,7 +2160,12 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               <button
                 type="button"
                 onClick={() => handleCreateSplit()}
-                className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] transition-transform"
+                disabled={splitMethod !== 'EQUAL' && !splitValidation.isValid}
+                className={`w-full h-12 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-xs transition-all ${
+                  splitMethod !== 'EQUAL' && !splitValidation.isValid
+                    ? 'opacity-40 cursor-not-allowed bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                    : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white active:scale-[0.98]'
+                }`}
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
                 <span>Confirm & Split Bill</span>

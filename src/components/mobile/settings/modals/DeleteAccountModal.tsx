@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, X, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { hapticWarning, hapticSuccess } from '../../../../lib/native/haptics';
 import { deleteUserAccountCloud } from '../../../../lib/storage/cloudStorageAdapter';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface DeleteAccountModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ export const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({
   onClose,
   onConfirmDelete,
 }) => {
+  // Dismiss delete account modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [confirmText, setConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

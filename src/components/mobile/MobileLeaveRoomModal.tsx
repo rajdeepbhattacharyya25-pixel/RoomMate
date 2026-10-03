@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { RoomFinancialSummary } from '../../types';
 import { getOutstandingObligationsForMember, canCleanExit } from '../../lib/ledger/engine';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface MobileLeaveRoomModalProps {
   isOpen: boolean;
@@ -44,6 +45,9 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
   const [acknowledged, setAcknowledged] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Close leave room modal on Android hardware back button
+  useBackButton(onClose, isOpen);
 
   if (!isOpen) return null;
 

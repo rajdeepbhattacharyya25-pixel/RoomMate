@@ -3030,33 +3030,47 @@ export async function regenerateInviteCloud(
   roomId: string,
   expirationHours?: number
 ): Promise<RoomInvitation> {
-  const result = db.regenerateInvite(requesterUserId, roomId, expirationHours);
-
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      const { error } = await supabase.rpc('regenerate_room_invite', {
+      const { data, error } = await (supabase.rpc as any)('regenerate_room_invite', {
         p_room_id: roomId,
         p_expires_in_hours: expirationHours || null,
       });
+
+      if (!error && data) {
+        const cloudInv: RoomInvitation = {
+          id: data.id || ('inv-' + Math.random().toString(36).substr(2, 9)),
+          roomId: data.room_id || roomId,
+          inviteCode: data.invite_code,
+          token: data.token,
+          createdBy: requesterUserId,
+          expiresAt: data.expires_at || undefined,
+          isRevoked: false,
+          createdAt: new Date().toISOString(),
+        };
+
+        const state = db.getState();
+        // Revoke all existing local invites for this room so state is in sync
+        state.roomInvitations
+          .filter((inv) => inv.roomId === roomId)
+          .forEach((inv) => {
+            inv.isRevoked = true;
+          });
+        state.roomInvitations.push(cloudInv);
+        db.saveState(state);
+
+        return cloudInv;
+      }
+
       if (error) {
-        console.warn('regenerate_room_invite RPC error, falling back to direct table update:', error.message);
-        await supabase.from('room_invitations').update({ is_revoked: true }).eq('room_id', roomId);
-        await supabase.from('room_invitations').insert({
-          id: result.id,
-          room_id: roomId,
-          token: result.token,
-          invite_code: result.inviteCode,
-          created_by: requesterUserId,
-          expires_at: result.expiresAt || null,
-          is_revoked: false,
-        });
+        console.warn('regenerate_room_invite RPC error, falling back to local storage:', error.message);
       }
     } catch (err) {
       console.warn('regenerateInviteCloud exception:', err);
     }
   }
 
-  return result;
+  return db.regenerateInvite(requesterUserId, roomId, expirationHours);
 }
 
 // Update Room Policies (Cloud + Local fallback)

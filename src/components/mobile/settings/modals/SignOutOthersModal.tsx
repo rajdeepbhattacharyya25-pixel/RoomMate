@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Smartphone, LogOut, X, Loader2, Check, AlertCircle } from 'lucide-react';
 import { signOutOtherDevicesCloud, signOutAllDevicesCloud } from '../../../../lib/storage/cloudStorageAdapter';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface SignOutOthersModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ export const SignOutOthersModal: React.FC<SignOutOthersModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // Dismiss sign out others modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

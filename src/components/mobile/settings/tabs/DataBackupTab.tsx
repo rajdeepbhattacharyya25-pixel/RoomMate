@@ -34,6 +34,7 @@ import { shareOrDownloadBackup } from '../../../../lib/storage/shareBackupServic
 import { RestoreBackupModal } from '../modals/RestoreBackupModal';
 import { GoogleDriveBackupModal } from '../modals/GoogleDriveBackupModal';
 import { StrictPinInput } from '../../../common/StrictPinInput';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface DataBackupTabProps {
   currentUser: User;
@@ -58,6 +59,12 @@ export const DataBackupTab: React.FC<DataBackupTabProps> = ({
   const [backupPin, setBackupPin] = useState<string>('');
   const [backupMode, setBackupMode] = useState<'share' | 'download'>('share');
   const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
+
+  // Dismiss backup PIN modal on Android hardware back button
+  useBackButton(() => {
+    setShowBackupPinModal(false);
+    return true;
+  }, showBackupPinModal);
 
   useEffect(() => {
     const unsub = subscribeToQueueChanges(() => {

@@ -5,6 +5,7 @@ import { submitBugReportCloud } from '../../../../lib/storage/cloudStorageAdapte
 import { captureDiagnosticReport } from '../../../../lib/services/diagnosticService';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { User, BugCategory } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface ReportProblemModalProps {
   isOpen: boolean;
@@ -37,6 +38,9 @@ export const ReportProblemModal: React.FC<ReportProblemModalProps> = ({
   onClose,
   onSubmitted,
 }) => {
+  // Dismiss report problem modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState('');
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);

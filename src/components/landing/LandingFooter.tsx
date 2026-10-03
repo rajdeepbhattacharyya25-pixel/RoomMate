@@ -6,6 +6,7 @@ interface LandingFooterProps {
   onOpenGuide: () => void;
   onOpenQrModal: () => void;
   onDownloadApk: () => void;
+  isAuthenticated?: boolean;
 }
 
 export const LandingFooter: React.FC<LandingFooterProps> = ({
@@ -14,6 +15,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({
   onOpenGuide,
   onOpenQrModal,
   onDownloadApk,
+  isAuthenticated = false,
 }) => {
   const handleShare = () => {
     if (navigator.share) {
@@ -126,7 +128,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({
               </li>
               <li>
                 <button onClick={onOpenMobilePreview} className="hover:text-brand transition-colors cursor-pointer text-left">
-                  Launch Mobile Simulator
+                  {isAuthenticated ? 'Go to Dashboard' : 'Launch Mobile Simulator'}
                 </button>
               </li>
               <li>

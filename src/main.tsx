@@ -7,6 +7,7 @@ import { crashService } from './lib/crashlytics/crashService';
 import { analytics } from './lib/analytics/posthog';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './context/ThemeContext';
+import { RoommateSyncProvider } from './context/RoommateSyncContext';
 
 // Initialize live update engine and signal successful boot
 liveUpdater.init().catch(console.error);
@@ -19,7 +20,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <App />
+        <RoommateSyncProvider>
+          <App />
+        </RoommateSyncProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,

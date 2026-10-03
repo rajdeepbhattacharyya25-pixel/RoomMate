@@ -6,6 +6,7 @@ import {
   downloadSettlementVoucherImage,
 } from '../../lib/payments/upiIntentService';
 import { hapticSuccess, hapticSelection } from '../../lib/native/haptics';
+import { useBackButton } from '../../lib/native/backButton';
 import {
   X,
   Share2,
@@ -36,6 +37,9 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
 }) => {
   const [copiedText, setCopiedText] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
+  // Close receipt voucher on Android hardware back button
+  useBackButton(onClose, isOpen && Boolean(receiptData));
 
   useEffect(() => {
     if (isOpen && receiptData) {

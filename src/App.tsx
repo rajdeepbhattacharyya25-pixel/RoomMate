@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   User,
   Room,
@@ -78,7 +78,7 @@ import {
   sendLocalSettlementNotification,
 } from './lib/native/notifications';
 import { playNotificationSound } from './lib/native/notificationSound';
-import { setAppStatusBarStyle, hideSplashScreen, setupKeyboardListeners } from './lib/native/statusBar';
+import { hideSplashScreen, setupKeyboardListeners } from './lib/native/statusBar';
 import { listenToNetworkStatus, listenToAppLifecycle } from './lib/native/network';
 import { setupBackButtonListener } from './lib/native/backButton';
 import { DesktopLandingPage } from './components/desktop/DesktopLandingPage';
@@ -94,6 +94,7 @@ import { crashService } from './lib/crashlytics/crashService';
 import { analytics } from './lib/analytics/posthog';
 import { ShieldAlert, Smartphone, Cloud, LogOut, CheckCircle2 } from 'lucide-react';
 import { NetworkProvider } from './context/NetworkContext';
+import { useRoommateSync } from './context/RoommateSyncContext';
 
 const DEFAULT_RESIDENT: User = {
   id: 'usr-default-guest',
@@ -126,6 +127,14 @@ export function AppContent() {
         : localStorage.getItem('campusflow_app_lock_enabled') !== 'false';
     return Boolean(session && lockEnabled);
   });
+  const lastUnlockTimeRef = useRef<number>(Date.now());
+  const lastBackgroundTimeRef = useRef<number>(Date.now());
+
+  const handleAppUnlock = useCallback(() => {
+    setIsAppLocked(false);
+    lastUnlockTimeRef.current = Date.now();
+    lastBackgroundTimeRef.current = Date.now();
+  }, []);
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const session = getStoredResidentSession();
     if (session) {
@@ -173,6 +182,20 @@ export function AppContent() {
   const [showCloudSyncSheet, setShowCloudSyncSheet] = useState(false);
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
   const [remoteSyncToast, setRemoteSyncToast] = useState<string | null>(null);
+  const { syncConflictNotice, dismissConflictNotice } = useRoommateSync();
+
+  // Show alert when offlineQueue auto-discards a conflicting mutation
+  useEffect(() => {
+    if (syncConflictNotice) {
+      setRemoteSyncToast(`⚠️ Offline change (${syncConflictNotice.type.replace(/_/g, ' ')}) discarded due to remote conflict.`);
+      const timer = setTimeout(() => {
+        setRemoteSyncToast(null);
+        dismissConflictNotice();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [syncConflictNotice, dismissConflictNotice]);
+
   const [roomJoinRequests, setRoomJoinRequests] = useState<Array<RoomJoinRequest & { user: User }>>([]);
   const [liveAdminReviewRequest, setLiveAdminReviewRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
   const [pendingJoinInviteCode, setPendingJoinInviteCode] = useState<string | null>(null);
@@ -187,6 +210,8 @@ export function AppContent() {
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() =>
     db.getPlatformSettings()
   );
+
+  const handleLogoutRef = useRef<() => void>(() => {});
 
   const fetchJoinRequests = useCallback(async () => {
     if (!activeRoom?.id) {
@@ -275,39 +300,53 @@ export function AppContent() {
       }
     );
 
-    let lastBackgroundTime = 0;
-    const cleanupLifecycle = listenToAppLifecycle(() => {
-      // Re-hydrate cloud state
-      if (IS_LIVE_SYNC_ENABLED) {
-        fetchCloudDatabaseState().then((state) => {
-          if (state) setDbState(state);
-        });
-      }
-
-      // Check App Lock timeout on resume
-      const lockEnabled =
-        localStorage.getItem('roommate_app_lock_enabled') !== null
-          ? localStorage.getItem('roommate_app_lock_enabled') !== 'false'
-          : localStorage.getItem('campusflow_app_lock_enabled') !== 'false';
-      if (lockEnabled) {
-        const timeoutSetting =
-          localStorage.getItem('roommate_app_lock_timeout') ||
-          localStorage.getItem('campusflow_app_lock_timeout') ||
-          'immediate';
-        const timeoutMs = timeoutSetting === '5m' ? 300000 : timeoutSetting === '1m' ? 60000 : 3000;
-        const elapsed = Date.now() - lastBackgroundTime;
-        if (elapsed >= timeoutMs) {
-          setIsAppLocked(true);
+    const cleanupLifecycle = listenToAppLifecycle(
+      () => {
+        // App Foregrounded / Resumed
+        if (IS_LIVE_SYNC_ENABLED) {
+          fetchCloudDatabaseState().then((state) => {
+            if (state) setDbState(state);
+          });
         }
-      }
-    });
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        lastBackgroundTime = Date.now();
+        // Biometric dialog dismissal grace period: ignore resume lock within 5s of unlock
+        const timeSinceLastUnlock = Date.now() - lastUnlockTimeRef.current;
+        if (timeSinceLastUnlock < 5000) {
+          lastBackgroundTimeRef.current = Date.now();
+          return;
+        }
+
+        // External UPI payment flow check: give 60s grace buffer when returning from UPI app
+        const upiIntentActive = sessionStorage.getItem('roommate_upi_intent_active') === 'true';
+        if (upiIntentActive) {
+          sessionStorage.removeItem('roommate_upi_intent_active');
+          lastBackgroundTimeRef.current = Date.now();
+          return;
+        }
+
+        // Check App Lock timeout on resume
+        const lockEnabled =
+          localStorage.getItem('roommate_app_lock_enabled') !== null
+            ? localStorage.getItem('roommate_app_lock_enabled') !== 'false'
+            : localStorage.getItem('campusflow_app_lock_enabled') !== 'false';
+        if (lockEnabled) {
+          const timeoutSetting =
+            localStorage.getItem('roommate_app_lock_timeout') ||
+            localStorage.getItem('campusflow_app_lock_timeout') ||
+            'immediate';
+          const timeoutMs = timeoutSetting === '5m' ? 300000 : timeoutSetting === '1m' ? 60000 : 3000;
+          const elapsed = Date.now() - lastBackgroundTimeRef.current;
+          if (elapsed >= timeoutMs) {
+            setIsAppLocked(true);
+          }
+        }
+        lastBackgroundTimeRef.current = Date.now();
+      },
+      () => {
+        // App Backgrounded / Paused
+        lastBackgroundTimeRef.current = Date.now();
       }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    );
 
     return () => {
       cleanupKeyboard();
@@ -315,9 +354,27 @@ export function AppContent() {
       cleanupPush();
       cleanupNetwork();
       cleanupLifecycle();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [refreshState]);
+
+  // Listen for dynamic App Lock changes from Settings
+  useEffect(() => {
+    const handleSettingsSync = () => {
+      const lockEnabled =
+        localStorage.getItem('roommate_app_lock_enabled') !== null
+          ? localStorage.getItem('roommate_app_lock_enabled') !== 'false'
+          : localStorage.getItem('campusflow_app_lock_enabled') !== 'false';
+      if (!lockEnabled) {
+        setIsAppLocked(false);
+      }
+    };
+    window.addEventListener('roommate_settings_changed', handleSettingsSync);
+    window.addEventListener('campusflow_settings_changed', handleSettingsSync);
+    return () => {
+      window.removeEventListener('roommate_settings_changed', handleSettingsSync);
+      window.removeEventListener('campusflow_settings_changed', handleSettingsSync);
+    };
+  }, []);
 
   // Analytics & Diagnostics: User Identity Sync
   useEffect(() => {
@@ -360,7 +417,7 @@ export function AppContent() {
         setIsRealtimeLive(true);
       }
     });
-  }, [isAuthenticated, currentUser.id, currentUser.email]);
+  }, [isAuthenticated, currentUser.id, currentUser.email, currentUser.role]);
 
   // 2. Realtime Room Subscriptions (Multi-Device Broadcast Listener & Native Notifications)
   useEffect(() => {
@@ -470,7 +527,7 @@ export function AppContent() {
     return () => {
       unsubscribe();
     };
-  }, [activeRoom?.id, currentUser.id, currentUser.name, activeRoom?.name, fetchJoinRequests]);
+  }, [activeRoom, currentUser.id, currentUser.name, fetchJoinRequests]);
 
   // 3. Realtime Global SuperAdmin Subscriptions (Syncs all mobile room & expense events across platform)
   useEffect(() => {
@@ -515,7 +572,7 @@ export function AppContent() {
       if (table === 'in_app_notifications') {
         playNotificationSound();
         if (payload?.new?.action_type === 'FORCE_LOGOUT') {
-          handleLogout();
+          handleLogoutRef.current();
           return;
         }
         fetchCloudDatabaseState().then((cloudState) => {
@@ -631,7 +688,7 @@ export function AppContent() {
     return () => {
       unsubscribe();
     };
-  }, [isAuthenticated, currentUser?.id, activeRoom?.id]);
+  }, [isAuthenticated, currentUser?.id, activeRoom]);
 
   // 4b. Realtime Admin Subscriptions across ALL Administered Rooms
   const adminRoomsKey = dbState.rooms
@@ -698,7 +755,7 @@ export function AppContent() {
       }
     });
 
-    const unsubscribe = subscribeToPlatformSettingsRealtime((table, eventType) => {
+    const unsubscribe = subscribeToPlatformSettingsRealtime((_table, _eventType) => {
       fetchPlatformSettingsCloud().then((settings) => {
         if (settings) {
           setPlatformSettings(settings);
@@ -765,6 +822,9 @@ export function AppContent() {
 
     setCurrentUser(user);
     setIsAuthenticated(true);
+    setIsAppLocked(false);
+    lastUnlockTimeRef.current = Date.now();
+    lastBackgroundTimeRef.current = Date.now();
     analytics.trackLoginCompleted(user.email.includes('google') ? 'google' : 'email');
     if (IS_LIVE_SYNC_ENABLED) {
       authenticateResidentWithSupabase(user.email);
@@ -795,9 +855,11 @@ export function AppContent() {
     const updated = db.getState();
     setDbState({ ...updated });
     setIsAuthenticated(false);
+    setIsAppLocked(false);
     setCurrentUser(DEFAULT_RESIDENT);
     setActiveTab('dashboard');
   };
+  handleLogoutRef.current = handleLogout;
 
   // Handlers for Shared Expense, Settlement, and Personal Expense with Cloud Sync
   const handleAddSharedExpense = async (data: {
@@ -1328,7 +1390,7 @@ export function AppContent() {
           try {
             const syncResult = await syncOAuthSessionToProfile(session.user);
             refreshState();
-            if (!isAuthenticated) {
+            if (!getStoredResidentSession()) {
               if (syncResult.needsProfileOnboarding) {
                 setProfileOnboardingUser({
                   user: syncResult.user,
@@ -1407,7 +1469,7 @@ export function AppContent() {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshState]);
 
   const handleAddPersonalExpense = async (data: {
     title: string;
@@ -1506,6 +1568,8 @@ export function AppContent() {
     return (
       <DesktopLandingPage
         allUsers={dbState.users}
+        isAuthenticated={isAuthenticated}
+        currentUser={currentUser}
         onLoginSuccess={(adminUser) => {
           handleLogin(adminUser, 'superadmin_token');
           setActiveTab('admin');
@@ -1570,6 +1634,7 @@ export function AppContent() {
           <MobileLogin
             allUsers={dbState.users}
             onLogin={handleLogin}
+            onBackToLanding={() => setViewMode('desktop')}
             onJoinWithCode={async (code, newUser, token) => {
               try {
                 const effectiveUser =
@@ -1811,7 +1876,7 @@ export function AppContent() {
         <AppLockGateway
           isOpen={isAppLocked}
           currentUser={currentUser}
-          onUnlock={() => setIsAppLocked(false)}
+          onUnlock={handleAppUnlock}
           onSwitchAccount={handleLogout}
         />
 

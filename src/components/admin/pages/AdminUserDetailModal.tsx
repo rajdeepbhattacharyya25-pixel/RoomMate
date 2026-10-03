@@ -57,8 +57,14 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   const [notifSuccess, setNotifSuccess] = useState(false);
 
   // Rooms this user belongs to
-  const userRoomMemberships = user ? roomMembers.filter((m) => m.userId === user.id) : [];
-  const userRooms = user ? rooms.filter((r) => userRoomMemberships.some((m) => m.roomId === r.id)) : [];
+  const userRoomMemberships = useMemo(
+    () => (user ? roomMembers.filter((m) => m.userId === user.id) : []),
+    [user, roomMembers]
+  );
+  const userRooms = useMemo(
+    () => (user ? rooms.filter((r) => userRoomMemberships.some((m) => m.roomId === r.id)) : []),
+    [user, rooms, userRoomMemberships]
+  );
 
   // Synthesize real user activity stream
   const userActivity = useMemo(() => {

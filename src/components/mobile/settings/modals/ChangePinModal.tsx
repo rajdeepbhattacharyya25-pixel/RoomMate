@@ -6,6 +6,7 @@ import { validateStrict4DigitPin, hashPin } from '../../../../lib/auth/jwtServic
 import { supabase } from '../../../../lib/supabase/client';
 import { IS_LIVE_SYNC_ENABLED } from '../../../../lib/storage/cloudStorageAdapter';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface ChangePinModalProps {
   isOpen: boolean;
@@ -25,6 +26,24 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Step backward or dismiss on Android hardware back button
+  useBackButton(() => {
+    if (step === 'CONFIRM_NEW') {
+      setError(null);
+      setConfirmPin('');
+      setStep('ENTER_NEW');
+      return true;
+    }
+    if (step === 'ENTER_NEW') {
+      setError(null);
+      setNewPin('');
+      setStep('VERIFY_OLD');
+      return true;
+    }
+    onClose();
+    return true;
+  }, isOpen);
 
   const getStoredPin = (): string => {
     if (typeof localStorage === 'undefined') return '1234';

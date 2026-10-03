@@ -5,6 +5,7 @@ import {
   createPushNotificationChannels,
   deactivateCurrentDevicePush,
   sendRoommatePushEvent,
+  ALERTS_CHANNEL_ID,
   EXPENSES_CHANNEL_ID,
   SETTLEMENTS_CHANNEL_ID,
   NUDGES_CHANNEL_ID,
@@ -102,7 +103,8 @@ describe('FCM Push Service Suite', () => {
   });
 
   describe('Notification Channels Configuration', () => {
-    it('defines distinct channel IDs for expense, settlement, nudge, and request categories', () => {
+    it('defines distinct channel IDs for alerts, expense, settlement, nudge, and request categories', () => {
+      expect(ALERTS_CHANNEL_ID).toBe('roommate_alerts');
       expect(EXPENSES_CHANNEL_ID).toBe('roommate_expenses_channel');
       expect(SETTLEMENTS_CHANNEL_ID).toBe('roommate_settlements_channel');
       expect(NUDGES_CHANNEL_ID).toBe('roommate_nudges_channel');
@@ -115,6 +117,13 @@ describe('FCM Push Service Suite', () => {
 
       await createPushNotificationChannels();
 
+      expect(PushNotifications.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: ALERTS_CHANNEL_ID,
+          importance: 4,
+          vibration: true,
+        })
+      );
       expect(PushNotifications.createChannel).toHaveBeenCalledWith(
         expect.objectContaining({
           id: EXPENSES_CHANNEL_ID,

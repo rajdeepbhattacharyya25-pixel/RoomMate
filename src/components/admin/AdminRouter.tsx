@@ -299,7 +299,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       bugSub.unsubscribe();
       incSub.unsubscribe();
     };
-  }, []);
+  }, [currentUser.role]);
 
   // Refresh DB state
   const refreshStorageData = useCallback(() => {

@@ -66,11 +66,11 @@ export type OfflineMutationPayload =
   | Record<string, unknown>;
 
 export type OfflineQueueItem =
-  | { id: string; type: 'ADD_SHARED_EXPENSE'; payload: AddSharedExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; type: 'RECORD_SETTLEMENT'; payload: RecordSettlementPayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; type: 'ADD_PERSONAL_EXPENSE'; payload: AddPersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; type: 'DELETE_PERSONAL_EXPENSE'; payload: DeletePersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; type: 'CREATE_ROOM'; payload: CreateRoomPayload; createdAt: number; retryCount: number; lastError?: string; };
+  | { id: string; clientMutationId?: string; type: 'ADD_SHARED_EXPENSE'; payload: AddSharedExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'RECORD_SETTLEMENT'; payload: RecordSettlementPayload; createdAt: number; retryCount: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'ADD_PERSONAL_EXPENSE'; payload: AddPersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'DELETE_PERSONAL_EXPENSE'; payload: DeletePersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'CREATE_ROOM'; payload: CreateRoomPayload; createdAt: number; retryCount: number; lastError?: string; };
 
 const PRIMARY_STORAGE_KEY = 'roommate_offline_sync_queue';
 const LEGACY_STORAGE_KEY = 'campusflow_offline_sync_queue';
@@ -138,8 +138,14 @@ export function enqueueOfflineItem<T extends OfflineMutationType>(
     : unknown
 ): OfflineQueueItem {
   const queue = loadQueue();
+  const clientMutationId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `mut_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
   const newItem = {
     id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    clientMutationId,
     type,
     payload,
     createdAt: Date.now(),
@@ -212,27 +218,44 @@ export function subscribeToQueueChanges(callback: (queue: OfflineQueueItem[]) =>
   };
 }
 
+let isFlushing = false;
+
+/**
+ * Returns whether an offline queue sync flush is currently executing.
+ */
+export function isQueueFlushing(): boolean {
+  return isFlushing;
+}
+
 /**
  * Flushes the pending offline queue to Supabase Cloud with idempotency.
  */
 export async function flushOfflineQueue(): Promise<{ syncedCount: number; failedCount: number }> {
-  const queue = loadQueue();
-  if (queue.length === 0) {
+  if (isFlushing) {
+    console.log('[OfflineQueue] Flush already in progress, skipping concurrent execution.');
     return { syncedCount: 0, failedCount: 0 };
   }
 
-  console.log(`[OfflineQueue] Starting sync flush of ${queue.length} pending items...`);
-  let syncedCount = 0;
-  let failedCount = 0;
-  const remainingQueue: OfflineQueueItem[] = [];
+  isFlushing = true;
 
-  for (const item of queue) {
-    try {
-      let success = false;
+  try {
+    const queue = loadQueue();
+    if (queue.length === 0) {
+      return { syncedCount: 0, failedCount: 0 };
+    }
 
-      switch (item.type) {
-        case 'ADD_SHARED_EXPENSE': {
-          const data = item.payload as {
+    console.log(`[OfflineQueue] Starting sync flush of ${queue.length} pending items...`);
+    let syncedCount = 0;
+    let failedCount = 0;
+    const remainingQueue: OfflineQueueItem[] = [];
+
+    for (const item of queue) {
+      try {
+        let success = false;
+
+        switch (item.type) {
+          case 'ADD_SHARED_EXPENSE': {
+            const data = item.payload as {
             localExpenseId?: string;
             roomId: string;
             paidBy: string;
@@ -457,12 +480,60 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
       failedCount++;
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.warn(`[OfflineQueue] Failed to sync ${item.type}:`, errorMessage);
-      item.retryCount += 1;
-      item.lastError = errorMessage;
-      remainingQueue.push(item);
+
+      // Detect permanent conflict / unresolvable database constraints
+      const errCode = (err as any)?.code;
+      const isPermanentConflict =
+        errCode === '23503' || // Foreign key violation (e.g. room or user deleted)
+        errCode === '42501' || // RLS permission denied
+        errCode === 'PGRST116' || // Record not found
+        errorMessage.toLowerCase().includes('foreign key') ||
+        errorMessage.toLowerCase().includes('violates row-level security') ||
+        errorMessage.toLowerCase().includes('not found') ||
+        item.retryCount >= 4; // Exceeded maximum retry attempts
+
+      if (isPermanentConflict) {
+        console.warn(`[OfflineQueue] Auto-discarding permanently conflicting mutation ${item.id} (${item.type}): ${errorMessage}`);
+        try {
+          db.logAdminAudit(
+            'SYSTEM',
+            'OFFLINE_SYNC_CONFLICT_DISCARDED',
+            'OFFLINE_QUEUE',
+            item.id,
+            { type: item.type, error: errorMessage }
+          );
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('roommate_sync_conflict_discarded', {
+                detail: {
+                  itemId: item.id,
+                  type: item.type,
+                  error: errorMessage,
+                  timestamp: Date.now(),
+                },
+              })
+            );
+          }
+        } catch {
+          // ignore audit logging error
+        }
+      } else {
+        item.retryCount += 1;
+        item.lastError = errorMessage;
+        remainingQueue.push(item);
+      }
     }
   }
 
-  saveQueue(remainingQueue);
+  // Reconcile remaining failed items with any items that were newly enqueued
+  // during the asynchronous network sync flush window to prevent silent data loss.
+  const freshQueue = loadQueue();
+  const processedIds = new Set(queue.map((item) => item.id));
+  const newlyEnqueuedItems = freshQueue.filter((item) => !processedIds.has(item.id));
+  saveQueue([...remainingQueue, ...newlyEnqueuedItems]);
+
   return { syncedCount, failedCount };
+} finally {
+  isFlushing = false;
+}
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldAlert, ExternalLink, Copy, Check, X, KeyRound, ArrowRight } from 'lucide-react';
 import { hapticSuccess, hapticImpact, hapticWarning } from '../../lib/native/haptics';
 import { redeemOAuthUrlOrHash } from '../../lib/storage/cloudStorageAdapter';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface OAuthProviderNoticeModalProps {
   isOpen: boolean;
@@ -14,6 +15,9 @@ export const OAuthProviderNoticeModal: React.FC<OAuthProviderNoticeModalProps> =
   onClose,
   errorMessage,
 }) => {
+  // Dismiss OAuth Notice modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [copied, setCopied] = useState(false);
   const [pasteInput, setPasteInput] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);

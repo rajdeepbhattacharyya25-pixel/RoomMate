@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, X, Check } from 'lucide-react';
 import { hapticSelection } from '../../../../lib/native/haptics';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface LockTimeoutSheetProps {
   isOpen: boolean;
@@ -23,6 +24,9 @@ export const LockTimeoutSheet: React.FC<LockTimeoutSheetProps> = ({
   onClose,
   onSelect,
 }) => {
+  // Dismiss lock timeout sheet on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   if (!isOpen) return null;
 
   const handleSelect = (val: string) => {

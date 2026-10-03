@@ -125,6 +125,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
     await hapticImpact('MEDIUM');
     setSelectedApp(app);
     setAppLaunched(true);
+    try {
+      sessionStorage.setItem('roommate_upi_intent_active', 'true');
+    } catch {
+      // Ignore sessionStorage error
+    }
     launchUpiIntent(app, upiOptions);
   };
 

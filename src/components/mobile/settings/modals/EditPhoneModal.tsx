@@ -5,6 +5,7 @@ import { updateProfilePhone, validateAndFormatPhoneNumber } from '../../../../li
 import { PhoneInput } from '../../../common/PhoneInput';
 import { extractTenDigits } from '../../../common/phoneFormat';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface EditPhoneModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export const EditPhoneModal: React.FC<EditPhoneModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  // Dismiss edit phone modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [digits, setDigits] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

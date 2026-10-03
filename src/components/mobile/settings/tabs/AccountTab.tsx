@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Camera,
   QrCode,
@@ -63,6 +63,15 @@ export const AccountTab: React.FC<AccountTabProps> = ({
   const [isSavingQr, setIsSavingQr] = useState(false);
   const [isAnalyzingQr, setIsAnalyzingQr] = useState(false);
   const [extractedUpiFromQr, setExtractedUpiFromQr] = useState<string | null>(null);
+
+  // Revoke object URL to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (pendingQrPreview && pendingQrPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(pendingQrPreview);
+      }
+    };
+  }, [pendingQrPreview]);
 
   // Username
   const storedUsername =

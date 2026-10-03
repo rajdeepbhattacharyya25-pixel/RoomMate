@@ -20,12 +20,16 @@ interface DesktopLandingPageProps {
   onLoginSuccess: (adminUser: User) => void;
   onOpenMobilePreview: () => void;
   allUsers: User[];
+  isAuthenticated?: boolean;
+  currentUser?: User;
 }
 
 export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
   onLoginSuccess,
   onOpenMobilePreview,
   allUsers,
+  isAuthenticated = false,
+  currentUser,
 }) => {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -75,6 +79,8 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
         onOpenGuide={() => setShowGuideModal(true)}
         onOpenQrModal={() => setShowQrModal(true)}
         onDownloadApk={openDownloadModal}
+        isAuthenticated={isAuthenticated}
+        currentUser={currentUser}
       />
 
       {/* 2. Main Landing Page Sections */}
@@ -84,6 +90,8 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
           onOpenMobilePreview={onOpenMobilePreview}
           onDownloadApk={openDownloadModal}
           onOpenGuide={() => setShowGuideModal(true)}
+          isAuthenticated={isAuthenticated}
+          currentUser={currentUser}
         />
 
         {/* Comparison: Spreadsheet Chaos vs RoomMate Standard - moved early */}
@@ -111,6 +119,7 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
         <FinalCTASection
           onOpenMobilePreview={onOpenMobilePreview}
           onDownloadApk={openDownloadModal}
+          isAuthenticated={isAuthenticated}
         />
       </main>
 
@@ -121,6 +130,7 @@ export const DesktopLandingPage: React.FC<DesktopLandingPageProps> = ({
         onOpenGuide={() => setShowGuideModal(true)}
         onOpenQrModal={() => setShowQrModal(true)}
         onDownloadApk={openDownloadModal}
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Download Confirmation Modal (Direct & QR Scan Trigger) */}

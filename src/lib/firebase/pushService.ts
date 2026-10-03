@@ -6,6 +6,7 @@ import { playNotificationSound, playSuccessSound } from '../native/notificationS
 import { updateFcmTokenCloud, deactivateFcmTokenCloud } from '../storage/cloudStorageAdapter';
 import { supabase } from '../supabase/client';
 
+export const ALERTS_CHANNEL_ID = 'roommate_alerts';
 export const EXPENSES_CHANNEL_ID = 'roommate_expenses_channel';
 export const SETTLEMENTS_CHANNEL_ID = 'roommate_settlements_channel';
 export const NUDGES_CHANNEL_ID = 'roommate_nudges_channel';
@@ -61,6 +62,19 @@ export async function createPushNotificationChannels(): Promise<void> {
 
   try {
     if (Capacitor.isPluginAvailable('PushNotifications')) {
+      // Default fallback channel configured in AndroidManifest.xml for system alerts & announcements
+      await PushNotifications.createChannel({
+        id: ALERTS_CHANNEL_ID,
+        name: 'RoomMate Alerts & Updates',
+        description: 'System announcements, room activity, and security notifications',
+        importance: 4, // High importance
+        visibility: 1, // Public
+        sound: 'notification.mp3',
+        vibration: true,
+        lights: true,
+        lightColor: '#6366F1',
+      });
+
       await PushNotifications.createChannel({
         id: EXPENSES_CHANNEL_ID,
         name: 'Room Shared Expenses',

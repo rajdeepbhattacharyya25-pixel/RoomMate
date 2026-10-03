@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Room,
@@ -25,6 +25,7 @@ import { MobileOfflineBanner } from './MobileOfflineBanner';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { ShakeBugReportModal } from './ShakeBugReportModal';
 import { addShakeListener } from '../../lib/native/shakeDetector';
+import { registerBackButtonHandler } from '../../lib/native/backButton';
 import { hapticImpact } from '../../lib/native/haptics';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { isNativeApp } from '../../lib/platform/deviceDetector';
@@ -179,13 +180,24 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
     }
   }, [pendingJoinInviteCode]);
 
+  // Hardware Back Button: navigate back to 'dashboard' tab before triggering app exit
+  useEffect(() => {
+    if (activeTab === 'dashboard') return;
+
+    return registerBackButtonHandler(() => {
+      setActiveTab('dashboard');
+      return true; // Event consumed
+    });
+  }, [activeTab]);
+
   // Global Shake Detection Listener (suppressed while modal or scanner is active)
+  const isScannerOrModalActiveRef = useRef(false);
+  isScannerOrModalActiveRef.current = Boolean(showQrScanner || showQuickActionSheet || showShakeReportModal);
+
   useEffect(() => {
     const unsubscribe = addShakeListener(() => {
-      setShowShakeReportModal((alreadyOpen) => {
-        if (alreadyOpen) return true;
-        return true;
-      });
+      if (isScannerOrModalActiveRef.current) return;
+      setShowShakeReportModal(true);
     });
     return () => {
       unsubscribe();

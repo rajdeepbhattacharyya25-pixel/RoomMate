@@ -14,6 +14,7 @@ import {
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { getOfflineQueue } from '../../lib/storage/offlineQueue';
 import { hapticImpact } from '../../lib/native/haptics';
+import { useBackButton } from '../../lib/native/backButton';
 
 export const MobileOfflineBanner: React.FC = () => {
   const {
@@ -32,6 +33,12 @@ export const MobileOfflineBanner: React.FC = () => {
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [showReconnectedBanner, setShowReconnectedBanner] = useState(false);
   const prevIsOnlineRef = useRef(isOnline);
+
+  // Dismiss network details sheet on Android hardware back button
+  useBackButton(() => {
+    setShowDetailsSheet(false);
+    return true;
+  }, showDetailsSheet);
 
   // Detect transition from offline to online to show temporary celebration banner
   useEffect(() => {

@@ -162,6 +162,11 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         setCameraActive(true);
+        try {
+          localStorage.removeItem('roommate_camera_perm_denied');
+        } catch {
+          // ignore storage error
+        }
         beginScanLoop();
       }
     } catch {
@@ -212,6 +217,29 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
       stopCamera();
     }
     return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTab, previewData, joinResult]);
+
+  // Pause camera when document is hidden (backgrounded or under app lock) to conserve battery
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'camera' || previewData || joinResult) return;
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        stopCamera();
+      } else if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        startCamera();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeTab, previewData, joinResult]);
 
@@ -340,15 +368,18 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   };
 
   const hasAutoJoinedRef = useRef(false);
+  const pendingRoom = joinResult?.room;
+  const pendingRequestId = (joinResult as any)?.requestId;
+  const pendingStatus = joinResult?.status;
 
   // Live Realtime listener & Fallback Polling for instant join approval
   useEffect(() => {
-    if (!isOpen || joinResult?.status !== 'PENDING' || !joinResult.room?.id) return;
+    if (!isOpen || pendingStatus !== 'PENDING' || !pendingRoom?.id) return;
     hasAutoJoinedRef.current = false;
 
     let isMounted = true;
-    const targetRoom = joinResult.room;
-    const requestId = (joinResult as any).requestId;
+    const targetRoom = pendingRoom;
+    const requestId = pendingRequestId;
 
     const triggerApprovalSuccess = (approvedRoom: Room) => {
       if (hasAutoJoinedRef.current) return;
@@ -454,7 +485,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
         supabase.removeChannel(channel);
       }
     };
-  }, [isOpen, joinResult?.status, joinResult?.room?.id, currentUser.id, onClose, onRoomJoined]);
+  }, [isOpen, pendingStatus, pendingRoom, pendingRequestId, currentUser.id, onClose, onRoomJoined]);
 
   return (
     <MobileBottomSheet

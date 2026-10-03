@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Moon, X, Check } from 'lucide-react';
 import { hapticSuccess } from '../../../../lib/native/haptics';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface QuietHoursSheetProps {
   isOpen: boolean;
@@ -13,6 +14,9 @@ export const QuietHoursSheet: React.FC<QuietHoursSheetProps> = ({
   onClose,
   onSave,
 }) => {
+  // Dismiss quiet hours sheet on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [enabled, setEnabled] = useState(true);
   const [startTime, setStartTime] = useState('23:00');
   const [endTime, setEndTime] = useState('07:00');

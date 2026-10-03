@@ -108,12 +108,12 @@ export async function authenticateResidentBiometrics(
         cancelTitle: 'Cancel',
         allowDeviceCredential: true, // Allow PIN/pattern fallback if biometrics fail
       });
-      await hapticSuccess();
+      hapticSuccess().catch(() => {});
       localStorage.setItem(BIOMETRIC_DEVICE_KEY, 'true');
       return true;
     } catch (err) {
       console.warn('Native biometrics authentication cancelled or failed:', err);
-      await hapticWarning();
+      hapticWarning().catch(() => {});
       return false;
     }
   }
@@ -136,7 +136,7 @@ export async function authenticateResidentBiometrics(
         });
 
         if (credential) {
-          await hapticSuccess();
+          hapticSuccess().catch(() => {});
           localStorage.setItem(BIOMETRIC_DEVICE_KEY, 'true');
           return true;
         }
@@ -148,6 +148,6 @@ export async function authenticateResidentBiometrics(
 
   // If native or WebAuthn platform authentication is unavailable or failed, return false.
   // Never simulate biometric approval in a production zero-trust architecture.
-  await hapticWarning();
+  hapticWarning().catch(() => {});
   return false;
 }

@@ -3,6 +3,7 @@ import { QrCode, X, Check, AlertCircle } from 'lucide-react';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { updateProfileUpiId } from '../../../../lib/storage/cloudStorageAdapter';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface EditUpiIdModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export const EditUpiIdModal: React.FC<EditUpiIdModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  // Dismiss edit UPI ID modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [upiId, setUpiId] = useState(currentUpiId);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);

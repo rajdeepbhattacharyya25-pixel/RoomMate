@@ -17,6 +17,7 @@ import {
   KeyRound,
   Check,
   ArrowRight,
+  ArrowLeft,
   RefreshCw,
   X,
   UserCheck,
@@ -59,17 +60,20 @@ import {
   decodeQrFromImage,
   cleanAndNormalizeRoomCode,
 } from '../../lib/services/qrDecoder';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface MobileLoginProps {
   allUsers: User[];
   onLogin: (user: User, token: string) => void;
   onJoinWithCode?: (code: string, user?: User, token?: string) => void;
+  onBackToLanding?: () => void;
 }
 
 export const MobileLogin: React.FC<MobileLoginProps> = ({
   allUsers,
   onLogin,
   onJoinWithCode,
+  onBackToLanding,
 }) => {
   // 3-Segment Tab Switcher: signin | join | create
   const [authTab, setAuthTab] = useState<'signin' | 'join' | 'create'>('signin');
@@ -182,6 +186,59 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
       setIdentifier(residentUsers[0].email);
     }
   }, [residentUsers, selectedDemoUserId]);
+
+  // Android Hardware Back button handling in MobileLogin
+  useBackButton(() => {
+    // 1. Close forgot pin modal if open
+    if (showForgotPinModal) {
+      setShowForgotPinModal(false);
+      setForgotSuccess(null);
+      return true;
+    }
+
+    // 2. Close JWT debug inspection if open
+    if (inspectingJwt) {
+      setInspectingJwt(null);
+      return true;
+    }
+
+    // 3. Step back in Join Wizard if on join tab
+    if (authTab === 'join') {
+      if (joinWizardStep === 'confirm_room') {
+        setJoinWizardStep('scan_or_code');
+        return true;
+      }
+      if (joinWizardStep === 'resident_info' || joinWizardStep === 'existing_user_auth') {
+        setJoinWizardStep('confirm_room');
+        return true;
+      }
+      if (joinWizardStep === 'email_verification') {
+        setJoinWizardStep('resident_info');
+        return true;
+      }
+      if (joinWizardStep === 'waiting') {
+        setJoinWizardStep('scan_or_code');
+        return true;
+      }
+      // If at start of join wizard, return to signin tab
+      setAuthTab('signin');
+      return true;
+    }
+
+    // 4. If on create account tab, return to signin tab
+    if (authTab === 'create') {
+      setAuthTab('signin');
+      return true;
+    }
+
+    // 5. Let landing page transition handle or delegate
+    if (onBackToLanding) {
+      onBackToLanding();
+      return true;
+    }
+
+    return false;
+  }, showForgotPinModal || Boolean(inspectingJwt) || authTab !== 'signin' || Boolean(onBackToLanding));
 
   // Handle Standard Sign In with Strict Backend Credential Verification
   const handleSignIn = async (e?: React.FormEvent) => {
@@ -773,6 +830,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
   // Flag to avoid duplicate auto-entry triggers
   const hasAutoEnteredRef = useRef(false);
+  const handleLiveApprovalRef = useRef<() => void>(() => {});
 
   // Instant Live Approval Celebration & Auto-Navigation
   const handleLiveApprovalAndAutoEnter = () => {
@@ -796,6 +854,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
       handleEnterApprovedRoom();
     }, 850);
   };
+  handleLiveApprovalRef.current = handleLiveApprovalAndAutoEnter;
 
   // Cancel pending request and return to join screen
   const handleCancelPendingRequest = () => {
@@ -836,7 +895,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
 
             if (isMatch) {
               if (updated.status === 'APPROVED') {
-                handleLiveApprovalAndAutoEnter();
+                handleLiveApprovalRef.current();
               } else if (updated.status === 'DECLINED') {
                 hapticWarning();
                 setJoinRequestStatus('declined');
@@ -861,7 +920,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
               newMember?.room_id === activeRoomId
             ) {
               if (newMember.status === 'ACTIVE') {
-                handleLiveApprovalAndAutoEnter();
+                handleLiveApprovalRef.current();
               }
             }
           }
@@ -882,7 +941,7 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
         if (!isMounted || hasAutoEnteredRef.current) return;
 
         if (res.status === 'APPROVED') {
-          handleLiveApprovalAndAutoEnter();
+          handleLiveApprovalRef.current();
         } else if (res.status === 'DECLINED') {
           hapticWarning();
           setJoinRequestStatus('declined');
@@ -1112,6 +1171,20 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
       {/* Scrollable Center Canvas */}
       <div className="flex-1 w-full max-w-[420px] mx-auto px-4 py-4 flex flex-col justify-start space-y-4">
         
+        {/* Web Back to Product Landing / APK Download Link */}
+        {onBackToLanding && (
+          <div className="w-full flex items-center justify-start">
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-brand-dark dark:text-cyan-400 dark:hover:text-cyan-300 transition-colors py-1 cursor-pointer group"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 transform transition-transform group-hover:-translate-x-0.5" />
+              <span>Product Overview &amp; APK Download</span>
+            </button>
+          </div>
+        )}
+
         {/* 1. Header & Pure RoomMate Branding */}
         <header className="flex flex-col items-center text-center pt-2">
           {/* RoomMate Emblem with emerald status verification */}

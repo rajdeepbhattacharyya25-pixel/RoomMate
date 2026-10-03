@@ -5,11 +5,13 @@ import { useInView } from '../../lib/hooks/useInView';
 interface FinalCTASectionProps {
   onOpenMobilePreview: () => void;
   onDownloadApk: () => void;
+  isAuthenticated?: boolean;
 }
 
 export const FinalCTASection: React.FC<FinalCTASectionProps> = ({
   onOpenMobilePreview,
   onDownloadApk,
+  isAuthenticated = false,
 }) => {
   const { ref, inView } = useInView({ threshold: 0.15 });
 
@@ -59,7 +61,7 @@ export const FinalCTASection: React.FC<FinalCTASectionProps> = ({
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-full bg-white text-brand-dark hover:bg-brand-soft font-bold text-sm transition-all shadow-md group cursor-pointer active:scale-95"
               >
                 <Smartphone className="w-4 h-4 text-brand-dark" />
-                <span>Get Started (Open App)</span>
+                <span>{isAuthenticated ? 'Go to Dashboard' : 'Get Started (Open App)'}</span>
                 <ArrowRight className="w-4 h-4 text-brand-dark transform transition-transform group-hover:translate-x-1" />
               </button>
 

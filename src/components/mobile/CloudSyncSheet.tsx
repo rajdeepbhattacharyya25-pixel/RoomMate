@@ -14,6 +14,7 @@ import {
 import { hapticImpact, hapticSuccess } from '../../lib/native/haptics';
 import { isDeveloperModeEnabled } from '../../lib/services/developerMode';
 import { useNetworkStatus } from '../../context/NetworkContext';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface CloudSyncSheetProps {
   isOpen: boolean;
@@ -41,6 +42,9 @@ export const CloudSyncSheet: React.FC<CloudSyncSheetProps> = ({
   const network = useNetworkStatus();
   const isOnline = propIsOnline !== undefined ? propIsOnline : network.isOnline;
   const pendingSyncCount = propPendingCount !== undefined ? propPendingCount : network.pendingSyncCount;
+
+  // Dismiss Cloud Sync Sheet on Android hardware back button
+  useBackButton(onClose, isOpen);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);

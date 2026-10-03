@@ -143,6 +143,29 @@ export const UpiQrScannerModal: React.FC<UpiQrScannerModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeMode, scannedResult]);
 
+  // Pause camera when document is hidden (backgrounded or under app lock) to conserve battery
+  useEffect(() => {
+    if (!isOpen || activeMode !== 'camera' || scannedResult) return;
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        stopCamera();
+      } else if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        startCamera();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeMode, scannedResult]);
+
   // Handle uploaded image file
   const handleFileSelected = async (file: File) => {
     setIsProcessing(true);

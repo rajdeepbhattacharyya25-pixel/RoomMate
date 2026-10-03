@@ -4,6 +4,7 @@ import { Sparkles, Smartphone, ArrowRight, ArrowLeft, Check, Loader2, User as Us
 import { hapticSuccess, hapticWarning, hapticImpact } from '../../lib/native/haptics';
 import { completeProfileOnboarding, validateAndFormatPhoneNumber } from '../../lib/storage/cloudStorageAdapter';
 import { PhoneInput } from '../common/PhoneInput';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface FirstLoginOnboardingModalProps {
   isOpen: boolean;
@@ -25,6 +26,16 @@ export const FirstLoginOnboardingModal: React.FC<FirstLoginOnboardingModalProps>
   const [phone, setPhone] = useState(user.phone || '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Step backward from PHONE to NAME on Android hardware back button
+  useBackButton(() => {
+    if (step === 'PHONE') {
+      setError(null);
+      setStep('NAME');
+      return true;
+    }
+    return false;
+  }, isOpen && step === 'PHONE');
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);

@@ -29,35 +29,38 @@ export const isAdminSubdomain = (): boolean => {
 /**
  * Returns initial display mode:
  * - Native Mobile App (Capacitor) -> strictly 'mobile'
- * - Mobile browser -> 'mobile'
- * - Desktop browser -> 'desktop'
+ * - Web Browsers (both Mobile & Desktop) -> default to 'desktop' (Landing Page)
+ *   so visitors can explore features and download the APK, or launch the web app.
+ * - Explicit URL query overrides (e.g. ?action=download, ?download=apk, ?view=landing, ?view=desktop, ?view=mobile, ?view=app, ?join=, ?code=, ?token=, ?verified=)
  */
 export const getInitialDeviceMode = (): 'mobile' | 'desktop' => {
-  if (typeof window === 'undefined') return 'mobile';
-
-  // Explicit URL query override for previewing and download flows (e.g. ?action=download, ?download=apk, ?view=landing, ?view=desktop)
-  const params = new URLSearchParams(window.location.search);
-  const viewParam = params.get('view');
-  const actionParam = params.get('action');
-  const downloadParam = params.get('download');
+  if (typeof window === 'undefined') return 'desktop';
 
   // If running inside Capacitor Android/iOS APK, ALWAYS mobile
   if (isNativeApp()) {
     return 'mobile';
   }
 
-  // QR scan download triggers or landing view overrides should always display the landing page
-  if (actionParam === 'download' || downloadParam === 'apk' || viewParam === 'landing' || viewParam === 'desktop') {
-    return 'desktop';
-  }
-  if (viewParam === 'mobile') return 'mobile';
+  // Explicit URL query overrides
+  const params = new URLSearchParams(window.location.search);
+  const viewParam = params.get('view');
 
-  // If on desktop screen width (>= 1024px) or on admin subdomain
-  if (isAdminSubdomain() || window.innerWidth >= 1024) {
-    return 'desktop';
+  // Direct app entry queries: room invitations, auth verification callbacks, or explicit app view requests
+  if (
+    viewParam === 'mobile' ||
+    viewParam === 'app' ||
+    params.has('join') ||
+    params.has('code') ||
+    params.has('token') ||
+    params.get('verified') === 'true'
+  ) {
+    return 'mobile';
   }
 
-  return 'mobile';
+  // QR scan download triggers, landing view overrides, or standard web browser visits
+  // Both mobile and desktop browsers show the full responsive landing page
+  return 'desktop';
 };
 
 export * from '../utils/deviceDetector';
+

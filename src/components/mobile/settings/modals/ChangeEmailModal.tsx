@@ -3,6 +3,7 @@ import { Mail, X, Loader2, Check, AlertCircle, Info } from 'lucide-react';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { supabase, isSupabaseConfigured } from '../../../../lib/supabase/client';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface ChangeEmailModalProps {
   isOpen: boolean;
@@ -17,6 +18,9 @@ export const ChangeEmailModal: React.FC<ChangeEmailModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // Dismiss change email modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [newEmail, setNewEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

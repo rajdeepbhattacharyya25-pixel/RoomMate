@@ -4,7 +4,6 @@ import {
   decodeQrFromVideoFrame,
 } from '../../lib/services/qrDecoder';
 import { generateQrDataUrl } from '../../lib/services/qrGenerator';
-import jsQR from 'jsqr';
 
 describe('Room Share, QR Code Invite & Manual Code Join Suite', () => {
   beforeEach(() => {
@@ -154,6 +153,46 @@ describe('Room Share, QR Code Invite & Manual Code Join Suite', () => {
       const pastTime = new Date(Date.now() - 3600000).toISOString();
       const isExpired = new Date(pastTime).getTime() < Date.now();
       expect(isExpired).toBe(true);
+    });
+  });
+
+  describe('5. Cloud Invite Regeneration & State Synchronization', () => {
+    it('synchronizes local state with cloud RPC returned invite code and token', async () => {
+      const { regenerateInviteCloud } = await import('../../lib/storage/cloudStorageAdapter');
+      const { supabase } = await import('../../lib/supabase/client');
+      const { db } = await import('../../lib/storage/mockStorage');
+
+      // Create test room in local state first
+      const testRoom = db.createRoom('user-test-admin', 'Test Sync Flat');
+      
+      // Mock supabase.rpc for regenerate_room_invite
+      const cloudPayload = {
+        id: 'inv-cloud-12345',
+        room_id: testRoom.id,
+        invite_code: 'CLOUD9',
+        token: 'rm_inv_cloud_verified_9999',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      };
+
+      const rpcSpy = vi.spyOn(supabase, 'rpc').mockResolvedValue({
+        data: cloudPayload,
+        error: null,
+      } as any);
+
+      const result = await regenerateInviteCloud('user-test-admin', testRoom.id);
+
+      expect(result.inviteCode).toBe('CLOUD9');
+      expect(result.token).toBe('rm_inv_cloud_verified_9999');
+      expect(result.roomId).toBe(testRoom.id);
+
+      // Verify that local db state also updated with this cloud invitation
+      const state = db.getState();
+      const activeInvite = state.roomInvitations.find((i) => i.roomId === testRoom.id && !i.isRevoked);
+      expect(activeInvite).toBeDefined();
+      expect(activeInvite?.inviteCode).toBe('CLOUD9');
+      expect(activeInvite?.token).toBe('rm_inv_cloud_verified_9999');
+
+      rpcSpy.mockRestore();
     });
   });
 });

@@ -281,13 +281,16 @@ export function listenToNetworkStatus(
 /**
  * Listens to app background/foreground transitions to trigger instant cloud state re-hydration.
  */
-export function listenToAppLifecycle(onResume: () => void): () => void {
+export function listenToAppLifecycle(onResume: () => void, onPause?: () => void): () => void {
   if (Capacitor.isNativePlatform()) {
     try {
       const listenerPromise = CapApp.addListener('appStateChange', (state) => {
         if (state.isActive) {
           console.log('[App] Foregrounded, reconciling room state...');
           onResume();
+        } else {
+          console.log('[App] Backgrounded, recording pause state...');
+          onPause?.();
         }
       });
 
@@ -299,14 +302,20 @@ export function listenToAppLifecycle(onResume: () => void): () => void {
     }
   }
 
-  const handleVisibility = () => {
-    if (document.visibilityState === 'visible') {
-      onResume();
-    }
-  };
+  if (typeof document !== 'undefined') {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        onResume();
+      } else if (document.visibilityState === 'hidden') {
+        onPause?.();
+      }
+    };
 
-  document.addEventListener('visibilitychange', handleVisibility);
-  return () => {
-    document.removeEventListener('visibilitychange', handleVisibility);
-  };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }
+
+  return () => {};
 }

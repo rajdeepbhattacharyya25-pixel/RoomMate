@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, X, Smartphone, Download, Lock, QrCode } from 'lucide-react';
 import { useScrollProgress } from '../../lib/hooks/useScrollProgress';
+import { User } from '../../types';
 
 interface LandingNavbarProps {
   onOpenMobilePreview: () => void;
@@ -8,6 +9,8 @@ interface LandingNavbarProps {
   onOpenGuide: () => void;
   onDownloadApk: () => void;
   onOpenQrModal?: () => void;
+  isAuthenticated?: boolean;
+  currentUser?: User;
 }
 
 export const LandingNavbar: React.FC<LandingNavbarProps> = ({
@@ -16,6 +19,8 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
   onOpenGuide,
   onDownloadApk,
   onOpenQrModal,
+  isAuthenticated = false,
+  currentUser,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { scrollProgress, isScrolled } = useScrollProgress(20);
@@ -112,7 +117,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-white bg-brand hover:bg-brand-dark px-4 sm:px-5 py-2.5 rounded-full transition-all duration-200 shadow-sm hover:shadow active:scale-95 cursor-pointer"
           >
             <Smartphone className="w-4 h-4" />
-            <span>Get Started</span>
+            <span>{isAuthenticated ? 'Go to Dashboard' : 'Get Started'}</span>
           </button>
 
           {/* Mobile Hamburger Toggle */}
@@ -159,6 +164,17 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             How It Works
           </a>
           <div className="pt-3 border-t border-brand-border flex flex-col gap-2">
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenMobilePreview();
+              }}
+              type="button"
+              className="w-full text-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-brand hover:bg-brand-dark flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>{isAuthenticated ? `Go to Dashboard (${currentUser?.name || 'Resident'})` : 'Get Started (Web App)'}</span>
+            </button>
             {onOpenQrModal && (
               <button
                 onClick={() => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { QrCode, X } from 'lucide-react';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface FullScreenQrModalProps {
   isOpen: boolean;
@@ -16,6 +17,10 @@ export const FullScreenQrModal: React.FC<FullScreenQrModalProps> = ({
   onClose,
 }) => {
   const activeQr = qrUrl || currentUser.upiQrUrl;
+
+  // Dismiss fullscreen QR modal on Android hardware back button
+  useBackButton(onClose, isOpen && Boolean(activeQr));
+
   if (!isOpen || !activeQr) return null;
 
   const displayUpi =

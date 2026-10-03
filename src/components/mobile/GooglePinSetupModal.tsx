@@ -4,6 +4,7 @@ import { KeyRound, Check, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react
 import { StrictPinInput } from '../common/StrictPinInput';
 import { hapticSuccess, hapticWarning, hapticImpact } from '../../lib/native/haptics';
 import { validateStrict4DigitPin } from '../../lib/auth/jwtService';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface GooglePinSetupModalProps {
   isOpen: boolean;
@@ -20,6 +21,17 @@ export const GooglePinSetupModal: React.FC<GooglePinSetupModalProps> = ({
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Step backward from CONFIRM to ENTER on Android hardware back button
+  useBackButton(() => {
+    if (step === 'CONFIRM') {
+      setError(null);
+      setConfirmPin('');
+      setStep('ENTER');
+      return true;
+    }
+    return false;
+  }, isOpen && step === 'CONFIRM');
 
   if (!isOpen) return null;
 

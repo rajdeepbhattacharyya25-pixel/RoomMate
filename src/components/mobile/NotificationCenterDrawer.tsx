@@ -15,6 +15,7 @@ import { NotificationCard } from './NotificationCard';
 import { NotificationHistoryModal } from './NotificationHistoryModal';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { hapticImpact, hapticSelection, hapticSuccess } from '../../lib/native/haptics';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface NotificationCenterDrawerProps {
   isOpen: boolean;
@@ -41,6 +42,16 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+
+  // Close overflow menu or dismiss drawer on Android hardware back button
+  useBackButton(() => {
+    if (showOverflowMenu) {
+      setShowOverflowMenu(false);
+      return true;
+    }
+    onClose();
+    return true;
+  }, isOpen && !showHistoryModal && !showSettingsModal);
 
   // Close overflow menu when clicking outside
   useEffect(() => {

@@ -21,6 +21,7 @@ import {
 } from '../../../../lib/storage/backupCryptoService';
 import { parseBackupFile, executeRestore } from '../../../../lib/storage/restoreService';
 import { hapticSuccess, hapticWarning, hapticImpact } from '../../../../lib/native/haptics';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface RestoreBackupModalProps {
   isOpen: boolean;
@@ -44,6 +45,23 @@ export const RestoreBackupModal: React.FC<RestoreBackupModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Step backward or dismiss on Android hardware back button
+  useBackButton(() => {
+    if (step === 'PREVIEW') {
+      setError(null);
+      setStep('ENTER_PIN');
+      return true;
+    }
+    if (step === 'ENTER_PIN') {
+      setError(null);
+      setPin('');
+      setStep('SELECT_FILE');
+      return true;
+    }
+    onClose();
+    return true;
+  }, isOpen);
 
   if (!isOpen) return null;
 

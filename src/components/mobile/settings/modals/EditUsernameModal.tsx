@@ -3,6 +3,7 @@ import { AtSign, X, Check, AlertCircle } from 'lucide-react';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { User } from '../../../../types';
 import { PrefixInput } from '../../../common/PrefixInput';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface EditUsernameModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  // Dismiss edit username modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [username, setUsername] = useState(currentUsername.replace(/^@/, ''));
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);

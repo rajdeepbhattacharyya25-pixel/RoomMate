@@ -53,10 +53,17 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
   const [showQuietHours, setShowQuietHours] = useState<boolean>(false);
 
   // Quiet hours label
-  const quietHoursConfig = typeof localStorage !== 'undefined'
-    ? localStorage.getItem('roommate_quiet_hours')
-    : null;
-  const parsedQuiet = quietHoursConfig ? JSON.parse(quietHoursConfig) : null;
+  let parsedQuiet: { enabled?: boolean; start?: string; end?: string } | null = null;
+  if (typeof localStorage !== 'undefined') {
+    const raw = localStorage.getItem('roommate_quiet_hours');
+    if (raw) {
+      try {
+        parsedQuiet = JSON.parse(raw);
+      } catch {
+        parsedQuiet = null;
+      }
+    }
+  }
   const quietHoursLabel = parsedQuiet?.enabled
     ? `${parsedQuiet.start || '22:00'} – ${parsedQuiet.end || '07:00'}`
     : 'Disabled';

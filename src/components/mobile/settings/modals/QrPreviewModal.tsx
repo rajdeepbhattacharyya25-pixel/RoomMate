@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { validateUpiId } from '../../../../lib/payments/upiExtraction';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface QrPreviewModalProps {
   isOpen: boolean;
@@ -33,6 +34,17 @@ export const QrPreviewModal: React.FC<QrPreviewModalProps> = ({
   const [mode, setMode] = useState<'confirm' | 'edit'>('confirm');
   const [editedUpi, setEditedUpi] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Step backward from edit to confirm, or dismiss on Android hardware back button
+  useBackButton(() => {
+    if (mode === 'edit') {
+      setMode('confirm');
+      setValidationError(null);
+      return true;
+    }
+    onClose();
+    return true;
+  }, isOpen && Boolean(previewUrl));
 
   // Reset internal state whenever modal opens or extracted UPI changes
   useEffect(() => {

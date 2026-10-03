@@ -3,6 +3,7 @@ import { User as UserIcon, X, Loader2, Check } from 'lucide-react';
 import { hapticSuccess, hapticWarning } from '../../../../lib/native/haptics';
 import { updateProfileName } from '../../../../lib/storage/cloudStorageAdapter';
 import { User } from '../../../../types';
+import { useBackButton } from '../../../../lib/native/backButton';
 
 interface EditNameModalProps {
   isOpen: boolean;
@@ -17,6 +18,9 @@ export const EditNameModal: React.FC<EditNameModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  // Dismiss edit name modal on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [name, setName] = useState(currentUser.name);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

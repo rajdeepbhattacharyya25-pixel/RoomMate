@@ -16,6 +16,7 @@ import {
 } from '../../lib/services/notificationService';
 import { playNotificationSound } from '../../lib/native/notificationSound';
 import { hapticImpact, hapticSelection } from '../../lib/native/haptics';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface NotificationSettingsModalProps {
   isOpen: boolean;
@@ -26,6 +27,9 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   isOpen,
   onClose,
 }) => {
+  // Dismiss notification settings on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [settings, setSettings] = useState<NotificationSettings>(getNotificationSettings());
   const [testSoundPlayed, setTestSoundPlayed] = useState(false);
 

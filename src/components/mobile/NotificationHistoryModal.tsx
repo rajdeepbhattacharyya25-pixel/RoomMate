@@ -9,6 +9,7 @@ import { InAppNotification } from '../../types';
 import { bucketNotificationsByDate } from '../../lib/services/notificationService';
 import { NotificationCard } from './NotificationCard';
 import { hapticImpact, hapticSelection } from '../../lib/native/haptics';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface NotificationHistoryModalProps {
   isOpen: boolean;
@@ -29,6 +30,9 @@ export const NotificationHistoryModal: React.FC<NotificationHistoryModalProps> =
   onToggleRead,
   onDelete,
 }) => {
+  // Dismiss notification history on Android hardware back button
+  useBackButton(onClose, isOpen);
+
   const [filter, setFilter] = useState<HistoryFilterType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 

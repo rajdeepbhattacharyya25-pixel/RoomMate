@@ -22,6 +22,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { MobileBottomSheet } from './MobileBottomSheet';
+import { useBackButton } from '../../lib/native/backButton';
 
 interface WhatsAppNudgeModalProps {
   isOpen: boolean;
@@ -53,6 +54,12 @@ export const WhatsAppNudgeModal: React.FC<WhatsAppNudgeModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [settleSuccess, setSettleSuccess] = useState(false);
+
+  // Close inner QR modal first before propagating to outer bottom sheet
+  useBackButton(() => {
+    setShowQrModal(false);
+    return true;
+  }, showQrModal);
 
   // Generate UPI Deep Link
   const upiDeepLink = useMemo(() => {
