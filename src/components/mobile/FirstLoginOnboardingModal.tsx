@@ -5,6 +5,7 @@ import { hapticSuccess, hapticWarning, hapticImpact } from '../../lib/native/hap
 import { completeProfileOnboarding, validateAndFormatPhoneNumber } from '../../lib/storage/cloudStorageAdapter';
 import { PhoneInput } from '../common/PhoneInput';
 import { useBackButton } from '../../lib/native/backButton';
+import { UserAvatar } from '../common/UserAvatar';
 
 interface FirstLoginOnboardingModalProps {
   isOpen: boolean;
@@ -136,20 +137,13 @@ export const FirstLoginOnboardingModal: React.FC<FirstLoginOnboardingModalProps>
       <div className="w-full max-w-md bg-white dark:bg-[#12121A] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 dark:border-[#27354A] space-y-5 animate-in slide-in-from-bottom-8 sm:zoom-in-95">
         {/* User Identity Header */}
         <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-[#1C1C25] border border-slate-200/70 dark:border-[#27354A] rounded-2xl">
-          {user.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="w-11 h-11 rounded-full object-cover border-2 border-indigo-200 dark:border-indigo-500/40 shadow-sm shrink-0"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
-              {(firstName.charAt(0) || user.name.charAt(0) || 'U').toUpperCase()}
-            </div>
-          )}
+          <UserAvatar
+            src={user.avatarUrl}
+            alt={firstName || user.name}
+            size="md"
+            shape="rounded-full"
+            className="w-11 h-11 border-2 border-indigo-200 dark:border-indigo-500/40 shadow-sm shrink-0"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">

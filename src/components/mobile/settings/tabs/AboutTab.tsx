@@ -17,7 +17,7 @@ import {
   Database,
   Flame,
 } from 'lucide-react';
-import { User } from '../../../../types';
+import { User, PlatformSettings } from '../../../../types';
 import { BUILD_INFO } from '../../../../config/buildInfo';
 import { liveUpdater, type UpdateState } from '../../../../services/updater';
 import { hapticImpact, hapticSelection } from '../../../../lib/native/haptics';
@@ -31,6 +31,7 @@ import { crashService } from '../../../../lib/crashlytics/crashService';
 interface AboutTabProps {
   currentUser: User;
   allUsers?: User[];
+  platformSettings?: PlatformSettings;
   onSwitchUser?: (user: User) => void;
   onOpenSecurityAudit?: () => void;
   onOpenSupabaseModal?: () => void;
@@ -42,6 +43,7 @@ interface AboutTabProps {
 export const AboutTab: React.FC<AboutTabProps> = ({
   currentUser,
   allUsers = [],
+  platformSettings,
   onSwitchUser,
   onOpenSecurityAudit,
   onOpenSupabaseModal,
@@ -111,7 +113,9 @@ export const AboutTab: React.FC<AboutTabProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">{BUILD_INFO.appName}</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                  {platformSettings?.appName || BUILD_INFO.appName}
+                </span>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     BUILD_INFO.channel === 'staging'

@@ -35,13 +35,14 @@ export function isMobileDevice(): boolean {
  * Generates an NPCI-compliant UPI query parameter string.
  */
 function buildUpiQueryParams(options: UpiIntentOptions): string {
-  const cleanUpi = options.pa.trim();
+  // Sanitize VPA to prevent query parameter injection while preserving valid email/VPA characters
+  const cleanUpi = encodeURIComponent(options.pa.trim()).replace(/%40/g, '@');
   const cleanName = encodeURIComponent(options.pn.trim());
-  const cleanAmount = options.am.toFixed(2);
+  const cleanAmount = (isNaN(options.am) || options.am <= 0) ? '0.00' : options.am.toFixed(2);
   const cleanNote = encodeURIComponent(options.tn.trim().replace(/\s+/g, '_'));
   let query = `pa=${cleanUpi}&pn=${cleanName}&am=${cleanAmount}&cu=INR&tn=${cleanNote}`;
   if (options.tr) {
-    query += `&tr=${encodeURIComponent(options.tr)}`;
+    query += `&tr=${encodeURIComponent(options.tr.trim())}`;
   }
   return query;
 }
@@ -281,7 +282,7 @@ export function downloadSettlementVoucherImage(data: SettlementReceiptData): voi
   if (!dataUrl) return;
 
   const link = document.createElement('a');
-  link.download = `RoomMate_Settlement_${data.payeeName.replace(/\s+/g, '_')}_₹${data.amount.toFixed(0)}.png`;
+  link.download = `RoomMate_Settlement_${data.payeeName.replace(/\s+/g, '_')}_₹${data.amount.toFixed(2)}.png`;
   link.href = dataUrl;
   document.body.appendChild(link);
   link.click();

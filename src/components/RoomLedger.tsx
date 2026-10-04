@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   User,
   Room,
@@ -10,12 +10,19 @@ import {
   SplitMethod,
 } from '../types';
 import {
-  calculateRoomSummary,
   calculateSplits,
   round2,
   getOutstandingObligationsForMember,
   canCleanExit,
+  financialIntegrationService,
+  calculateCanonicalRoomSummary,
 } from '../lib/ledger/engine';
+import { CanonicalRoomSummaryResult } from '../lib/ledger/financialIntegrationService';
+import { DbFinancialSummaryV2, FinancialDataState } from '../lib/ledger/v2';
+import { isSupabaseConfigured } from '../lib/supabase/client';
+import { isUuid } from '../lib/storage/cloudStorageAdapter';
+import { UserAvatar } from './common/UserAvatar';
+import { formatInrExact } from '../lib/utils/currencyFormatter';
 import {
   Users,
   Plus,
@@ -126,6 +133,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<SettlementPayment['paymentMethod']>('UPI');
   const [transactionRef, setTransactionRef] = useState('');
   const [settleNotes, setSettleNotes] = useState('');
+  const [isSubmittingSettle, setIsSubmittingSettle] = useState(false);
 
   // Create & Join Room Form State
   const [newRoomName, setNewRoomName] = useState('');
@@ -237,6 +245,156 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
     }
   };
 
+  // Canonical V2 Authoritative Database Summary & Explicit Financial State
+  const [financialState, setFinancialState] = useState<FinancialDataState>('LOADING');
+  const [dbFinancialSummary, setDbFinancialSummary] = useState<DbFinancialSummaryV2 | null>(null);
+  const [financialError, setFinancialError] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeRoom?.id) return;
+    let isSubscribed = true;
+
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (!isOnline || !isSupabaseConfigured || !isUuid(activeRoom.id)) {
+      if (isSubscribed) {
+        setFinancialState('OFFLINE_LOCAL');
+        setFinancialError(null);
+      }
+      return;
+    }
+
+    setFinancialState('LOADING');
+    setFinancialError(null);
+
+    financialIntegrationService.fetchRoomFinancialSummaryV2(activeRoom.id)
+      .then((data) => {
+        if (!isSubscribed) return;
+        if (data) {
+          setDbFinancialSummary(data);
+          setFinancialState('ONLINE_AUTHORITATIVE');
+          setFinancialError(null);
+        } else {
+          setFinancialState('ERROR');
+          setFinancialError('Failed to retrieve authoritative financial summary from server');
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isSubscribed) return;
+        const msg = err instanceof Error ? err.message : 'Network error fetching financial summary';
+        console.warn('[RoomLedger] V2 authoritative database summary fetch failed:', msg);
+        setFinancialState('ERROR');
+        setFinancialError(msg);
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeRoom?.id, sharedExpenses, settlementPayments]);
+
+  // Consumes authoritative PostgreSQL V2 summary when online; handles explicit offline and error states
+  const summary: CanonicalRoomSummaryResult = useMemo(() => {
+    if (!activeRoom) {
+      return {
+        roomId: '',
+        totalRoomExpenses: 0,
+        myTotalPaid: 0,
+        myTotalShare: 0,
+        myNetBalance: 0,
+        pairwiseDebts: [],
+        v2Summary: {
+          roomId: '',
+          totalExpensesPaise: 0,
+          totalSettledPaise: 0,
+          members: [],
+          simplifiedTransfers: [],
+          isZeroSumVerified: true,
+          netDiscrepancyPaise: 0,
+          generatedAt: new Date().toISOString(),
+        },
+        isZeroSumVerified: true,
+        netDiscrepancyPaise: 0,
+        source: 'CLIENT_V2_FALLBACK',
+        financialState: 'LOADING',
+      };
+    }
+
+    // 1. ONLINE AUTHORITATIVE: Active database summary available
+    if (financialState === 'ONLINE_AUTHORITATIVE' && dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+      return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+        dbFinancialSummary,
+        currentUser.id,
+        allUsers
+      );
+    }
+
+    // 2. ERROR STATE: Surface error or explicitly retain clearly marked stale authoritative snapshot
+    if (financialState === 'ERROR') {
+      if (dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+        const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+          dbFinancialSummary,
+          currentUser.id,
+          allUsers
+        );
+        staleSummary.isStale = true;
+        staleSummary.error = financialError;
+        staleSummary.financialState = 'ERROR';
+        return staleSummary;
+      }
+      return calculateCanonicalRoomSummary(
+        activeRoom.id,
+        currentUser.id,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments,
+        allUsers,
+        {
+          financialState: 'ERROR',
+          isStale: true,
+          error: financialError || 'Server connection error. Displaying unverified local calculation.',
+        }
+      );
+    }
+
+    // 3. OFFLINE LOCAL: Local V2 engine explicitly calculating offline summary
+    if (financialState === 'OFFLINE_LOCAL') {
+      return calculateCanonicalRoomSummary(
+        activeRoom.id,
+        currentUser.id,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments,
+        allUsers,
+        {
+          financialState: 'OFFLINE_LOCAL',
+        }
+      );
+    }
+
+    // 4. LOADING STATE: Retain previous snapshot if matching, or calculate temporary local marked as LOADING
+    if (dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+      const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+        dbFinancialSummary,
+        currentUser.id,
+        allUsers
+      );
+      prevSummary.financialState = 'LOADING';
+      return prevSummary;
+    }
+
+    return calculateCanonicalRoomSummary(
+      activeRoom.id,
+      currentUser.id,
+      sharedExpenses,
+      expenseSplits,
+      settlementPayments,
+      allUsers,
+      {
+        financialState: 'LOADING',
+      }
+    );
+  }, [financialState, dbFinancialSummary, financialError, activeRoom, currentUser.id, sharedExpenses, expenseSplits, settlementPayments, allUsers]);
+
   if (!activeRoom) {
     return (
       <div className="glass-card p-12 text-center space-y-4">
@@ -295,14 +453,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 
   const invitation = roomInvitations.find((i) => i.roomId === activeRoom.id && !i.isRevoked);
 
-  const summary = calculateRoomSummary(
-    activeRoom.id,
-    currentUser.id,
-    sharedExpenses,
-    expenseSplits,
-    settlementPayments,
-    allUsers
-  );
+
 
   const myObligations = getOutstandingObligationsForMember(
     currentUser.id,
@@ -353,29 +504,38 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
     setShowAddExpenseModal(false);
   };
 
-  const handleSettleUp = (e: React.FormEvent) => {
+  const handleSettleUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settlePayeeId || !settleAmount || Number(settleAmount) <= 0) return;
+    setSettleError(null);
+    setIsSubmittingSettle(true);
 
-    onRecordSettlement({
-      roomId: activeRoom.id,
-      payerId: currentUser.id,
-      payeeId: settlePayeeId,
-      amount: Number(settleAmount),
-      paymentMethod,
-      transactionRef,
-      notes: settleNotes,
-    });
+    try {
+      await onRecordSettlement({
+        roomId: activeRoom.id,
+        payerId: currentUser.id,
+        payeeId: settlePayeeId,
+        amount: Number(settleAmount),
+        paymentMethod,
+        transactionRef,
+        notes: settleNotes,
+      });
 
-    confetti({
-      particleCount: 80,
-      spread: 60,
-      origin: { y: 0.7 },
-    });
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.7 },
+      });
 
-    setShowSettleModal(false);
-    setSettleAmount('');
-    setTransactionRef('');
+      setShowSettleModal(false);
+      setSettleAmount('');
+      setTransactionRef('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Settlement rejected by server';
+      setSettleError(msg);
+    } finally {
+      setIsSubmittingSettle(false);
+    }
   };
 
   const copyInvite = () => {
@@ -415,6 +575,30 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   {currentMembers.length} Members
                 </span>
+                {summary.financialState === 'ONLINE_AUTHORITATIVE' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title="Authoritative Ledger">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Live sync</span>
+                  </span>
+                )}
+                {summary.financialState === 'OFFLINE_LOCAL' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1" title="Offline Mode: Showing last saved balance">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span>Offline · Saved balance</span>
+                  </span>
+                )}
+                {summary.financialState === 'LOADING' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1" title="Synchronizing with server...">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                    <span>Updating balance...</span>
+                  </span>
+                )}
+                {summary.financialState === 'ERROR' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1" title={summary.error || 'Server sync error'}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                    <span>Couldn't refresh balance</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[var(--text-subtle)] mt-0.5">{activeRoom.description || 'Shared household group ledger'}</p>
             </div>
@@ -489,6 +673,18 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
         </div>
       </div>
 
+      {summary.error && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Couldn't refresh balance: {summary.error}</span>
+          </div>
+          <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+            {summary.isStale ? 'Saved Snapshot' : 'Offline'}
+          </span>
+        </div>
+      )}
+
       {/* Room Net Standing & Pairwise Debts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Col: Balance Summary & Direct Settle Up Trigger */}
@@ -498,27 +694,27 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               My Standing in {activeRoom.name}
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-indigo-300">
-              Total Bills: ₹{summary.totalRoomExpenses}
+              Total Bills: {formatInrExact(summary.totalRoomExpenses)}
             </span>
           </div>
 
           <div className="p-4 rounded-xl bg-slate-950/60 border border-[var(--border-subtle)] space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-[var(--text-subtle)]">Paid by Me:</span>
-              <span className="font-bold text-white">₹{summary.myTotalPaid}</span>
+              <span className="font-bold text-white">{formatInrExact(summary.myTotalPaid)}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-[var(--text-subtle)]">My Obligation Share:</span>
-              <span className="font-bold text-purple-300">₹{summary.myTotalShare}</span>
+              <span className="text-[var(--text-subtle)]">My Share:</span>
+              <span className="font-bold text-purple-300">{formatInrExact(summary.myTotalShare)}</span>
             </div>
             <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-sm">
               <span className="font-bold text-gray-300">Net Room Balance:</span>
               {summary.myNetBalance > 0 ? (
-                <span className="font-extrabold text-emerald-400">+₹{summary.myNetBalance} (Owed)</span>
+                <span className="font-extrabold text-emerald-400">You get {formatInrExact(summary.myNetBalance)}</span>
               ) : summary.myNetBalance < 0 ? (
-                <span className="font-extrabold text-rose-400">-₹{Math.abs(summary.myNetBalance)} (Owes)</span>
+                <span className="font-extrabold text-rose-400">You owe {formatInrExact(Math.abs(summary.myNetBalance))}</span>
               ) : (
-                <span className="font-bold text-emerald-400">All Settled ✅</span>
+                <span className="font-bold text-emerald-400">You're all settled 🎉</span>
               )}
             </div>
           </div>
@@ -542,7 +738,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all"
           >
             <Zap className="w-4 h-4" />
-            <span>Settle Up / Record Payment</span>
+            <span>Settle Up</span>
           </button>
         </div>
 
@@ -550,9 +746,9 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
         <div className="lg:col-span-2 glass-card p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>Two-Way Pairwise Ledger Matrix</span>
+              <span>Room Balances & Settlements</span>
               <span className="text-[10px] text-gray-400 font-normal">
-                (Mutual offsetting & partial repayments)
+                (Who owes who)
               </span>
             </h3>
           </div>
@@ -560,8 +756,8 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
           {summary.pairwiseDebts.length === 0 ? (
             <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-[var(--border-subtle)]">
               <Check className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
-              <p className="text-xs text-gray-300 font-semibold">Zero Outstanding Debts in this Room!</p>
-              <p className="text-[11px] text-[var(--text-subtle)]">Everyone has fully settled all shared split obligations.</p>
+              <p className="text-xs text-gray-300 font-semibold">You're all settled 🎉</p>
+              <p className="text-[11px] text-[var(--text-subtle)]">No pending debts for anyone in this room.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -611,8 +807,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-[var(--text-subtle)]">
-                          Bills: ₹{bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA} | Direct Paid: ₹
-                          {bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB}
+                          Bills: {formatInrExact(bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA)} | Direct Paid: {formatInrExact(bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB)}
                         </span>
                       </div>
                     </div>
@@ -627,7 +822,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                             : 'text-gray-300'
                         }`}
                       >
-                        ₹{absAmount.toFixed(2)}
+                        {formatInrExact(absAmount)}
                       </span>
                       {debtorId === currentUser.id && (
                         <button
@@ -638,7 +833,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                           }}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40"
                         >
-                          Pay
+                          Settle up
                         </button>
                       )}
                     </div>
@@ -1056,7 +1251,9 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-2">
                 <Zap className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Settle Up / Record Payment</h3>
+                <h3 className="text-base font-bold text-white">
+                  {settlePayeeId ? `Settle with ${allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}` : 'Settle Up'}
+                </h3>
               </div>
               <button
                 onClick={() => setShowSettleModal(false)}
@@ -1067,6 +1264,14 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             </div>
 
             <form onSubmit={handleSettleUp} className="space-y-4">
+              {settleError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Settlement Rejected:</span> {settleError}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
                   Recipient (Roommate you paid) *
@@ -1161,6 +1366,27 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 />
               </div>
 
+              {/* Settle Summary Box Before Confirming (Section 8 Requirement) */}
+              {settlePayeeId && Number(settleAmount) > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 space-y-2">
+                  <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Settlement Summary
+                  </div>
+                  <div className="text-xs text-gray-300">
+                    Settle with <strong className="text-white">{allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}</strong>
+                  </div>
+                  <div className="flex items-baseline justify-between pt-1 border-t border-slate-800">
+                    <span className="text-xs font-semibold text-gray-400">Amount</span>
+                    <span className="text-base font-extrabold text-white tabular-nums">
+                      {formatInrExact(Number(settleAmount))}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button
                   type="button"
@@ -1171,9 +1397,17 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30"
+                  disabled={isSubmittingSettle || !settlePayeeId || !settleAmount || Number(settleAmount) <= 0}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
                 >
-                  Record Direct Payment
+                  {isSubmittingSettle ? (
+                    <>
+                      <Zap className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verifying with V2...</span>
+                    </>
+                  ) : (
+                    <span>Confirm payment</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1575,15 +1809,22 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Active Roommates</h4>
                 <div className="space-y-2">
-                  {currentMembers.map((m) => (
+                  {currentMembers.map((m) => {
+                    const memberUser = allUsers.find((u) => u.id === m.userId);
+                    const avatarUrl = memberUser?.avatarUrl || (m.userId === currentUser.id ? currentUser.avatarUrl : undefined);
+                    return (
                     <div
                       key={m.userId}
                       className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-sm font-bold text-indigo-400 border border-slate-700">
-                          {m.name.charAt(0).toUpperCase()}
-                        </div>
+                        <UserAvatar
+                          src={avatarUrl}
+                          alt={m.name}
+                          size="sm"
+                          shape="rounded-xl"
+                          className="w-9 h-9 border border-slate-700/80 shadow-sm"
+                        />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-white">
@@ -1614,7 +1855,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                         </button>
                       )}
                     </div>
-                  ))}
+                  );})}
                 </div>
               </div>
 
@@ -1623,15 +1864,22 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Former Members</h4>
                   <div className="space-y-2">
-                    {formerMembers.map((m) => (
+                    {formerMembers.map((m) => {
+                      const formerUser = allUsers.find((u) => u.id === m.userId);
+                      const avatarUrl = formerUser?.avatarUrl || (m.userId === currentUser.id ? currentUser.avatarUrl : undefined);
+                      return (
                       <div
                         key={m.userId}
                         className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/60 flex items-center justify-between opacity-80"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center text-sm font-bold text-gray-500 border border-slate-800">
-                            {m.name.charAt(0).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            src={avatarUrl}
+                            alt={m.name}
+                            size="sm"
+                            shape="rounded-xl"
+                            className="w-9 h-9 border border-slate-800 opacity-75"
+                          />
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-300">{m.name}</span>
@@ -1643,7 +1891,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                 </div>
               )}

@@ -676,6 +676,21 @@ export type Database = {
           net_balance: number;
         }[];
       };
+      get_room_financial_summary_v2: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: Json;
+      };
+      record_room_settlement_v2: {
+        Args: {
+          p_room_id: string;
+          p_payer_id: string;
+          p_payee_id: string;
+          p_amount: number;
+        };
+        Returns: Json;
+      };
       leave_room: {
         Args: {
           p_room_id: string;

@@ -11,6 +11,11 @@ import {
   UserSubscription,
   AuditLog,
 } from '../../types';
+import {
+  DbFinancialSummaryV2,
+  RecordSettlementV2Result,
+  FinancialErrorCode,
+} from '../ledger/v2';
 
 export class SupabaseService {
   /**
@@ -299,42 +304,34 @@ export class SupabaseService {
 
   /**
    * Record a settlement in Supabase
+   * @deprecated Direct table insert is forbidden in V2. Strictly routes authoritatively through recordRoomSettlementV2.
    */
   async recordSettlement(
     settlement: Omit<SettlementPayment, 'id' | 'createdAt'>
   ): Promise<SettlementPayment | null> {
     if (!isSupabaseConfigured) return null;
-    const { data, error } = await supabase
-      .from('settlement_payments')
-      .insert({
-        room_id: settlement.roomId,
-        payer_id: settlement.payerId,
-        payee_id: settlement.payeeId,
-        amount: settlement.amount,
-        payment_method: settlement.paymentMethod,
-        transaction_ref: settlement.transactionRef || null,
-        notes: settlement.notes || null,
-        payment_date: settlement.paymentDate,
-      })
-      .select()
-      .single();
+    const res = await this.recordRoomSettlementV2(
+      settlement.roomId,
+      settlement.payerId,
+      settlement.payeeId,
+      settlement.amount
+    );
 
-    if (error) {
-      console.error('[SupabaseService] recordSettlement error:', error.message);
-      throw error;
+    if (!res.success) {
+      throw new Error(`[V2 Settlement Rejected] ${res.errorCode}: ${res.error}`);
     }
 
     return {
-      id: data.id,
-      roomId: data.room_id,
-      payerId: data.payer_id,
-      payeeId: data.payee_id,
-      amount: Number(data.amount),
-      paymentMethod: data.payment_method,
-      transactionRef: data.transaction_ref || undefined,
-      notes: data.notes || undefined,
-      paymentDate: data.payment_date,
-      createdAt: data.created_at,
+      id: res.settlement_id,
+      roomId: res.room_id,
+      payerId: res.payer_id,
+      payeeId: res.payee_id,
+      amount: res.amount,
+      paymentMethod: settlement.paymentMethod,
+      transactionRef: settlement.transactionRef || undefined,
+      notes: settlement.notes || undefined,
+      paymentDate: settlement.paymentDate,
+      createdAt: res.created_at,
     };
   }
 
@@ -480,6 +477,7 @@ export class SupabaseService {
 
   /**
    * Execute PostgreSQL RPC function to calculate live room balances
+   * @deprecated Use `getRoomFinancialSummaryV2` instead for canonical V2 calculations.
    */
   async getRoomBalances(roomId: string): Promise<
     Array<{
@@ -510,6 +508,78 @@ export class SupabaseService {
       settlementsReceived: Number(row.settlements_received),
       netBalance: Number(row.net_balance),
     }));
+  }
+
+  /**
+   * Canonical V2: Fetches authoritative room financial summary from PostgreSQL V2 RPC
+   * (public.get_room_financial_summary_v2)
+   */
+  async getRoomFinancialSummaryV2(roomId: string): Promise<DbFinancialSummaryV2 | null> {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase.rpc('get_room_financial_summary_v2', {
+        p_room_id: roomId,
+      });
+      if (error) {
+        console.warn('[SupabaseService] get_room_financial_summary_v2 error:', error.message);
+        return null;
+      }
+      return data as unknown as DbFinancialSummaryV2;
+    } catch (err: unknown) {
+      console.warn('[SupabaseService] get_room_financial_summary_v2 exception:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Canonical V2: Records an atomic room settlement via PostgreSQL V2 RPC
+   * (public.record_room_settlement_v2 with row-locking and debt validation)
+   */
+  async recordRoomSettlementV2(
+    roomId: string,
+    payerId: string,
+    payeeId: string,
+    amount: number
+  ): Promise<RecordSettlementV2Result> {
+    if (!isSupabaseConfigured) {
+      return {
+        success: false,
+        error: 'Supabase is not configured or offline',
+        errorCode: 'SUPABASE_NOT_CONFIGURED',
+      };
+    }
+    try {
+      const { data, error } = await supabase.rpc('record_room_settlement_v2', {
+        p_room_id: roomId,
+        p_payer_id: payerId,
+        p_payee_id: payeeId,
+        p_amount: amount,
+      });
+
+      if (error) {
+        const errorMsg = error.message || 'Unknown database error';
+        let errorCode: FinancialErrorCode = 'UNKNOWN_RPC_ERROR';
+        if (errorMsg.includes('INVALID_SETTLEMENT')) errorCode = 'INVALID_SETTLEMENT';
+        else if (errorMsg.includes('ACCESS_DENIED')) errorCode = 'ACCESS_DENIED';
+        else if (errorMsg.includes('OVERSETTLEMENT_EXCEEDS_DEBT')) errorCode = 'OVERSETTLEMENT_EXCEEDS_DEBT';
+        else if (errorMsg.includes('OVERSETTLEMENT_EXCEEDS_CREDIT')) errorCode = 'OVERSETTLEMENT_EXCEEDS_CREDIT';
+
+        return {
+          success: false,
+          error: errorMsg,
+          errorCode,
+        };
+      }
+
+      return data as unknown as RecordSettlementV2Result;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown settlement error';
+      return {
+        success: false,
+        error: message,
+        errorCode: message.includes('network') || message.includes('fetch') ? 'NETWORK_ERROR' : 'UNKNOWN_RPC_ERROR',
+      };
+    }
   }
 
   /**

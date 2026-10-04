@@ -10,6 +10,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { Room, SharedExpense, SettlementPayment, RoomMember, User, RoomActivityItem } from '../../types';
+import { formatInrExact } from '../../lib/utils/currencyFormatter';
 
 interface RoomActivitySectionProps {
   room: Room;
@@ -99,8 +100,12 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
         }
       });
 
-    // Sort descending by timestamp
-    return list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // Sort descending by timestamp safely
+    return list.sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
   }, [room.id, sharedExpenses, settlementPayments, roomMembers, allUsers]);
 
   if (activities.length === 0) return null;
@@ -140,10 +145,13 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
             iconBg = 'bg-amber-50 dark:bg-amber-950/50';
           }
 
-          const timeStr = new Date(item.timestamp).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-          });
+          const dateObj = item.timestamp ? new Date(item.timestamp) : null;
+          const timeStr = dateObj && !isNaN(dateObj.getTime())
+            ? dateObj.toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+              })
+            : 'Recently';
 
           return (
             <div key={item.id} className="py-2.5 flex items-center justify-between text-xs">
@@ -162,7 +170,7 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
 
               {item.amount !== undefined && (
                 <span className="font-mono font-bold text-xs text-slate-900 dark:text-white shrink-0">
-                  ₹{item.amount.toLocaleString('en-IN')}
+                  {formatInrExact(item.amount)}
                 </span>
               )}
             </div>

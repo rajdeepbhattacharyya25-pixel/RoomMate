@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, PersonalExpense, SharedExpense, ExpenseSplit, SettlementPayment, Room } from '../types';
 import { calculateUnifiedDashboard, calculateRoomSummary } from '../lib/ledger/engine';
+import { formatInrExact } from '../lib/utils/currencyFormatter';
 import { Lock, Users, ArrowUpRight, ArrowDownLeft, Wallet, PieChart, CheckCircle } from 'lucide-react';
 
 interface UnifiedDashboardProps {
@@ -101,10 +102,10 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-3xl font-extrabold text-white tracking-tight">
-              ₹{summary.totalOutflow.toLocaleString('en-IN')}
+              {formatInrExact(summary.totalOutflow)}
             </span>
             <p className="text-xs text-[var(--text-subtle)] mt-1 flex items-center gap-1">
-              <span>Personal (₹{summary.personalTotal}) + Room (₹{summary.sharedObligationsTotal})</span>
+              <span>Personal ({formatInrExact(summary.personalTotal)}) + Room ({formatInrExact(summary.sharedObligationsTotal)})</span>
             </p>
           </div>
         </div>
@@ -122,7 +123,7 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-3xl font-extrabold text-emerald-400 tracking-tight">
-              ₹{summary.personalTotal.toLocaleString('en-IN')}
+              {formatInrExact(summary.personalTotal)}
             </span>
             <p className="text-xs text-[var(--text-subtle)] mt-1">
               Food, shopping, travel & snacks
@@ -143,7 +144,7 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-3xl font-extrabold text-purple-300 tracking-tight">
-              ₹{summary.sharedObligationsTotal.toLocaleString('en-IN')}
+              {formatInrExact(summary.sharedObligationsTotal)}
             </span>
             <p className="text-xs text-[var(--text-subtle)] mt-1">
               Assigned share of electricity, Wi-Fi, groceries
@@ -166,24 +167,24 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
           <div className="mt-3">
             {summary.netReceivables > 0 && (
               <div className="text-sm font-bold text-emerald-400 flex items-center gap-1">
-                <span>+ ₹{summary.netReceivables}</span>
-                <span className="text-[10px] text-emerald-300/80 font-normal">(You are owed)</span>
+                <span>You get {formatInrExact(summary.netReceivables)}</span>
               </div>
             )}
             {summary.netPayables > 0 && (
               <div className="text-sm font-bold text-rose-400 flex items-center gap-1 mt-0.5">
-                <span>- ₹{summary.netPayables}</span>
-                <span className="text-[10px] text-rose-300/80 font-normal">(You owe roommates)</span>
+                <span>You owe {formatInrExact(summary.netPayables)}</span>
               </div>
             )}
             {summary.netReceivables === 0 && summary.netPayables === 0 && (
               <span className="text-xl font-bold text-emerald-400 flex items-center gap-1.5">
                 <CheckCircle className="w-5 h-5" />
-                <span>All Settled Up</span>
+                <span>All Settled 🎉</span>
               </span>
             )}
             <p className="text-xs text-[var(--text-subtle)] mt-1">
-              Derived from two-way pairwise ledger
+              {summary.netReceivables === 0 && summary.netPayables === 0
+                ? 'No pending balances with your roommates'
+                : 'Current standing with your roommates'}
             </p>
           </div>
         </div>
@@ -271,17 +272,17 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white tracking-tight">{room.name}</span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-gray-300">
-                      ₹{rSummary.totalRoomExpenses} Total
+                      {formatInrExact(rSummary.totalRoomExpenses)} Total
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[var(--text-subtle)]">My Standing:</span>
                     {rSummary.myNetBalance > 0 ? (
-                      <span className="font-bold text-emerald-400">+₹{rSummary.myNetBalance} (Owed)</span>
+                      <span className="font-bold text-emerald-400">You get {formatInrExact(rSummary.myNetBalance)}</span>
                     ) : rSummary.myNetBalance < 0 ? (
-                      <span className="font-bold text-rose-400">-₹{Math.abs(rSummary.myNetBalance)} (Owes)</span>
+                      <span className="font-bold text-rose-400">You owe {formatInrExact(Math.abs(rSummary.myNetBalance))}</span>
                     ) : (
-                      <span className="font-bold text-gray-400">Settled ✅</span>
+                      <span className="font-bold text-gray-400">All settled 🎉</span>
                     )}
                   </div>
                 </div>

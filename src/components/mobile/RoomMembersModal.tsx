@@ -13,6 +13,7 @@ import {
 import { Room, RoomMember, RoomJoinRequest, User } from '../../types';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { hapticImpact, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
+import { UserAvatar } from '../common/UserAvatar';
 
 interface RoomMembersModalProps {
   isOpen: boolean;
@@ -262,8 +263,15 @@ export const RoomMembersModal: React.FC<RoomMembersModalProps> = ({
           {adminMember && (
             <div className="p-3.5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-sm shadow-inner relative">
-                  {adminMember.user.name.charAt(0).toUpperCase()}
+                <div className="relative">
+                  <UserAvatar
+                    src={adminMember.user.avatarUrl}
+                    name={adminMember.user.name}
+                    size="md"
+                    roundedClassName="rounded-full"
+                    showBorder={true}
+                    borderColorClassName="border-amber-300 dark:border-amber-700"
+                  />
                   <span className="absolute -top-1 -right-1 text-xs">👑</span>
                 </div>
                 <div>
@@ -333,9 +341,12 @@ export const RoomMembersModal: React.FC<RoomMembersModalProps> = ({
                 return (
                   <div key={member.id} className="p-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-[#20202A]/40 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
+                      <UserAvatar
+                        src={user.avatarUrl}
+                        name={user.name}
+                        size="md"
+                        roundedClassName="rounded-full"
+                      />
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-900 dark:text-white">{user.name}</span>

@@ -1,4 +1,5 @@
 import { supabase } from '../supabase/client';
+import { supabaseService } from '../supabase/supabaseService';
 import { db } from './mockStorage';
 import { SharedExpense, SplitMethod, SettlementPayment, PersonalExpense } from '../../types';
 
@@ -327,21 +328,19 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
             notes?: string;
           };
 
-          const { error } = await supabase.from('settlement_payments').upsert(
-            {
-              id: data.localSettlementId,
-              room_id: data.roomId,
-              payer_id: data.payerId,
-              payee_id: data.payeeId,
-              amount: data.amount,
-              payment_method: data.paymentMethod,
-              transaction_ref: data.transactionRef || null,
-              notes: data.notes || null,
-            },
-            { onConflict: 'id' }
+          // Canonical V2: Authoritative V2 RPC settlement execution on queue flush
+          const rpcRes = await supabaseService.recordRoomSettlementV2(
+            data.roomId,
+            data.payerId,
+            data.payeeId,
+            data.amount
           );
 
-          if (error) throw error;
+          if (!rpcRes.success) {
+            console.error('[OfflineQueue] V2 settlement rejected on sync:', rpcRes.error);
+            throw new Error(`[OfflineQueue] ${rpcRes.error}`);
+          }
+
           success = true;
           break;
         }
@@ -490,6 +489,9 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
         errorMessage.toLowerCase().includes('foreign key') ||
         errorMessage.toLowerCase().includes('violates row-level security') ||
         errorMessage.toLowerCase().includes('not found') ||
+        errorMessage.includes('INVALID_SETTLEMENT') ||
+        errorMessage.includes('OVERSETTLEMENT') ||
+        errorMessage.includes('PAYER_IS_NOT_A_DEBTOR') ||
         item.retryCount >= 4; // Exceeded maximum retry attempts
 
       if (isPermanentConflict) {

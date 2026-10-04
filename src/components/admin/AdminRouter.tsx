@@ -567,9 +567,14 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
       'Modifying platform settings alters system policies, limits, and runtime parameters for all users.',
       async () => {
         try {
-          db.updatePlatformSettings(currentUser.id, newSettings);
+          const updated = db.updatePlatformSettings(currentUser.id, newSettings);
           await updatePlatformSettingsCloud(newSettings, currentUser.id);
           refreshStorageData();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('roommate_platform_settings_updated', { detail: updated })
+            );
+          }
           addToast('success', 'Global platform parameters updated and synced to cloud.', 'Settings Saved');
         } catch (err: any) {
           addToast('error', err?.message || 'Failed to update settings.', 'Error');

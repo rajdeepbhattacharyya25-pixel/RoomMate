@@ -142,20 +142,23 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
 
           {/* Status Badge */}
           <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>CLEARED & SYNCED</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-400">
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Payment recorded</span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">NPCI • UPI</span>
+            <span className="text-[10px] font-mono text-slate-400">Settled</span>
           </div>
 
           {/* Big Amount */}
-          <div className="text-center py-1">
+          <div className="text-center py-2">
             <div className="text-3xl font-extrabold text-white tracking-tight tabular-nums">
-              ₹{receiptData.amount.toFixed(2)}
+              ₹{receiptData.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <p className="text-[11px] text-emerald-300/90 font-medium mt-0.5">
-              Settled via {receiptData.paymentMethod}
+            <p className="text-xs text-emerald-300 font-semibold mt-1">
+              You paid {receiptData.payeeName}.
+            </p>
+            <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+              Your balance with {receiptData.payeeName} is now settled.
             </p>
           </div>
 
@@ -203,7 +206,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center gap-1">
                 <CreditCard className="w-3 h-3" />
-                <span>Recipient VPA:</span>
+                <span>Recipient:</span>
               </span>
               <span className="font-mono text-slate-200">{receiptData.payeeUpiId}</span>
             </div>
@@ -211,7 +214,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center gap-1">
                 <Hash className="w-3 h-3" />
-                <span>Ref / UTR:</span>
+                <span>Reference:</span>
               </span>
               <span className="font-mono text-indigo-300 font-semibold truncate max-w-[170px]">
                 {receiptData.transactionRef}
@@ -227,10 +230,10 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
             </div>
           </div>
 
-          {/* Cloud Security Seal */}
+          {/* Clear confirmation seal */}
           <div className="pt-2 border-t border-white/10 text-center">
-            <p className="text-[10px] text-slate-400">
-              ⚡ Recorded on Supabase PostgreSQL Ledger with RLS
+            <p className="text-[11px] text-emerald-400 font-medium">
+              ✓ Payment recorded · Balance updated
             </p>
           </div>
         </div>
@@ -287,7 +290,7 @@ export const SettlementProofModal: React.FC<SettlementProofModalProps> = ({
               className="w-full h-11 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
-              <span>Done • View Updated Ledger</span>
+              <span>Done</span>
             </button>
           </div>
         </div>

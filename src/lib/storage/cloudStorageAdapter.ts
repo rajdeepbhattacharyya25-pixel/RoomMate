@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
+import { supabaseService } from '../supabase/supabaseService';
 import { Database, Json } from '../../types/supabase';
 import { db, DatabaseState, DEFAULT_STAGING_SEEDS } from './mockStorage';
 import {
@@ -460,44 +461,37 @@ export async function recordSettlementCloud(data: {
   transactionRef?: string;
   notes?: string;
 }): Promise<SettlementPayment> {
-  // 1. Write locally (returns existing if id matched)
-  const localSettlement = db.recordSettlementPayment(data.payerId, data);
-
-  // 2. Mirror to Supabase Cloud with client-generated UUID for idempotency
+  // 1. Authoritative Online Path: V2 RPC is the SOLE online settlement-creation path
   if (IS_LIVE_SYNC_ENABLED) {
-    try {
-      const { error } = await supabase.from('settlement_payments').insert({
-        id: localSettlement.id,
-        room_id: data.roomId,
-        payer_id: data.payerId,
-        payee_id: data.payeeId,
-        amount: data.amount,
-        payment_method: data.paymentMethod,
-        transaction_ref: data.transactionRef || null,
-        notes: data.notes || null,
-        payment_date: new Date().toISOString().split('T')[0],
-      });
+    // Canonical V2: Atomic record_room_settlement_v2 RPC with row locking and debt validation
+    const v2Result = await supabaseService.recordRoomSettlementV2(
+      data.roomId,
+      data.payerId,
+      data.payeeId,
+      data.amount
+    );
 
-      if (error) {
-        // If code 23505 (unique_violation / primary key exists), it is an idempotent retry
-        if (error.code === '23505') {
-          console.log('[Idempotency] Settlement payment already recorded in cloud:', localSettlement.id);
-        } else {
-          console.warn('Cloud settlement sync warning, queued offline:', error.message);
-          enqueueOfflineItem('RECORD_SETTLEMENT', {
-            ...data,
-            localSettlementId: localSettlement.id,
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('Async settlement cloud sync failed, queued offline:', err);
-      enqueueOfflineItem('RECORD_SETTLEMENT', {
-        ...data,
-        localSettlementId: localSettlement.id,
-      });
+    if (!v2Result.success) {
+      // V2 RPC FAILURE -> NO settlement insert -> throw typed financial error
+      const errorMsg = v2Result.error || 'V2 settlement rejected by server';
+      console.error('[CloudStorage] V2 settlement RPC rejected:', errorMsg);
+      throw new Error(errorMsg);
     }
+
+    // V2 RPC SUCCESS -> write locally and return committed settlement
+    const localSettlement = db.recordSettlementPayment(data.payerId, {
+      ...data,
+      id: v2Result.settlement_id || data.id,
+    });
+    return localSettlement;
   }
+
+  // 2. Explicit Offline / Local-only mode (No network / Supabase not configured)
+  const localSettlement = db.recordSettlementPayment(data.payerId, data);
+  enqueueOfflineItem('RECORD_SETTLEMENT', {
+    ...data,
+    localSettlementId: localSettlement.id,
+  });
 
   return localSettlement;
 }
@@ -515,16 +509,17 @@ export async function leaveRoomCloud(
 
       if (error) {
         console.warn('leave_room RPC cloud error:', error.message);
-      } else {
-        const localRes = db.leaveRoom(userId, roomId);
-        return {
-          success: true,
-          newAdminId: data?.new_admin_id || localRes.newAdminId,
-          isArchived: data?.is_archived ?? localRes.isArchived,
-        };
+        throw error;
       }
+      const localRes = db.leaveRoom(userId, roomId);
+      return {
+        success: true,
+        newAdminId: data?.new_admin_id || localRes.newAdminId,
+        isArchived: data?.is_archived ?? localRes.isArchived,
+      };
     } catch (err) {
-      console.warn('leaveRoomCloud fallback to local:', err);
+      console.warn('leaveRoomCloud error:', err);
+      throw err;
     }
   }
 
@@ -546,11 +541,12 @@ export async function removeMemberCloud(
 
       if (error) {
         console.warn('remove_room_member RPC cloud error:', error.message);
-      } else {
-        return db.removeMember(adminUserId, roomId, targetUserId);
+        throw error;
       }
+      return db.removeMember(adminUserId, roomId, targetUserId);
     } catch (err) {
-      console.warn('removeMemberCloud fallback to local:', err);
+      console.warn('removeMemberCloud error:', err);
+      throw err;
     }
   }
 
@@ -866,6 +862,29 @@ export function subscribeToPlatformSettingsRealtime(
       { event: '*', schema: 'public', table: 'platform_settings' },
       (payload) => {
         console.log('[Realtime] platform_settings changed:', payload.eventType);
+        if (payload?.new) {
+          const r = payload.new as any;
+          const mappedSettings: PlatformSettings = {
+            appName: r.app_name || 'RoomMate',
+            supportEmail: r.support_email || 'admin@roommate.app',
+            supportPhone: r.support_phone || '+91 98765 43210',
+            googleAuthEnabled: r.google_auth_enabled ?? true,
+            emailVerificationRequired: r.email_verification_required ?? true,
+            sessionTimeoutMinutes: r.session_timeout_minutes ?? 1440,
+            maxRoomMembers: r.max_room_members ?? 12,
+            defaultJoinPolicy: (r.default_join_policy as JoinPolicy) || 'APPROVAL_REQUIRED',
+            defaultInvitePolicy: (r.default_invite_policy as InvitePolicy) || 'ALL_MEMBERS',
+            qrExpirationHours: r.qr_expiration_hours ?? 72,
+            maxExpenseAmount: Number(r.max_expense_amount) || 200000,
+            defaultSplitMethod: (r.default_split_method as SplitMethod) || 'EQUAL',
+            currencyCode: r.currency_code || 'INR',
+            globalNotificationsEnabled: r.global_notifications_enabled ?? true,
+            maintenanceMode: Boolean(r.maintenance_mode),
+            maintenanceMessage:
+              r.maintenance_message || 'RoomMate is undergoing scheduled maintenance. Back online shortly!',
+          };
+          db.updatePlatformSettingsLocally(mappedSettings);
+        }
         onRemoteChange('platform_settings', payload.eventType, payload);
       }
     )
@@ -1849,9 +1868,18 @@ export async function syncOAuthSessionToProfile(sessionUser: {
 }): Promise<OAuthSyncResult> {
   const cleanEmail = (sessionUser.email || '').trim().toLowerCase();
   const extractedFirstName = extractGoogleFirstName(sessionUser.user_metadata, cleanEmail);
+  const rawSessionUser = sessionUser as {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+    identities?: Array<{ identity_data?: Record<string, unknown> }>;
+  };
   const avatarUrl =
-    (sessionUser.user_metadata?.avatar_url as string) ||
-    (sessionUser.user_metadata?.picture as string) ||
+    (rawSessionUser.user_metadata?.avatar_url as string) ||
+    (rawSessionUser.user_metadata?.picture as string) ||
+    (rawSessionUser.user_metadata?.photo_url as string) ||
+    (rawSessionUser.identities?.[0]?.identity_data?.avatar_url as string) ||
+    (rawSessionUser.identities?.[0]?.identity_data?.picture as string) ||
     undefined;
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionUser.id);
@@ -1911,11 +1939,26 @@ export async function syncOAuthSessionToProfile(sessionUser: {
       ? existingProfile.upi_id
       : localUser?.upiId) || undefined;
 
+  const customAvatarPref =
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem(`roommate_avatar_custom_${sessionUser.id}`)
+      : null;
+
+  let resolvedAvatarUrl: string | undefined;
+  if (customAvatarPref === 'removed') {
+    resolvedAvatarUrl = undefined;
+  } else if (customAvatarPref === 'custom') {
+    resolvedAvatarUrl = (existingProfile?.avatar_url as string) || localUser?.avatarUrl || avatarUrl;
+  } else {
+    // Default flow: Google DP takes immediate precedence if present, then existing profile / local user
+    resolvedAvatarUrl = avatarUrl || (existingProfile?.avatar_url as string) || localUser?.avatarUrl;
+  }
+
   const resolvedUser: User = {
     id: sessionUser.id,
     name: resolvedName,
     email: (existingProfile?.email as string) || localUser?.email || cleanEmail,
-    avatarUrl: (existingProfile?.avatar_url as string) || localUser?.avatarUrl || avatarUrl,
+    avatarUrl: resolvedAvatarUrl,
     phone: existingPhone,
     upiQrUrl: existingQrUrl,
     upiId: existingUpiId,
@@ -2128,14 +2171,13 @@ export async function joinRoomWithCodeCloud(userId: string, code: string): Promi
 }
 
 // Update Profile Avatar (Cloud + Local)
-export async function updateProfileAvatar(userId: string, avatarUrl: string): Promise<boolean> {
-  // Guard: never save base64 data URLs to Supabase — they bloat the DB (500KB–2MB per row).
-  // Only CDN URLs (https://i.ibb.co/...) should be persisted to the cloud.
-  const isBase64 = avatarUrl.startsWith('data:');
+export async function updateProfileAvatar(userId: string, avatarUrl: string | null | undefined): Promise<boolean> {
+  const normalizedAvatar = avatarUrl && avatarUrl.trim() ? avatarUrl : undefined;
+  const isBase64 = Boolean(normalizedAvatar && normalizedAvatar.startsWith('data:'));
   
   const localUser = db.getState().users.find((u) => u.id === userId);
   if (localUser) {
-    db.upsertUser({ ...localUser, avatarUrl });
+    db.upsertUser({ ...localUser, avatarUrl: normalizedAvatar });
   }
 
   if (isBase64) {
@@ -2157,7 +2199,7 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string): Pr
       try {
         const { error } = await supabase
           .from('profiles')
-          .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+          .update({ avatar_url: normalizedAvatar || null, updated_at: new Date().toISOString() })
           .eq('id', targetId);
 
         if (error) {

@@ -13,6 +13,7 @@ import {
 import { RoomFinancialSummary } from '../../types';
 import { getOutstandingObligationsForMember, canCleanExit } from '../../lib/ledger/engine';
 import { useBackButton } from '../../lib/native/backButton';
+import { formatInrExact } from '../../lib/utils/currencyFormatter';
 
 interface MobileLeaveRoomModalProps {
   isOpen: boolean;
@@ -159,11 +160,11 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                 <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
                   <h3 className="text-xs font-bold uppercase tracking-wider">
-                    You still owe ₹{obligations.totalOwed.toLocaleString('en-IN')}
+                    You still owe {formatInrExact(obligations.totalOwed)}
                   </h3>
                 </div>
                 <p className="text-xs text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
-                  Leaving the room won't cancel this balance. Your <strong>₹{obligations.totalOwed.toLocaleString('en-IN')}</strong> debt will be frozen and can be settled with your former roommates later.
+                  Leaving the room won't cancel this balance. Your <strong>{formatInrExact(obligations.totalOwed)}</strong> debt will be frozen and can be settled with your former roommates later.
                 </p>
 
                 {/* Breakdown of whom user owes */}
@@ -172,7 +173,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                     <div key={idx} className="py-2 flex items-center justify-between text-xs">
                       <span className="font-semibold text-rose-950 dark:text-rose-200">You owe {debt.toUserName}</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-rose-700 dark:text-rose-400">₹{debt.amount.toFixed(2)}</span>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">{formatInrExact(debt.amount)}</span>
                         {onStartSettle && (
                           <button
                             type="button"
@@ -202,7 +203,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                   className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Settle ₹{obligations.totalOwed.toLocaleString('en-IN')} via UPI Now</span>
+                  <span>Settle {formatInrExact(obligations.totalOwed)} via UPI Now</span>
                 </button>
               )}
 
@@ -215,7 +216,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                 />
                 <span className="text-[11px] text-slate-700 dark:text-slate-200 font-medium leading-tight">
-                  I acknowledge that my <strong>₹{obligations.totalOwed.toLocaleString('en-IN')}</strong> debt remains recorded and visible to my former roommates.
+                  I acknowledge that my <strong>{formatInrExact(obligations.totalOwed)}</strong> debt remains recorded and visible to my former roommates.
                 </span>
               </label>
             </div>
@@ -227,7 +228,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-300">
                 <Info className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-xs font-bold uppercase tracking-wider">
-                  You're owed ₹{obligations.totalCredit.toLocaleString('en-IN')}
+                  You're owed {formatInrExact(obligations.totalCredit)}
                 </h3>
               </div>
               <p className="text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">
@@ -238,7 +239,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                 {obligations.creditsOwed.map((credit, idx) => (
                   <div key={idx} className="py-2 flex items-center justify-between text-xs font-semibold text-indigo-950 dark:text-indigo-200">
                     <span>{credit.fromUserName} owes you</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">+₹{credit.amount.toFixed(2)}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatInrExact(credit.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -247,7 +248,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const msg = `Hey roommates from ${roomName}! I am leaving the room. Please remember to settle your outstanding tabs with me: ₹${obligations.totalCredit}. Thanks!`;
+                    const msg = `Hey roommates from ${roomName}! I am leaving the room. Please remember to settle your outstanding tabs with me: ${formatInrExact(obligations.totalCredit)}. Thanks!`;
                     onNudgeRoommates(msg);
                   }}
                   className="w-full h-9 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 hover:bg-indigo-200 dark:hover:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
@@ -305,7 +306,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               disabled={!acknowledged || isSubmitting}
               className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             >
-              <span>{isSubmitting ? 'Leaving...' : `Leave with ₹${obligations.totalOwed} debt`}</span>
+              <span>{isSubmitting ? 'Leaving...' : `Leave with ${formatInrExact(obligations.totalOwed)} debt`}</span>
             </button>
           ) : (
             <button
@@ -314,7 +315,7 @@ export const MobileLeaveRoomModal: React.FC<MobileLeaveRoomModalProps> = ({
               disabled={isSubmitting}
               className="flex-1 h-11 rounded-xl bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             >
-              <span>{isSubmitting ? 'Leaving...' : `Leave with ₹${obligations.totalCredit} credit`}</span>
+              <span>{isSubmitting ? 'Leaving...' : `Leave with ${formatInrExact(obligations.totalCredit)} credit`}</span>
             </button>
           )}
         </div>

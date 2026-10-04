@@ -271,11 +271,13 @@ export function gatherRoomExportData(params: GatherRoomDataParams): RoomExportDa
     // Net balance: Positive means member should receive, Negative means member owes
     // Balance = (totalPaid - fairShare) + settlementsPaid - settlementsReceived
     const netBalance = round2((totalPaid - fairShare) + settlementsPaid - settlementsReceived);
+    const netBalancePaise = Math.round(netBalance * 100);
 
+    // Canonical V2 status: exact integer paise parity (no loose 0.5 rupee swallow)
     let status: 'Receive' | 'Pay' | 'Settled' = 'Settled';
-    if (netBalance >= 0.5) {
+    if (netBalancePaise > 0) {
       status = 'Receive';
-    } else if (netBalance <= -0.5) {
+    } else if (netBalancePaise < 0) {
       status = 'Pay';
     }
 

@@ -710,6 +710,15 @@ class MockDatabase {
       (rm) => rm.roomId === room.id && rm.userId === userId
     );
 
+    const activeMembersCount = this.state.roomMembers.filter(
+      (rm) => rm.roomId === room.id && rm.status === 'ACTIVE'
+    ).length;
+    const maxLimit = this.getPlatformSettings().maxRoomMembers || 12;
+
+    if (!existingMember && activeMembersCount >= maxLimit) {
+      throw new Error(`Room has reached maximum capacity of ${maxLimit} roommates.`);
+    }
+
     if (existingMember) {
       existingMember.status = 'ACTIVE';
       existingMember.joinedAt = new Date().toISOString();
@@ -1855,7 +1864,28 @@ class MockDatabase {
     });
 
     this.save(this.state);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('roommate_platform_settings_updated', {
+          detail: this.state.settings,
+        })
+      );
+    }
+
     return this.state.settings;
+  }
+
+  public updatePlatformSettingsLocally(settings: PlatformSettings): void {
+    this.state.settings = { ...settings };
+    this.save(this.state);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('roommate_platform_settings_updated', {
+          detail: this.state.settings,
+        })
+      );
+    }
   }
 
   public getBugReports(): BugReport[] {

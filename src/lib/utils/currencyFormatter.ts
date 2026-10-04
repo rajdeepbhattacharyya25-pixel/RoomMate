@@ -5,7 +5,7 @@
  */
 
 export function formatInr(amount: number, compact = false): string {
-  if (isNaN(amount)) return '₹0';
+  if (isNaN(amount)) return '₹0.00';
   
   if (compact) {
     const abs = Math.abs(amount);
@@ -22,15 +22,19 @@ export function formatInr(amount: number, compact = false): string {
       const val = abs / 1000;
       return `${sign}₹${val.toFixed(1)}K`;
     }
-    return `${sign}₹${abs.toLocaleString('en-IN')}`;
+    return `${sign}₹${abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
-  return `₹${Math.round(amount).toLocaleString('en-IN')}`;
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}₹${abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatInrExact(amount: number): string {
   if (isNaN(amount)) return '₹0.00';
-  return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}₹${abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatRelativeTime(isoString?: string): string {

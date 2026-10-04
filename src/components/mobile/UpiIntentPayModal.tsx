@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, PaymentMethod } from '../../types';
 import {
   launchUpiIntent,
@@ -63,7 +63,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   });
 
   const [payAmount, setPayAmount] = useState<string>(() =>
-    initialAmount > 0 ? initialAmount.toFixed(0) : '0'
+    initialAmount > 0 ? initialAmount.toFixed(2) : '0.00'
   );
   const [selectedApp, setSelectedApp] = useState<UpiAppTarget>('generic');
   const [appLaunched, setAppLaunched] = useState(false);
@@ -76,6 +76,28 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [generatedRef] = useState(() => generateSettlementToken());
   const proofFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Synchronize modal state whenever opened or when target payee/amount changes
+  useEffect(() => {
+    if (isOpen) {
+      if (initialPayeeId && availablePayees.some((u) => u.id === initialPayeeId)) {
+        setSelectedPayeeId(initialPayeeId);
+      } else if (availablePayees.length > 0) {
+        setSelectedPayeeId((prev) => (availablePayees.some((u) => u.id === prev) ? prev : availablePayees[0].id));
+      }
+      if (initialAmount > 0) {
+        setPayAmount(initialAmount.toFixed(2));
+      }
+      setAppLaunched(false);
+      setCopiedUpi(false);
+      setShowQrCode(false);
+      setShowScannerModal(false);
+      setCustomPayeeVpa(null);
+      setCustomPayeeName(null);
+      setUserUtr('');
+      setProofImage(null);
+    }
+  }, [isOpen, initialPayeeId, initialAmount, availablePayees]);
 
   // Active payee user object
   const activePayee = useMemo(() => {
@@ -284,11 +306,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 type="button"
                 onClick={() => {
                   hapticSelection();
-                  setPayAmount(initialAmount.toFixed(0));
+                  setPayAmount(initialAmount.toFixed(2));
                 }}
                 className="px-3 py-1.5 min-h-[36px] rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
               >
-                Full Due (₹{initialAmount.toFixed(0)})
+                Full Due (₹{initialAmount.toFixed(2)})
               </button>
             )}
             {initialAmount > 100 && (
@@ -296,11 +318,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
                 type="button"
                 onClick={() => {
                   hapticSelection();
-                  setPayAmount((initialAmount / 2).toFixed(0));
+                  setPayAmount((initialAmount / 2).toFixed(2));
                 }}
                 className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-300 border border-transparent dark:border-[#27354A] text-xs font-semibold whitespace-nowrap active:scale-95 transition-transform"
               >
-                50% (₹{(initialAmount / 2).toFixed(0)})
+                50% (₹{(initialAmount / 2).toFixed(2)})
               </button>
             )}
             <button
@@ -563,7 +585,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             setCustomPayeeVpa(data.vpa);
             if (data.name) setCustomPayeeName(data.name);
             if (data.amount && data.amount > 0) {
-              setPayAmount(data.amount.toFixed(0));
+              setPayAmount(data.amount.toFixed(2));
             }
           }}
         />

@@ -12,7 +12,17 @@ import {
   InvitePolicy,
   RoomJoinRequest,
 } from '../../types';
-import { calculateRoomSummary, calculateSplits, round2 } from '../../lib/ledger/engine';
+import {
+  calculateSplits,
+  round2,
+  financialIntegrationService,
+  calculateCanonicalRoomSummary,
+} from '../../lib/ledger/engine';
+import { CanonicalRoomSummaryResult } from '../../lib/ledger/financialIntegrationService';
+import { DbFinancialSummaryV2, FinancialDataState } from '../../lib/ledger/v2';
+import { isSupabaseConfigured } from '../../lib/supabase/client';
+import { isUuid } from '../../lib/storage/cloudStorageAdapter';
+import { UserAvatar } from '../common/UserAvatar';
 import {
   Users,
   Plus,
@@ -52,6 +62,8 @@ import { useNetworkStatus } from '../../context/NetworkContext';
 import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
 import { UpiIntentPayModal } from './UpiIntentPayModal';
 import { SettlementProofModal } from './SettlementProofModal';
+import { WhyBalanceBottomSheet } from './WhyBalanceBottomSheet';
+import { formatInrExact } from '../../lib/utils/currencyFormatter';
 import { SettlementReceiptData } from '../../lib/payments/upiIntentService';
 import { MobileLeaveRoomModal } from './MobileLeaveRoomModal';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -447,17 +459,160 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
     });
   }, [activeRoom?.id, roomMembers]);
 
-  // Room Summary & Debts
-  const summary = activeRoom
-    ? calculateRoomSummary(
+  // Canonical V2 Authoritative Database Summary & Explicit Financial State
+  const [financialState, setFinancialState] = useState<FinancialDataState>('LOADING');
+  const [dbFinancialSummary, setDbFinancialSummary] = useState<DbFinancialSummaryV2 | null>(null);
+  const [financialError, setFinancialError] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
+  const [isSubmittingSettle, setIsSubmittingSettle] = useState(false);
+
+  const handleRefreshFinancialSummary = useCallback(() => {
+    if (!activeRoom) return;
+    if (!isUuid(activeRoom.id) || !isSupabaseConfigured) {
+      setFinancialState('OFFLINE_LOCAL');
+      setFinancialError(null);
+      return;
+    }
+    setFinancialState('LOADING');
+    setFinancialError(null);
+    financialIntegrationService.fetchRoomFinancialSummaryV2(activeRoom.id)
+      .then((data) => {
+        if (data) {
+          setDbFinancialSummary(data);
+          setFinancialState('ONLINE_AUTHORITATIVE');
+          setFinancialError(null);
+        } else {
+          setFinancialState('ERROR');
+          setFinancialError('Failed to retrieve authoritative financial summary from server');
+        }
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Network error fetching financial summary';
+        setFinancialState('ERROR');
+        setFinancialError(msg);
+      });
+  }, [activeRoom]);
+
+  useEffect(() => {
+    if (!activeRoom?.id) return;
+    let isSubscribed = true;
+
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (!isOnline || !isSupabaseConfigured || !isUuid(activeRoom.id)) {
+      if (isSubscribed) {
+        setFinancialState('OFFLINE_LOCAL');
+        setFinancialError(null);
+      }
+      return;
+    }
+
+    setFinancialState('LOADING');
+    setFinancialError(null);
+
+    financialIntegrationService.fetchRoomFinancialSummaryV2(activeRoom.id)
+      .then((data) => {
+        if (!isSubscribed) return;
+        if (data) {
+          setDbFinancialSummary(data);
+          setFinancialState('ONLINE_AUTHORITATIVE');
+          setFinancialError(null);
+        } else {
+          setFinancialState('ERROR');
+          setFinancialError('Failed to retrieve authoritative financial summary from server');
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isSubscribed) return;
+        const msg = err instanceof Error ? err.message : 'Network error fetching financial summary';
+        console.warn('[MobileRoomLedger] V2 authoritative database summary fetch failed:', msg);
+        setFinancialState('ERROR');
+        setFinancialError(msg);
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeRoom?.id, sharedExpenses, settlementPayments]);
+
+  // Room Summary & Debts: Consumes Authoritative PostgreSQL V2 Summary when available
+  const summary: CanonicalRoomSummaryResult | null = useMemo(() => {
+    if (!activeRoom) return null;
+
+    // 1. ONLINE AUTHORITATIVE: Active database summary available
+    if (financialState === 'ONLINE_AUTHORITATIVE' && dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+      return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+        dbFinancialSummary,
+        currentUser.id,
+        allUsers
+      );
+    }
+
+    // 2. ERROR STATE: Surface error or explicitly retain clearly marked stale authoritative snapshot
+    if (financialState === 'ERROR') {
+      if (dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+        const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+          dbFinancialSummary,
+          currentUser.id,
+          allUsers
+        );
+        staleSummary.isStale = true;
+        staleSummary.error = financialError;
+        staleSummary.financialState = 'ERROR';
+        return staleSummary;
+      }
+      return calculateCanonicalRoomSummary(
         activeRoom.id,
         currentUser.id,
         sharedExpenses,
         expenseSplits,
         settlementPayments,
+        allUsers,
+        {
+          financialState: 'ERROR',
+          isStale: true,
+          error: financialError || 'Server connection error. Displaying unverified local calculation.',
+        }
+      );
+    }
+
+    // 3. OFFLINE LOCAL: Local V2 engine explicitly calculating offline summary
+    if (financialState === 'OFFLINE_LOCAL') {
+      return calculateCanonicalRoomSummary(
+        activeRoom.id,
+        currentUser.id,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments,
+        allUsers,
+        {
+          financialState: 'OFFLINE_LOCAL',
+        }
+      );
+    }
+
+    // 4. LOADING STATE: Retain previous snapshot if matching, or calculate temporary local marked as LOADING
+    if (dbFinancialSummary && dbFinancialSummary.room_id === activeRoom.id) {
+      const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+        dbFinancialSummary,
+        currentUser.id,
         allUsers
-      )
-    : null;
+      );
+      prevSummary.financialState = 'LOADING';
+      return prevSummary;
+    }
+
+    return calculateCanonicalRoomSummary(
+      activeRoom.id,
+      currentUser.id,
+      sharedExpenses,
+      expenseSplits,
+      settlementPayments,
+      allUsers,
+      {
+        financialState: 'LOADING',
+      }
+    );
+  }, [financialState, dbFinancialSummary, financialError, activeRoom, currentUser.id, sharedExpenses, expenseSplits, settlementPayments, allUsers]);
 
   // Former members who have unresolved balance with currentUser in this room
   const formerMembersWithDebts = useMemo(() => {
@@ -511,6 +666,43 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
     setSettleAmount(suggestedAmount > 0 ? String(suggestedAmount) : '');
     setShowUpiPayModal(true);
   };
+
+  // "Why do I owe this?" / Itemized Balance Explanation Sheet Target
+  const [whySheetTarget, setWhySheetTarget] = useState<{
+    personId?: string;
+    personName?: string;
+    type: 'OWE' | 'GET' | 'GENERAL';
+    amount: number;
+  } | null>(null);
+
+  // Toggle for other room balances not involving current user
+  const [showOtherDebts, setShowOtherDebts] = useState(false);
+
+  // Categorized debts involving current user
+  const myDebtsToPay = useMemo(() => {
+    if (!summary) return [];
+    return summary.pairwiseDebts.filter((d) => {
+      const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
+      return debtorId === currentUser.id;
+    });
+  }, [summary, currentUser.id]);
+
+  const myDebtsToReceive = useMemo(() => {
+    if (!summary) return [];
+    return summary.pairwiseDebts.filter((d) => {
+      const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
+      return creditorId === currentUser.id;
+    });
+  }, [summary, currentUser.id]);
+
+  const otherDebts = useMemo(() => {
+    if (!summary) return [];
+    return summary.pairwiseDebts.filter((d) => {
+      const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
+      const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
+      return debtorId !== currentUser.id && creditorId !== currentUser.id;
+    });
+  }, [summary, currentUser.id]);
 
   // WhatsApp Nudge Studio target state
   const [nudgeTarget, setNudgeTarget] = useState<{
@@ -618,7 +810,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   };
 
   // Submit Settlement with guided field validation
-  const handleRecordSettlementSubmit = (e: React.FormEvent) => {
+  const handleRecordSettlementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeRoom) return;
     if (activeRoom.isFrozen) {
@@ -647,38 +839,48 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
     }
 
     setSettleValidationErrors({});
-    hapticSuccess();
+    setSettleError(null);
+    setIsSubmittingSettle(true);
     const finalRef = transactionRef.trim() || `CF-${Date.now().toString(36).toUpperCase()}`;
 
-    onRecordSettlement({
-      roomId: activeRoom.id,
-      payerId: currentUser.id,
-      payeeId: settlePayeeId,
-      amount: numAmount,
-      paymentMethod,
-      transactionRef: finalRef,
-    });
-
-    const payee = allUsers.find((u) => u.id === settlePayeeId);
-    if (payee) {
-      setActiveProofData({
+    try {
+      await onRecordSettlement({
+        roomId: activeRoom.id,
+        payerId: currentUser.id,
+        payeeId: settlePayeeId,
         amount: numAmount,
-        payerName: currentUser.name,
-        payeeName: payee.name,
-        payeeUpiId: payee.email ? `${payee.name.toLowerCase().replace(/\s+/g, '')}@okaxis` : 'roommate@upi',
-        roomName: activeRoom.name,
         paymentMethod,
         transactionRef: finalRef,
       });
-      setShowProofModal(true);
-    }
 
-    confetti({ particleCount: 80, spread: 70, origin: { y: 0.8 } });
-    setSettleAmount('');
-    setSettlePayeeId('');
-    setTransactionRef('');
-    setShowSettleModal(false);
-    if (onCloseModals) onCloseModals();
+      hapticSuccess();
+      const payee = allUsers.find((u) => u.id === settlePayeeId);
+      if (payee) {
+        setActiveProofData({
+          amount: numAmount,
+          payerName: currentUser.name,
+          payeeName: payee.name,
+          payeeUpiId: payee.email ? `${payee.name.toLowerCase().replace(/\s+/g, '')}@okaxis` : 'roommate@upi',
+          roomName: activeRoom.name,
+          paymentMethod,
+          transactionRef: finalRef,
+        });
+        setShowProofModal(true);
+      }
+
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.8 } });
+      setSettleAmount('');
+      setSettlePayeeId('');
+      setTransactionRef('');
+      setShowSettleModal(false);
+      if (onCloseModals) onCloseModals();
+    } catch (err: unknown) {
+      hapticWarning();
+      const msg = err instanceof Error ? err.message : 'Settlement rejected by server';
+      setSettleError(msg);
+    } finally {
+      setIsSubmittingSettle(false);
+    }
   };
 
   // Handle 1-Tap UPI Intent Payment Completion & Proof Card Generation
@@ -839,8 +1041,8 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   };
 
   const totalToCollect = paidBy === currentUser.id
-    ? (numAmount - (selectedParticipants.includes(currentUser.id) ? (previewSplits.find(s => s.userId === currentUser.id)?.shareAmount || 0) : 0)).toFixed(0)
-    : '0';
+    ? (numAmount - (selectedParticipants.includes(currentUser.id) ? (previewSplits.find(s => s.userId === currentUser.id)?.shareAmount || 0) : 0)).toFixed(2)
+    : '0.00';
 
   return (
     <div className="space-y-4 pb-28 sm:pb-nav-safe px-4 pt-3 bg-[#F9F9FF] dark:bg-[#0B0B10] min-h-full text-slate-900 dark:text-slate-100">
@@ -1020,8 +1222,8 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               </button>
             </div>
 
-            {/* Tappable Member Count Badge */}
-            <div className="mt-2.5">
+            {/* Tappable Member Count Badge & V2 Status Pill */}
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => setShowMembersModal(true)}
@@ -1031,8 +1233,116 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 <span>{activeMembers.length} members</span>
                 <ChevronRight className="w-3 h-3 text-slate-400" />
               </button>
+
+              {summary?.financialState === 'ONLINE_AUTHORITATIVE' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Live sync</span>
+                </span>
+              )}
+              {summary?.financialState === 'OFFLINE_LOCAL' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span>Offline · Saved balance</span>
+                </span>
+              )}
+              {summary?.financialState === 'LOADING' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                  <span>Updating balance...</span>
+                </span>
+              )}
+              {summary?.financialState === 'ERROR' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  <span>Couldn't refresh balance</span>
+                </span>
+              )}
             </div>
           </div>
+
+          {summary?.error && (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Notice: Couldn't refresh room balance from server. Showing last saved balance.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshFinancialSummary}
+                className="text-[11px] font-bold text-amber-900 dark:text-amber-100 hover:underline px-2 py-0.5 shrink-0"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {/* Primary Room Balance Hero Card */}
+          {!summary ? (
+            <div className="rounded-2xl bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-2.5 animate-pulse">
+              <div className="h-3 w-20 bg-slate-200 dark:bg-[#27354A] rounded" />
+              <div className="h-8 w-36 bg-slate-200 dark:bg-[#27354A] rounded" />
+              <div className="h-3 w-40 bg-slate-100 dark:bg-[#20202A] rounded" />
+            </div>
+          ) : (
+            summary.myNetBalance < 0 ? (
+              <div className="rounded-2xl bg-gradient-to-br from-rose-500/10 via-white to-slate-50 dark:from-rose-950/30 dark:via-[#12121A] dark:to-[#161622] border border-rose-200/80 dark:border-rose-900/40 p-4 space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+                    You owe
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    to {myDebtsToPay.length} {myDebtsToPay.length === 1 ? 'roommate' : 'roommates'}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-extrabold text-rose-600 dark:text-rose-400 tabular-nums tracking-tight">
+                    {formatInrExact(Math.abs(summary.myNetBalance))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWhySheetTarget({ type: 'OWE', amount: Math.abs(summary.myNetBalance) })}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>Why do I owe this?</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : summary.myNetBalance > 0 ? (
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-white to-slate-50 dark:from-emerald-950/30 dark:via-[#12121A] dark:to-[#161622] border border-emerald-200/80 dark:border-emerald-900/40 p-4 space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    You get
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    from {myDebtsToReceive.length} {myDebtsToReceive.length === 1 ? 'roommate' : 'roommates'}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tight">
+                    {formatInrExact(summary.myNetBalance)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWhySheetTarget({ type: 'GET', amount: summary.myNetBalance })}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>See details</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-white to-slate-50 dark:from-emerald-950/30 dark:via-[#12121A] dark:to-[#161622] border border-emerald-200/80 dark:border-emerald-900/40 p-4 space-y-1 text-center shadow-xs">
+                <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mx-auto mb-1">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">You're all settled 🎉</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No pending balances with your roommates in this room.</p>
+              </div>
+            )
+          )}
 
           {/* Primary Financial Action: Full Width Add Bill / Split */}
           <div>
@@ -1071,6 +1381,15 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   alert('Settlements are paused while this room ledger is frozen.');
                   return;
                 }
+                const payees = [
+                  ...activeUserObjects.filter((u) => u.id !== currentUser.id),
+                  ...formerMembersWithDebts,
+                ];
+                if (payees.length === 0) {
+                  hapticWarning();
+                  alert('There are no roommates in this room to settle with yet. Invite your roommates first!');
+                  return;
+                }
                 setShowUpiPayModal(true);
               }}
               disabled={activeRoom.isFrozen}
@@ -1087,115 +1406,210 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         </div>
       )}
 
-      {/* Simplified Debts Matrix: Who Owes Whom */}
+      {/* Roommate Balances (Person-to-Person Settlement Cards) */}
       {activeRoom && (
-        <div className="space-y-2">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
-            Simplified Room Settlements
-          </h2>
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Roommate Balances
+            </h2>
+            {summary && summary.pairwiseDebts.length > 0 && (
+              <span className="text-[10px] text-slate-400 font-medium">
+                {myDebtsToPay.length + myDebtsToReceive.length} involving you
+              </span>
+            )}
+          </div>
 
-        {summary && summary.pairwiseDebts.length > 0 ? (
-          <div className="bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] rounded-2xl divide-y divide-slate-100 dark:divide-[#27354A]/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_0_rgba(0,0,0,0.4)] overflow-hidden">
-            {summary.pairwiseDebts.map((debt, idx) => {
-              const debtorId = debt.netAmount > 0 ? debt.userBId : debt.userAId;
-              const creditorId = debt.netAmount > 0 ? debt.userAId : debt.userBId;
-              const debtorName = debt.netAmount > 0 ? debt.userBName : debt.userAName;
-              const creditorName = debt.netAmount > 0 ? debt.userAName : debt.userBName;
-              const debtAmount = Math.abs(debt.netAmount);
+          {/* 1. Debts You Owe Others */}
+          {myDebtsToPay.length > 0 && (
+            <div className="space-y-2">
+              {myDebtsToPay.map((debt, idx) => {
+                const creditorId = debt.netAmount > 0 ? debt.userAId : debt.userBId;
+                const creditorName = debt.netAmount > 0 ? debt.userAName : debt.userBName;
+                const creditorUser = allUsers.find((u) => u.id === creditorId);
+                const debtAmount = Math.abs(debt.netAmount);
+                const isCreditorFormer = roomMembers.some(
+                  (m) => m.roomId === activeRoom?.id && m.userId === creditorId && m.status !== 'ACTIVE'
+                );
 
-              const isCurrentUserDebtor = debtorId === currentUser.id;
-              const isCurrentUserCreditor = creditorId === currentUser.id;
-
-              const isDebtorFormer = roomMembers.some(
-                (m) => m.roomId === activeRoom?.id && m.userId === debtorId && m.status !== 'ACTIVE'
-              );
-              const isCreditorFormer = roomMembers.some(
-                (m) => m.roomId === activeRoom?.id && m.userId === creditorId && m.status !== 'ACTIVE'
-              );
-
-              return (
-                <div
-                  key={idx}
-                  className="p-3.5 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-[#1C1C25]/80 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${
-                        isCurrentUserDebtor
-                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
-                          : isCurrentUserCreditor
-                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      {debtorName.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
-                        <span>
-                          {isCurrentUserDebtor
-                            ? `You owe ${creditorName}`
-                            : isCurrentUserCreditor
-                            ? `${debtorName} owes you`
-                            : `${debtorName} owes ${creditorName}`}
-                        </span>
-                        {(isDebtorFormer || isCreditorFormer) && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#27354A]">
-                            Former
+                return (
+                  <div
+                    key={`pay-${idx}`}
+                    className="p-3.5 rounded-2xl bg-white dark:bg-[#12121A] border border-rose-200/80 dark:border-rose-900/40 shadow-xs space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          src={creditorUser?.avatarUrl}
+                          name={creditorName}
+                          size="md"
+                          roundedClassName="rounded-full"
+                          className="shrink-0"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                            <span>You owe {creditorName}</span>
+                            {isCreditorFormer && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#27354A]">
+                                Former
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            Tap settle up to clear this balance
                           </span>
-                        )}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-400">
-                        Direct pairwise balance
+
+                      <div className="text-right">
+                        <span className="text-base font-extrabold text-rose-600 dark:text-rose-400 tabular-nums block">
+                          {formatInrExact(debtAmount)}
+                        </span>
                       </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-[#27354A]/60 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWhySheetTarget({ personId: creditorId, personName: creditorName, type: 'OWE', amount: debtAmount })}
+                        className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 py-1"
+                      >
+                        <span>Why do I owe this?</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStartSettle(creditorId, debtAmount)}
+                        className="h-8 px-4 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1 active:scale-95 transition-all shadow-xs"
+                      >
+                        <span>Settle up</span>
+                        <ArrowRight className="w-3 h-3 stroke-[2.5]" />
+                      </button>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
 
-                  <div className="flex items-center space-x-2.5">
-                    <span
-                      className={`text-xs font-bold tabular-nums ${
-                        isCurrentUserDebtor
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : isCurrentUserCreditor
-                          ? 'text-emerald-700 dark:text-emerald-400'
-                          : 'text-slate-900 dark:text-slate-100'
-                      }`}
-                    >
-                      ₹{debtAmount.toLocaleString('en-IN')}
-                    </span>
+          {/* 2. Debts Others Owe You */}
+          {myDebtsToReceive.length > 0 && (
+            <div className="space-y-2">
+              {myDebtsToReceive.map((debt, idx) => {
+                const debtorId = debt.netAmount > 0 ? debt.userBId : debt.userAId;
+                const debtorName = debt.netAmount > 0 ? debt.userBName : debt.userAName;
+                const debtorUser = allUsers.find((u) => u.id === debtorId);
+                const debtAmount = Math.abs(debt.netAmount);
+                const isDebtorFormer = roomMembers.some(
+                  (m) => m.roomId === activeRoom?.id && m.userId === debtorId && m.status !== 'ACTIVE'
+                );
 
-                    {isCurrentUserDebtor && (
+                return (
+                  <div
+                    key={`receive-${idx}`}
+                    className="p-3.5 rounded-2xl bg-white dark:bg-[#12121A] border border-emerald-200/80 dark:border-emerald-900/40 shadow-xs space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          src={debtorUser?.avatarUrl}
+                          name={debtorName}
+                          size="md"
+                          roundedClassName="rounded-full"
+                          className="shrink-0"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                            <span>{debtorName} owes you</span>
+                            {isDebtorFormer && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#27354A]">
+                                Former
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            Send friendly WhatsApp nudge
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums block">
+                          {formatInrExact(debtAmount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-[#27354A]/60 flex items-center justify-between gap-2">
                       <button
-                        onClick={() => handleStartSettle(creditorId, debtAmount)}
-                        className="px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all border border-rose-200/50 dark:border-rose-800/40"
+                        type="button"
+                        onClick={() => setWhySheetTarget({ personId: debtorId, personName: debtorName, type: 'GET', amount: debtAmount })}
+                        className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 py-1"
                       >
-                        <span>Pay</span>
-                        <ArrowRight className="w-3 h-3" />
+                        <span>View breakdown</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
                       </button>
-                    )}
 
-                    {isCurrentUserCreditor && (
                       <button
+                        type="button"
                         onClick={() => handleOpenNudge(debtorId, debtAmount)}
-                        className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all border border-emerald-200 dark:border-emerald-800/40 shadow-2xs"
+                        className="h-8 px-3 rounded-full bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all border border-emerald-200 dark:border-emerald-800/40 shadow-2xs"
                         title="Send 1-Tap WhatsApp Nudge"
                       >
                         <MessageCircle className="w-3.5 h-3.5 fill-[#25D366] text-[#25D366]" />
-                        <span>Nudge</span>
+                        <span>Remind</span>
                       </button>
-                    )}
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 3. All Settled Up Empty State */}
+          {myDebtsToPay.length === 0 && myDebtsToReceive.length === 0 && (
+            <div className="rounded-2xl bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] p-5 text-center text-xs text-slate-500 dark:text-slate-400 shadow-xs">
+              <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-1.5" />
+              <span>You're all settled up! 🎉 No pending debts for you in this room.</span>
+            </div>
+          )}
+
+          {/* 4. Collapsible Other Room Balances */}
+          {otherDebts.length > 0 && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowOtherDebts(!showOtherDebts)}
+                className="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-[#1C1C25] hover:bg-slate-100 dark:hover:bg-[#20202A] border border-slate-200/70 dark:border-[#27354A] text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between transition-colors"
+              >
+                <span>Other roommate settlements ({otherDebts.length})</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showOtherDebts ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showOtherDebts && (
+                <div className="mt-2 bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] rounded-2xl divide-y divide-slate-100 dark:divide-[#27354A]/60 overflow-hidden shadow-2xs animate-in fade-in">
+                  {otherDebts.map((debt, idx) => {
+                    const debtorName = debt.netAmount > 0 ? debt.userBName : debt.userAName;
+                    const creditorName = debt.netAmount > 0 ? debt.userAName : debt.userBName;
+                    const debtAmount = Math.abs(debt.netAmount);
+
+                    return (
+                      <div key={`other-${idx}`} className="p-3 flex items-center justify-between text-xs">
+                        <div className="text-slate-700 dark:text-slate-300">
+                          <strong className="text-slate-900 dark:text-slate-100">{debtorName}</strong> owes <strong className="text-slate-900 dark:text-slate-100">{creditorName}</strong>
+                        </div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                          {formatInrExact(debtAmount)}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-2xl bg-white dark:bg-[#12121A] border border-slate-200/80 dark:border-[#27354A] p-5 text-center text-xs text-slate-500 dark:text-slate-400 shadow-xs">
-            <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-1.5" />
-            All settled up! No outstanding debts in this room.
-          </div>
-        )}
-      </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Room Activity Feed */}
@@ -1286,27 +1700,27 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#1C1C25] border border-slate-100 dark:border-[#27354A]">
                     <span className="text-[10px] text-slate-400 font-medium block">Total Shared</span>
                     <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">
-                      ₹{monthlyRoomData.summary.totalSharedSpending.toLocaleString('en-IN')}
+                      {formatInrExact(monthlyRoomData.summary.totalSharedSpending)}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100/70 dark:border-indigo-800/40">
                     <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium block">My Share</span>
                     <span className="text-base font-extrabold text-indigo-950 dark:text-indigo-200 tabular-nums">
-                      ₹{monthlyRoomData.summary.myShare.toLocaleString('en-IN')}
+                      {formatInrExact(monthlyRoomData.summary.myShare)}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-300">
-                  <span>I Paid: <strong className="text-slate-900 dark:text-slate-100">₹{monthlyRoomData.summary.iPaid.toLocaleString('en-IN')}</strong></span>
+                  <span>I Paid: <strong className="text-slate-900 dark:text-slate-100">{formatInrExact(monthlyRoomData.summary.iPaid)}</strong></span>
                   {monthlyRoomData.summary.iOwe > 0 && (
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">I Owe: ₹{monthlyRoomData.summary.iOwe.toLocaleString('en-IN')}</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">I Owe: {formatInrExact(monthlyRoomData.summary.iOwe)}</span>
                   )}
                   {monthlyRoomData.summary.othersOweMe > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Owed to Me: ₹{monthlyRoomData.summary.othersOweMe.toLocaleString('en-IN')}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">You get: {formatInrExact(monthlyRoomData.summary.othersOweMe)}</span>
                   )}
                   {monthlyRoomData.summary.iOwe === 0 && monthlyRoomData.summary.othersOweMe === 0 && (
-                    <span className="text-slate-400">All settled</span>
+                    <span className="text-slate-400">All settled 🎉</span>
                   )}
                 </div>
 
@@ -1364,10 +1778,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                         {s.name}
                       </td>
                       <td className="py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        ₹{s.totalPaid.toLocaleString('en-IN')}
+                        {formatInrExact(s.totalPaid)}
                       </td>
                       <td className="py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        ₹{s.fairShare.toLocaleString('en-IN')}
+                        {formatInrExact(s.fairShare)}
                       </td>
                       <td
                         className={`py-2 text-right tabular-nums font-bold ${
@@ -1379,10 +1793,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                         }`}
                       >
                         {s.netBalance > 0
-                          ? `+₹${s.netBalance.toLocaleString('en-IN')}`
+                          ? `+${formatInrExact(s.netBalance)}`
                           : s.netBalance < 0
-                          ? `-₹${Math.abs(s.netBalance).toLocaleString('en-IN')}`
-                          : '₹0'}
+                          ? `-${formatInrExact(Math.abs(s.netBalance))}`
+                          : formatInrExact(0)}
                       </td>
                       <td className="py-2 text-center pr-1">
                         <span
@@ -1394,7 +1808,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                               : 'bg-slate-100 dark:bg-[#20202A] text-slate-600 dark:text-slate-400'
                           }`}
                         >
-                          {s.status}
+                          {s.status === 'Receive' ? 'Gets' : s.status === 'Pay' ? 'Owes' : 'Settled'}
                         </span>
                       </td>
                     </tr>
@@ -1469,7 +1883,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                           <>
                             <span>•</span>
                             <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              Your share: ₹{mySplit.shareAmount.toLocaleString('en-IN')}
+                              Your share: {formatInrExact(mySplit.shareAmount)}
                             </span>
                           </>
                         )}
@@ -1479,7 +1893,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                     <div className="text-right flex items-center gap-2 shrink-0">
                       <div>
                         <div className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                          ₹{exp.totalAmount.toLocaleString('en-IN')}
+                          {formatInrExact(exp.totalAmount)}
                         </div>
                         {mySplit ? (
                           <div
@@ -1527,13 +1941,13 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                                 )}
                               </div>
                               <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                                <span>Share: ₹{split.shareAmount.toLocaleString('en-IN')}</span>
+                                <span>Share: {formatInrExact(split.shareAmount)}</span>
                                 {split.paidAmount > 0 && split.status !== 'Settled' && (
                                   <>
                                     <span>•</span>
-                                    <span className="text-emerald-600 dark:text-emerald-400">Paid: ₹{split.paidAmount}</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400">Paid: {formatInrExact(split.paidAmount)}</span>
                                     <span>•</span>
-                                    <span className="text-rose-600 dark:text-rose-400">Rem: ₹{split.remainingAmount}</span>
+                                    <span className="text-rose-600 dark:text-rose-400">Rem: {formatInrExact(split.remainingAmount)}</span>
                                   </>
                                 )}
                               </div>
@@ -1669,7 +2083,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
                   {numAmount > 0 && selectedParticipants.length > 0 && (
                     <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-[#20202A] text-slate-700 dark:text-slate-300 text-xs font-medium">
-                      <span>₹{perPersonAmount} / person across {selectedParticipants.length}</span>
+                      <span>{formatInrExact(Number(perPersonAmount))} / person across {selectedParticipants.length}</span>
                     </div>
                   )}
                 </div>
@@ -1679,7 +2093,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1 pl-1">
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <span>Description</span>
+                        <span>What was it for?</span>
                         <span className="text-rose-500 font-bold">*</span>
                       </span>
                       {splitValidationErrors.title && (
@@ -1837,14 +2251,14 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               {/* Split Method Segmented Control */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Split Mode</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">How to split</span>
                 </div>
                 <div className="bg-slate-100 dark:bg-[#20202A] p-1 rounded-xl flex items-center gap-1">
                   {[
-                    { id: 'EQUAL' as SplitMethod, label: 'Equal (=)' },
-                    { id: 'EXACT' as SplitMethod, label: 'Exact (₹)' },
-                    { id: 'PERCENTAGE' as SplitMethod, label: 'Percent (%)' },
-                    { id: 'SHARES' as SplitMethod, label: 'Shares (x)' },
+                    { id: 'EQUAL' as SplitMethod, label: 'Equally (=)' },
+                    { id: 'EXACT' as SplitMethod, label: 'By amount (₹)' },
+                    { id: 'PERCENTAGE' as SplitMethod, label: 'By percentage (%)' },
+                    { id: 'SHARES' as SplitMethod, label: 'By shares (x)' },
                   ].map((sm) => {
                     const isActive = splitMethod === sm.id;
                     return (
@@ -1869,7 +2283,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   {splitMethod === 'EQUAL' ? (
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>Split equally among {selectedParticipants.length} roommates (₹{perPersonAmount} each)</span>
+                      <span>Split equally among {selectedParticipants.length} roommates ({formatInrExact(Number(perPersonAmount))} each)</span>
                     </p>
                   ) : (
                     <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/80 dark:border-[#27354A]">
@@ -1903,7 +2317,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Split Breakdown ({selectedParticipants.length} Members)
+                    Split between ({selectedParticipants.length} people)
                   </span>
                   <button
                     type="button"
@@ -1963,7 +2377,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                         {splitMethod === 'EQUAL' && (
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                              ₹{isChecked ? perPersonAmount : '0.00'}
+                              {isChecked ? formatInrExact(previewShare) : '₹0.00'}
                             </span>
                             <button
                               type="button"
@@ -2027,7 +2441,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                           <div className="flex items-center gap-2">
                             <div className="text-right">
                               <span className="text-[10px] text-slate-400 dark:text-slate-500 block tabular-nums">
-                                ₹{isChecked ? previewShare.toFixed(2) : '0.00'}
+                                {isChecked ? formatInrExact(previewShare) : '₹0.00'}
                               </span>
                             </div>
                             <div className="relative flex items-center">
@@ -2071,7 +2485,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                           <div className="flex items-center gap-2">
                             <div className="text-right">
                               <span className="text-[10px] text-slate-400 dark:text-slate-500 block tabular-nums">
-                                ₹{isChecked ? previewShare.toFixed(2) : '0.00'}
+                                {isChecked ? formatInrExact(previewShare) : '₹0.00'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-lg px-1.5 py-0.5">
@@ -2153,7 +2567,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               <div className="flex items-center justify-between mb-2 px-1 text-xs">
                 <span className="text-slate-500 dark:text-slate-400">Total to collect</span>
                 <span className="font-bold text-slate-900 dark:text-white tabular-nums">
-                  ₹{totalToCollect} <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">from {Math.max(0, selectedParticipants.length - 1)} people</span>
+                  {formatInrExact(Number(totalToCollect))} <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">from {Math.max(0, selectedParticipants.length - 1)} people</span>
                 </span>
               </div>
 
@@ -2180,8 +2594,8 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           setShowSettleModal(false);
           if (onCloseModals) onCloseModals();
         }}
-        title="Settle Roommate Debt"
-        subtitle="Record payment or clear balance"
+        title={settlePayeeId ? `Settle with ${allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}` : 'Settle Up'}
+        subtitle="Pay a roommate to clear your balance"
         icon={<QrCode className="w-4.5 h-4.5" />}
         maxHeight="90vh"
       >
@@ -2195,6 +2609,14 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         )}
 
         <form onSubmit={handleRecordSettlementSubmit} className="space-y-3.5 pb-4">
+              {settleError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/60 flex items-start gap-2 text-xs text-rose-800 dark:text-rose-200">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Settlement Rejected:</span> {settleError}
+                  </div>
+                </div>
+              )}
               {/* Payee Selection */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -2255,7 +2677,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                    <span>Settlement Amount in ₹</span>
+                    <span>Amount</span>
                     <span className="text-rose-500 font-bold">*</span>
                   </label>
                   {settleValidationErrors.amount && (
@@ -2288,7 +2710,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 {/* Settle Up 1-Tap Quick Amount Presets */}
                 <div className="pt-2">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block mb-1">
-                    Quick Settlement Presets:
+                    Quick Presets:
                   </span>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                     {[100, 200, 500, 1000, 2000].map((presetVal) => (
@@ -2308,7 +2730,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                             : 'bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-[#27354A]'
                         }`}
                       >
-                        ₹{presetVal}
+                        {formatInrExact(presetVal)}
                       </button>
                     ))}
                   </div>
@@ -2375,13 +2797,51 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 />
               </div>
 
-              <div className="pt-2">
+              {/* Settle Summary Box Before Confirming (Section 8 Requirement) */}
+              {settlePayeeId && Number(settleAmount) > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#1E1E2A] border border-slate-200 dark:border-[#27354A] space-y-2">
+                  <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Settlement Details
+                  </div>
+                  <div className="text-xs text-slate-700 dark:text-slate-300">
+                    Settle with <strong className="text-slate-900 dark:text-white">{allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}</strong>
+                  </div>
+                  <div className="flex items-baseline justify-between pt-1 border-t border-slate-200/80 dark:border-[#27354A]">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Amount</span>
+                    <span className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                      {formatInrExact(Number(settleAmount))}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSettleModal(false)}
+                  className="h-12 px-4 rounded-xl border border-slate-200 dark:border-[#27354A] text-slate-600 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-[#20202A] active:scale-98 transition-all"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all"
+                  disabled={isSubmittingSettle || !settlePayeeId || !settleAmount || Number(settleAmount) <= 0}
+                  className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all"
                 >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>Record & Clear Balance</span>
+                  {isSubmittingSettle ? (
+                    <>
+                      <Bolt className="w-4 h-4 animate-spin" />
+                      <span>Verifying with V2...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 stroke-[2.5]" />
+                      <span>Confirm payment</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -2493,6 +2953,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       {/* 1-Tap UPI Intent Switcher Bottom Sheet */}
       {activeRoom && (
         <UpiIntentPayModal
+          key={`upi-modal-${settlePayeeId}-${settleAmount}-${showUpiPayModal}`}
           isOpen={showUpiPayModal}
           onClose={() => {
             setShowUpiPayModal(false);
@@ -2544,7 +3005,8 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           onStartSettle={(payeeId, amt) => {
             setSettlePayeeId(payeeId);
             setSettleAmount(String(amt));
-            setShowSettleModal(true);
+            setShowLeaveModal(false);
+            setShowUpiPayModal(true);
           }}
           onNudgeRoommates={(text) => {
             const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -2704,7 +3166,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
                 <div className="text-right">
                   <div className="text-xs font-bold text-slate-900 dark:text-white tabular-nums">
-                    ₹{item.total.toLocaleString('en-IN')}
+                    {formatInrExact(item.total)}
                   </div>
                   <div className="text-[10px] text-slate-400 dark:text-slate-500">Total</div>
                 </div>
@@ -2722,6 +3184,27 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         monthLabel={`${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`}
         onExport={handleRoomExport}
       />
+
+      {/* Why Balance Explanation Bottom Sheet */}
+      {activeRoom && (
+        <WhyBalanceBottomSheet
+          isOpen={Boolean(whySheetTarget)}
+          onClose={() => setWhySheetTarget(null)}
+          currentUser={currentUser}
+          activeRoom={activeRoom}
+          targetPerson={
+            whySheetTarget?.personId
+              ? allUsers.find((u) => u.id === whySheetTarget.personId) || null
+              : null
+          }
+          targetType={whySheetTarget?.type || 'GENERAL'}
+          amount={whySheetTarget?.amount || 0}
+          sharedExpenses={sharedExpenses}
+          expenseSplits={expenseSplits}
+          settlementPayments={settlementPayments}
+          allUsers={allUsers}
+        />
+      )}
     </div>
   );
 };

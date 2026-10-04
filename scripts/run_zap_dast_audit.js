@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
-const ZAP_API_BASE = 'http://localhost:8080';
+const ZAP_API_BASE = 'http://127.0.0.1:8080';
 const TARGET_URL = 'http://host.docker.internal:4173/';
 const SCRATCH_DIR = path.resolve('scratch');
 

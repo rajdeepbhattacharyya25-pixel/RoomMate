@@ -149,6 +149,109 @@ describe('Google OAuth & Session Synchronization Test Suite', () => {
     expect(dbUser?.upiId).toBe(existingUpi);
   });
 
+  describe('Google Profile Picture (DP) Synchronization & Fallback Rules', () => {
+    it('automatically collects avatar from user_metadata.picture when avatar_url is omitted', async () => {
+      const fakeOAuthUser = {
+        id: 'usr-google-picture-only',
+        email: 'photo.user@gmail.com',
+        user_metadata: {
+          full_name: 'Photo User',
+          picture: 'https://lh3.googleusercontent.com/p/picture-123.jpg',
+        },
+      };
+
+      const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+      expect(syncResult.user.avatarUrl).toBe('https://lh3.googleusercontent.com/p/picture-123.jpg');
+    });
+
+    it('automatically collects avatar from identities array identity_data', async () => {
+      const fakeOAuthUser = {
+        id: 'usr-google-identity-only',
+        email: 'identity.user@gmail.com',
+        user_metadata: {
+          full_name: 'Identity User',
+        },
+        identities: [
+          {
+            identity_data: {
+              avatar_url: 'https://lh3.googleusercontent.com/a/identity-dp.png',
+            },
+          },
+        ],
+      };
+
+      const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+      expect(syncResult.user.avatarUrl).toBe('https://lh3.googleusercontent.com/a/identity-dp.png');
+    });
+
+    it('respects user custom avatar upload over incoming Google DP', async () => {
+      const userId = 'usr-custom-avatar-hero';
+      const customUrl = 'https://i.ibb.co/custom-uploaded-photo.png';
+
+      // Seed local user with custom avatar
+      db.upsertUser({
+        id: userId,
+        name: 'Custom Hero',
+        email: 'custom.hero@gmail.com',
+        avatarUrl: customUrl,
+        role: 'STUDENT',
+        isSuspended: false,
+        onboardingCompleted: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Mark that user explicitly customized their avatar
+      globalThis.localStorage.setItem(`roommate_avatar_custom_${userId}`, 'custom');
+
+      const fakeOAuthUser = {
+        id: userId,
+        email: 'custom.hero@gmail.com',
+        user_metadata: {
+          full_name: 'Custom Hero',
+          avatar_url: 'https://lh3.googleusercontent.com/a/google-avatar-to-ignore',
+        },
+      };
+
+      const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+      // User's custom photo must be preserved!
+      expect(syncResult.user.avatarUrl).toBe(customUrl);
+    });
+
+    it('respects user decision to remove photo (leaves avatarUrl undefined for Instagram fallback)', async () => {
+      const userId = 'usr-avatar-removed-user';
+
+      // Mark that user explicitly removed their avatar
+      globalThis.localStorage.setItem(`roommate_avatar_custom_${userId}`, 'removed');
+
+      const fakeOAuthUser = {
+        id: userId,
+        email: 'no.photo@gmail.com',
+        user_metadata: {
+          full_name: 'No Photo',
+          avatar_url: 'https://lh3.googleusercontent.com/a/google-avatar-to-suppress',
+        },
+      };
+
+      const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+      // Avatar must remain undefined so that the Instagram default silhouette fallback is used
+      expect(syncResult.user.avatarUrl).toBeUndefined();
+    });
+
+    it('leaves avatarUrl undefined when Google account has no photo', async () => {
+      const fakeOAuthUser = {
+        id: 'usr-google-no-photo',
+        email: 'blank.dp@gmail.com',
+        user_metadata: {
+          full_name: 'Blank DP',
+        },
+      };
+
+      const syncResult = await syncOAuthSessionToProfile(fakeOAuthUser);
+      expect(syncResult.user.avatarUrl).toBeUndefined();
+    });
+  });
+
   describe('OAuth Redirect URL & Hash Parser', () => {
     it('returns error on empty or invalid input in redeemOAuthUrlOrHash', async () => {
       const res = await redeemOAuthUrlOrHash('');

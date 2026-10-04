@@ -237,6 +237,7 @@ export function AppContent() {
   // Sync state whenever db updates
   const refreshState = useCallback(() => {
     const updated = db.getState();
+    setPlatformSettings(updated.settings || db.getPlatformSettings());
     setDbState({
       ...updated,
       personalExpenses: [...(updated.personalExpenses || [])],
@@ -772,6 +773,22 @@ export function AppContent() {
     };
   }, []);
 
+  // Listen to local platform settings updates dispatched across console and tabs
+  useEffect(() => {
+    const handleSettingsEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<PlatformSettings>;
+      if (customEvent.detail) {
+        setPlatformSettings((prev) => ({ ...prev, ...customEvent.detail }));
+      } else {
+        setPlatformSettings(db.getPlatformSettings());
+      }
+    };
+    window.addEventListener('roommate_platform_settings_updated', handleSettingsEvent);
+    return () => {
+      window.removeEventListener('roommate_platform_settings_updated', handleSettingsEvent);
+    };
+  }, []);
+
   // If switched user persona changes
   const handleSwitchUser = (user: User) => {
     setCurrentUser(user);
@@ -949,68 +966,58 @@ export function AppContent() {
     notes?: string;
   }) => {
     const payerId = data.payerId || currentUser.id;
-    // 1. Instant optimistic local write (0ms latency)
-    const localSettlement = db.recordSettlementPayment(payerId, {
-      roomId: data.roomId,
-      payerId,
-      payeeId: data.payeeId,
-      amount: data.amount,
-      paymentMethod: data.paymentMethod,
-      notes: data.notes,
-    });
-    hapticSuccess();
-    refreshState();
+    try {
+      const committedSettlement = await recordSettlementCloud({
+        roomId: data.roomId,
+        payerId,
+        payeeId: data.payeeId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        notes: data.notes,
+      });
 
-    analytics.trackSettlementRecorded({ paymentMethod: data.paymentMethod });
+      hapticSuccess();
+      refreshState();
+      analytics.trackSettlementRecorded({ paymentMethod: data.paymentMethod });
 
-    // 2. Background Cloud Sync & Notifications (non-blocking)
-    (async () => {
-      try {
-        await recordSettlementCloud({
-          id: localSettlement.id,
-          roomId: data.roomId,
-          payerId,
-          payeeId: data.payeeId,
-          amount: data.amount,
-          paymentMethod: data.paymentMethod,
-          notes: data.notes,
+      const recipient = data.payeeId !== currentUser.id ? data.payeeId : payerId;
+      if (recipient && recipient !== currentUser.id) {
+        sendPushNotificationToMembers({
+          recipientUserIds: [recipient],
+          title: `Settlement: ₹${data.amount.toFixed(2)}`,
+          body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
+          channelId: SETTLEMENTS_CHANNEL_ID,
+          actorAvatar: currentUser.avatarUrl,
+          data: { roomId: data.roomId, type: 'settlement', actorAvatar: currentUser.avatarUrl || '' },
         });
 
-        const recipient = data.payeeId !== currentUser.id ? data.payeeId : payerId;
-        if (recipient && recipient !== currentUser.id) {
-          sendPushNotificationToMembers({
-            recipientUserIds: [recipient],
-            title: `Settlement: ₹${data.amount.toFixed(2)}`,
-            body: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}.`,
-            channelId: SETTLEMENTS_CHANNEL_ID,
-            actorAvatar: currentUser.avatarUrl,
-            data: { roomId: data.roomId, type: 'settlement', actorAvatar: currentUser.avatarUrl || '' },
-          });
-
-          await createInAppNotificationCloud({
-            userId: recipient,
-            roomId: data.roomId,
-            type: 'PARTIAL_PAYMENT_RECEIVED',
-            title: `Settlement Received: ₹${data.amount.toFixed(2)}`,
-            message: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}. Balances updated.`,
-            priority: 'MEDIUM',
-            isRead: false,
-            actionType: 'VIEW_DETAILS',
-            actionTarget: data.roomId,
-            metadata: {
-              amount: data.amount,
-              payerName: currentUser.name,
-              payerId: currentUser.id,
-              roomName: activeRoom?.name,
-            },
-            eventId: `settle_${localSettlement.id}_${recipient}`,
-          });
-          refreshState();
-        }
-      } catch (err) {
-        console.warn('Background sync for settlement failed:', err);
+        await createInAppNotificationCloud({
+          userId: recipient,
+          roomId: data.roomId,
+          type: 'PARTIAL_PAYMENT_RECEIVED',
+          title: `Settlement Received: ₹${data.amount.toFixed(2)}`,
+          message: `${currentUser.name} settled ₹${data.amount.toFixed(2)} via ${data.paymentMethod}. Balances updated.`,
+          priority: 'MEDIUM',
+          isRead: false,
+          actionType: 'VIEW_DETAILS',
+          actionTarget: data.roomId,
+          metadata: {
+            amount: data.amount,
+            payerName: currentUser.name,
+            payerId: currentUser.id,
+            roomName: activeRoom?.name,
+          },
+          eventId: `settle_${committedSettlement.id}_${recipient}`,
+        });
+        refreshState();
       }
-    })();
+    } catch (err: unknown) {
+      hapticWarning();
+      const message = err instanceof Error ? err.message : 'Settlement failed';
+      console.error('[App] handleRecordSettlement failed:', message);
+      alert(`Settlement Failed: ${message}`);
+      throw err;
+    }
   };
 
   const handleLeaveRoom = async (roomId: string) => {
@@ -1697,10 +1704,10 @@ export function AppContent() {
               Sign Out / Switch Account
             </button>
             <a
-              href="mailto:support@roommate.app?subject=Account%20Suspension%20Appeal"
+              href={`mailto:${platformSettings?.supportEmail || 'support@roommate.app'}?subject=Account%20Suspension%20Appeal`}
               className="text-xs text-indigo-400 hover:underline pt-1"
             >
-              Contact Support Desk
+              Contact Support Desk ({platformSettings?.supportEmail || 'support@roommate.app'})
             </a>
           </div>
         </div>
@@ -1760,6 +1767,7 @@ export function AppContent() {
         <MobileLayout
           currentUser={currentUser}
           allUsers={dbState.users}
+          platformSettings={platformSettings}
           onSwitchUser={handleSwitchUser}
           activeRoom={activeRoom}
           rooms={userRooms}

@@ -10,8 +10,12 @@ import {
   SplitMethod,
 } from '../../types';
 
+// Re-export V2 Canonical Financial Ledger Engine (Phase 3)
+export * from './v2';
+
 /**
  * High-precision rounding to 2 decimal places to avoid floating point anomalies.
+ * @deprecated Use integer Paise operations in `./v2` for authoritative financial calculations.
  */
 export function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -20,6 +24,8 @@ export function round2(num: number): number {
 /**
  * Calculates point-in-time splits for a shared expense across participating users.
  * Automatically distributes remainder cents deterministically to ensure sum(splits) === totalAmount.
+ * @deprecated Legacy client calculation. For canonical V2 allocations, use `calculateEqualSplitsV2`,
+ * `validateAndCalculateExactSplitsV2`, etc. from `./v2`.
  */
 export function calculateSplits(
   totalAmount: number,
@@ -100,6 +106,9 @@ export function calculateSplits(
  *
  * Positive NetBalance: B owes A
  * Negative NetBalance: A owes B
+ * 
+ * @deprecated Legacy pairwise calculation. Produces O(N^2) pairwise debts and circular loops.
+ * Authoritative financial calculation is provided by V2 Multilateral Min-Cash-Flow engine (`calculateRoomFinancialSummaryV2`).
  */
 export function calculateRoomPairwiseDebts(
   expenses: SharedExpense[],
@@ -187,8 +196,13 @@ export function calculateRoomPairwiseDebts(
   return pairwiseResults;
 }
 
+// Export Canonical Financial Integration Service (Phase 4)
+export * from './financialIntegrationService';
+import { calculateCanonicalRoomSummary } from './financialIntegrationService';
+
 /**
  * Calculates the complete financial summary for a specific room from a user's perspective.
+ * Canonical V2 Engine: Powered by multilateral net positions and min-cash-flow simplification.
  */
 export function calculateRoomSummary(
   roomId: string,
@@ -198,44 +212,14 @@ export function calculateRoomSummary(
   settlements: SettlementPayment[],
   users: User[]
 ): RoomFinancialSummary {
-  const roomExpenses = expenses.filter((e) => e.roomId === roomId && !e.isDeleted);
-  const roomExpenseIds = new Set(roomExpenses.map((e) => e.id));
-  const roomSplits = splits.filter((s) => roomExpenseIds.has(s.sharedExpenseId));
-  const roomSettlements = settlements.filter((s) => s.roomId === roomId);
-
-  const totalRoomExpenses = round2(roomExpenses.reduce((sum, e) => sum + e.totalAmount, 0));
-
-  // My total spending paid out-of-pocket for the room
-  const myTotalPaid = round2(
-    roomExpenses.filter((e) => e.paidBy === currentUserId).reduce((sum, e) => sum + e.totalAmount, 0)
-  );
-
-  // My assigned share obligations
-  const myTotalShare = round2(
-    roomSplits.filter((s) => s.userId === currentUserId).reduce((sum, s) => sum + s.shareAmount, 0)
-  );
-
-  const pairwiseDebts = calculateRoomPairwiseDebts(roomExpenses, roomSplits, roomSettlements, users);
-
-  // Calculate my personal net balance in this room
-  // Positive: room owes me | Negative: I owe room
-  let myNetBalance = 0;
-  for (const debt of pairwiseDebts) {
-    if (debt.userAId === currentUserId) {
-      myNetBalance = round2(myNetBalance + debt.netAmount);
-    } else if (debt.userBId === currentUserId) {
-      myNetBalance = round2(myNetBalance - debt.netAmount);
-    }
-  }
-
-  return {
+  return calculateCanonicalRoomSummary(
     roomId,
-    totalRoomExpenses,
-    myTotalPaid,
-    myTotalShare,
-    myNetBalance,
-    pairwiseDebts,
-  };
+    currentUserId,
+    expenses,
+    splits,
+    settlements,
+    users
+  );
 }
 
 /**

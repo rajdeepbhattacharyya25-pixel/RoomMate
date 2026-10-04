@@ -20,9 +20,9 @@ export function generateUpiDeepLink(options: {
   am: number; // Amount in INR
   tn: string; // Transaction note
 }): string {
-  const cleanUpi = options.pa.trim();
+  const cleanUpi = encodeURIComponent(options.pa.trim()).replace(/%40/g, '@');
   const cleanName = encodeURIComponent(options.pn.trim());
-  const cleanAmount = options.am.toFixed(2);
+  const cleanAmount = (isNaN(options.am) || options.am <= 0) ? '0.00' : options.am.toFixed(2);
   const cleanNote = encodeURIComponent(options.tn.trim().replace(/\s+/g, '_'));
 
   return `upi://pay?pa=${cleanUpi}&pn=${cleanName}&am=${cleanAmount}&cu=INR&tn=${cleanNote}`;

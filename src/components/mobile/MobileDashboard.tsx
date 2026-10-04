@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, Room, SharedExpense, PersonalExpense, RoomMember, SettlementPayment, ExpenseSplit, InAppNotification } from '../../types';
+import { DbFinancialSummaryV2 } from '../../lib/ledger/v2';
 import { calculateRoomSummary } from '../../lib/ledger/engine';
+import { financialIntegrationService } from '../../lib/ledger/financialIntegrationService';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -23,6 +25,7 @@ import {
 import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
 import { NotificationBell } from './NotificationBell';
 import { NotificationCenterDrawer } from './NotificationCenterDrawer';
+import { UserAvatar } from '../common/UserAvatar';
 import { getUserBudget } from '../../lib/storage/budgetService';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { hapticImpact, hapticSelection } from '../../lib/native/haptics';
@@ -97,17 +100,46 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     items: Array<{ title: string; shareAmount: number }>;
   } | null>(null);
 
-  // Calculate room balances
-  const summary = activeRoom
-    ? calculateRoomSummary(
-        activeRoom.id,
+  // Authoritative V2 financial summary from PostgreSQL when online
+  const [dbSummary, setDbSummary] = useState<DbFinancialSummaryV2 | null>(null);
+
+  useEffect(() => {
+    if (!activeRoom?.id) {
+      setDbSummary(null);
+      return;
+    }
+    let isSubscribed = true;
+    financialIntegrationService.fetchRoomFinancialSummaryV2(activeRoom.id)
+      .then((data) => {
+        if (isSubscribed && data) {
+          setDbSummary(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeRoom?.id, sharedExpenses, settlementPayments]);
+
+  // Calculate room balances — consumes canonical V2 database summary when online
+  const summary = useMemo(() => {
+    if (!activeRoom) return null;
+    if (dbSummary && dbSummary.room_id === activeRoom.id) {
+      return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
+        dbSummary,
         currentUser.id,
-        sharedExpenses,
-        expenseSplits,
-        settlementPayments,
         allUsers
-      )
-    : null;
+      );
+    }
+    return calculateRoomSummary(
+      activeRoom.id,
+      currentUser.id,
+      sharedExpenses,
+      expenseSplits,
+      settlementPayments,
+      allUsers
+    );
+  }, [activeRoom, dbSummary, currentUser.id, sharedExpenses, expenseSplits, settlementPayments, allUsers]);
 
   const netBalance = summary ? summary.myNetBalance : 0;
   const isPositive = netBalance >= 0;
@@ -190,9 +222,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const weeklyBudgetPercentage = Math.min(100, Math.round((thisWeekPersonal / weeklyAllowance) * 100));
 
   const formatInr = (val: number) => {
-    const rounded = Math.round(val * 100) / 100;
-    return rounded.toLocaleString('en-IN', {
-      minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
+    const abs = Math.abs(val);
+    return abs.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   };
@@ -318,9 +350,14 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             />
 
             {/* Profile Avatar Circle */}
-            <div className="w-9 h-9 rounded-full border border-slate-200 dark:border-[#27354A] bg-white dark:bg-[#181820] flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-sm shadow-xs overflow-hidden">
-              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
-            </div>
+            <UserAvatar
+              user={currentUser}
+              size="md"
+              roundedClassName="rounded-full"
+              showBorder={true}
+              borderColorClassName="border-slate-200 dark:border-[#27354A]"
+              className="shadow-xs"
+            />
           </div>
         </div>
 
@@ -367,8 +404,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
       {/* Net Balance Hero Card (Apple Wallet / Splitwise Style) */}
       <section className="bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] rounded-2xl p-4.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] dark:shadow-none">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {netBalance >= 0 ? 'Overall, you are owed' : 'Overall, you owe'}
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            {netBalance < 0 ? 'You owe' : netBalance > 0 ? 'You get' : 'Room balance'}
           </span>
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="w-4 h-4" />
@@ -376,23 +413,27 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         </div>
 
         <div className="mt-1 flex items-baseline">
-          <span className={`text-3xl font-extrabold tracking-tight tabular-nums ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {netBalance === 0
-              ? '₹0'
+          <span className={`text-3xl font-extrabold tracking-tight tabular-nums ${
+            netBalance === 0
+              ? 'text-emerald-600 dark:text-emerald-400'
               : isPositive
-              ? `+₹${formatInr(Math.abs(netBalance))}`
-              : `-₹${formatInr(Math.abs(netBalance))}`}
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-rose-600 dark:text-rose-400'
+          }`}>
+            {netBalance === 0
+              ? "All settled 🎉"
+              : `₹${formatInr(Math.abs(netBalance))}`}
           </span>
         </div>
 
-        <div className="mt-1 flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
+        <div className="mt-1 flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs">
           <span>
             {owedToMe > 0
               ? `${roommateBalances.filter((r) => r.balance > 0).length} roommate(s) owe you`
               : iOwe > 0
-              ? `You owe ${roommateBalances.filter((r) => r.balance < 0).length} roommate(s)`
+              ? `to ${roommateBalances.filter((r) => r.balance < 0).length} roommate(s)`
               : activeRoom
-              ? 'You are all settled up with your roommates!'
+              ? "You're all settled up with your roommates!"
               : 'Create or join a room to start tracking splits.'}
           </span>
         </div>
@@ -404,7 +445,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               <ArrowDownLeft className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-[10px] text-slate-400 dark:text-slate-500">Owed to you</div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">You get</div>
               <div className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 ₹{formatInr(owedToMe)}
               </div>
@@ -412,11 +453,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <ArrowUpRight className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-[10px] text-slate-400 dark:text-slate-500">You owe others</div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">You owe</div>
               <div className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 ₹{formatInr(iOwe)}
               </div>
@@ -491,16 +532,10 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               </button>
             </div>
           ) : roommateBalances.length > 0 ? (
-            roommateBalances.map((rm, idx) => {
+            roommateBalances.map((rm) => {
               const owesMe = rm.balance > 0;
               const iOweHim = rm.balance < 0;
-              const avatarColors = [
-                'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300',
-                'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300',
-                'bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300',
-                'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300',
-              ];
-              const colorClass = avatarColors[idx % avatarColors.length];
+              const roommateUser = allUsers.find((u) => u.id === rm.id);
 
               return (
                 <div
@@ -508,11 +543,14 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                   className="flex items-center justify-between p-3.5 hover:bg-slate-50/80 dark:hover:bg-[#20202A]/60 transition-colors"
                 >
                   <div className="flex items-center space-x-3">
-                    <div
-                      className={`w-9 h-9 rounded-full ${colorClass} flex items-center justify-center font-bold text-xs border border-black/5 dark:border-white/10`}
-                    >
-                      {rm.name.charAt(0).toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      src={roommateUser?.avatarUrl}
+                      name={rm.name}
+                      size="md"
+                      roundedClassName="rounded-full"
+                      showBorder={true}
+                      borderColorClassName="border-black/5 dark:border-white/10"
+                    />
                     <div className="flex flex-col">
                       <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">{rm.name}</span>
                       <span className="text-[11px] font-medium">
@@ -521,7 +559,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                         ) : iOweHim ? (
                           <span className="text-rose-600 dark:text-rose-400">you owe ₹{formatInr(Math.abs(rm.balance))}</span>
                         ) : (
-                          <span className="text-slate-400 dark:text-slate-500">settled up</span>
+                          <span className="text-slate-400 dark:text-slate-500">All settled 🎉</span>
                         )}
                       </span>
                     </div>

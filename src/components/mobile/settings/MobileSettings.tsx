@@ -12,7 +12,7 @@ import {
   Check,
   Settings as SettingsIcon,
 } from 'lucide-react';
-import { User, UserSubscription } from '../../../types';
+import { User, UserSubscription, PlatformSettings } from '../../../types';
 import { hapticSelection } from '../../../lib/native/haptics';
 import { registerBackButtonHandler } from '../../../lib/native/backButton';
 
@@ -59,6 +59,7 @@ const CATEGORIES: CategoryMeta[] = [
 export interface MobileSettingsProps {
   currentUser: User;
   allUsers?: User[];
+  platformSettings?: PlatformSettings;
   onSwitchUser?: (user: User) => void;
   subscription?: UserSubscription;
   onUpgradePlan?: (planCode: 'PRO' | 'CAMPUS_MAX') => void;
@@ -72,6 +73,7 @@ export interface MobileSettingsProps {
 export const MobileSettings: React.FC<MobileSettingsProps> = ({
   currentUser,
   allUsers = [],
+  platformSettings,
   onSwitchUser,
   subscription,
   onUpgradePlan,
@@ -241,6 +243,7 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
           {activeCategory === 'help-support' && (
             <HelpSupportTab
               currentUser={currentUser}
+              platformSettings={platformSettings}
               onShowToast={showToast}
             />
           )}
@@ -249,6 +252,7 @@ export const MobileSettings: React.FC<MobileSettingsProps> = ({
             <AboutTab
               currentUser={currentUser}
               allUsers={allUsers}
+              platformSettings={platformSettings}
               onSwitchUser={onSwitchUser}
               onOpenSecurityAudit={onOpenSecurityAudit}
               onOpenSupabaseModal={onOpenSupabaseModal}

@@ -14,6 +14,7 @@ import {
   InvitePolicy,
   RoomJoinRequest,
   InAppNotification,
+  PlatformSettings,
 } from '../../types';
 import { MobileBottomNav, MobileTabType } from './MobileBottomNav';
 import { MobileDashboard } from './MobileDashboard';
@@ -115,11 +116,13 @@ interface MobileLayoutProps {
   onClearReadNotifications?: (ids?: string[]) => void;
   pendingJoinInviteCode?: string | null;
   onClearPendingJoinInviteCode?: () => void;
+  platformSettings?: PlatformSettings;
 }
 
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
   currentUser,
   allUsers,
+  platformSettings,
   onSwitchUser,
   activeRoom,
   rooms,
@@ -420,6 +423,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
             <MobileProfile
               currentUser={currentUser}
               allUsers={allUsers}
+              platformSettings={platformSettings}
               onSwitchUser={onSwitchUser}
               subscription={currentSubscription}
               onUpgradePlan={onUpgradePlan}

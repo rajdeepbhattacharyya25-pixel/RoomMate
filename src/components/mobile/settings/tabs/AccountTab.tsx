@@ -13,10 +13,14 @@ import {
   Mail,
   AtSign,
   Smartphone,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { User } from '../../../../types';
 import { pickImageFile, uploadImage } from '../../../../lib/services/imageUploadService';
 import { updateProfileAvatar, updateUpiQrUrl, updateProfileUpiId } from '../../../../lib/storage/cloudStorageAdapter';
+import { supabase, isSupabaseConfigured } from '../../../../lib/supabase/client';
+import { UserAvatar } from '../../../common/UserAvatar';
 import { decodeQrFromImage } from '../../../../lib/services/qrDecoder';
 import { extractUpiIdFromQrPayload } from '../../../../lib/payments/upiExtraction';
 import { hapticSuccess, hapticImpact, hapticWarning } from '../../../../lib/native/haptics';
@@ -49,12 +53,69 @@ export const AccountTab: React.FC<AccountTabProps> = ({
   const [showQrPreview, setShowQrPreview] = useState(false);
   const [showFullQr, setShowFullQr] = useState(false);
 
+  const [showPhotoActionSheet, setShowPhotoActionSheet] = useState(false);
+  const [googlePhotoAvailable, setGooglePhotoAvailable] = useState<string | null>(null);
+
   // Avatar & QR local overrides
   const [avatarUrlOverride, setAvatarUrlOverride] = useState<string | null>(null);
   const [upiQrUrlOverride, setUpiQrUrlOverride] = useState<string | null | undefined>(undefined);
 
   const effectiveAvatar = avatarUrlOverride !== null ? avatarUrlOverride : currentUser.avatarUrl;
   const effectiveQr = upiQrUrlOverride !== undefined ? (upiQrUrlOverride || undefined) : currentUser.upiQrUrl;
+
+  // Auto-collect Google profile photo if available and user has not explicitly customized/removed it
+  useEffect(() => {
+    async function checkGoogleAvatar() {
+      if (!isSupabaseConfigured) return;
+      const customPref = typeof localStorage !== 'undefined'
+        ? localStorage.getItem(`roommate_avatar_custom_${currentUser.id}`)
+        : null;
+
+      if (customPref === 'removed' || customPref === 'custom') return;
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const googlePhoto =
+          (session?.user?.user_metadata?.avatar_url as string) ||
+          (session?.user?.user_metadata?.picture as string) ||
+          (session?.user?.user_metadata?.photo_url as string) ||
+          (session?.user?.identities?.[0]?.identity_data?.avatar_url as string) ||
+          (session?.user?.identities?.[0]?.identity_data?.picture as string);
+
+        if (googlePhoto) {
+          setGooglePhotoAvailable(googlePhoto);
+          if (googlePhoto !== currentUser.avatarUrl) {
+            await updateProfileAvatar(currentUser.id, googlePhoto);
+            setAvatarUrlOverride(googlePhoto);
+            if (onProfileUpdated) onProfileUpdated();
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to auto-fetch Google avatar:', err);
+      }
+    }
+
+    checkGoogleAvatar();
+  }, [currentUser.id, currentUser.avatarUrl, onProfileUpdated]);
+
+  const handleOpenPhotoActions = async () => {
+    if (isSupabaseConfigured) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const googlePhoto =
+          (session?.user?.user_metadata?.avatar_url as string) ||
+          (session?.user?.user_metadata?.picture as string) ||
+          (session?.user?.user_metadata?.photo_url as string) ||
+          (session?.user?.identities?.[0]?.identity_data?.avatar_url as string) ||
+          (session?.user?.identities?.[0]?.identity_data?.picture as string) ||
+          null;
+        setGooglePhotoAvailable(googlePhoto);
+      } catch {
+        setGooglePhotoAvailable(null);
+      }
+    }
+    setShowPhotoActionSheet(true);
+  };
 
   // Upload states
   const [isUploadingDp, setIsUploadingDp] = useState(false);
@@ -90,6 +151,7 @@ export const AccountTab: React.FC<AccountTabProps> = ({
 
   // Profile DP upload
   const handleUploadDp = async () => {
+    setShowPhotoActionSheet(false);
     try {
       const file = await pickImageFile('image/*');
       if (!file) return;
@@ -98,6 +160,9 @@ export const AccountTab: React.FC<AccountTabProps> = ({
       const result = await uploadImage(file, `${currentUser.name}_avatar`);
 
       if (result.success && result.url) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`roommate_avatar_custom_${currentUser.id}`, 'custom');
+        }
         await updateProfileAvatar(currentUser.id, result.url);
         setAvatarUrlOverride(result.url);
         await hapticSuccess();
@@ -109,6 +174,47 @@ export const AccountTab: React.FC<AccountTabProps> = ({
       }
     } catch {
       onShowToast('Error selecting photo');
+    } finally {
+      setIsUploadingDp(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setShowPhotoActionSheet(false);
+    setIsUploadingDp(true);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`roommate_avatar_custom_${currentUser.id}`, 'removed');
+      }
+      await updateProfileAvatar(currentUser.id, null);
+      setAvatarUrlOverride('');
+      await hapticSuccess();
+      playSuccessSound();
+      onShowToast('Profile photo removed. Using default avatar.');
+      if (onProfileUpdated) onProfileUpdated();
+    } catch {
+      onShowToast('Failed to remove photo.');
+    } finally {
+      setIsUploadingDp(false);
+    }
+  };
+
+  const handleApplyGooglePhoto = async () => {
+    if (!googlePhotoAvailable) return;
+    setShowPhotoActionSheet(false);
+    setIsUploadingDp(true);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(`roommate_avatar_custom_${currentUser.id}`);
+      }
+      await updateProfileAvatar(currentUser.id, googlePhotoAvailable);
+      setAvatarUrlOverride(googlePhotoAvailable);
+      await hapticSuccess();
+      playSuccessSound();
+      onShowToast('Google profile photo applied!');
+      if (onProfileUpdated) onProfileUpdated();
+    } catch {
+      onShowToast('Failed to apply Google photo.');
     } finally {
       setIsUploadingDp(false);
     }
@@ -221,21 +327,26 @@ export const AccountTab: React.FC<AccountTabProps> = ({
         <div className="flex items-center space-x-3.5">
           {/* Avatar with Camera upload button */}
           <div className="relative group shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-2xl shadow-xs overflow-hidden border-2 border-white dark:border-[#12121A]">
-              {effectiveAvatar ? (
-                <img
-                  src={effectiveAvatar}
-                  alt={currentUser.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                currentUser.name.charAt(0).toUpperCase()
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={handleOpenPhotoActions}
+              aria-label="Change profile photo"
+              className="block rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 active:scale-98 transition-transform"
+            >
+              <UserAvatar
+                src={effectiveAvatar}
+                name={currentUser.name}
+                size="xl"
+                roundedClassName="rounded-2xl"
+                showBorder={true}
+                borderColorClassName="border-white dark:border-[#12121A]"
+                className="shadow-xs"
+              />
+            </button>
 
             <button
               type="button"
-              onClick={handleUploadDp}
+              onClick={handleOpenPhotoActions}
               disabled={isUploadingDp}
               aria-label="Change profile photo"
               className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md border-2 border-white dark:border-[#12121A] hover:bg-indigo-700 active:scale-95 transition-all"
@@ -535,6 +646,101 @@ export const AccountTab: React.FC<AccountTabProps> = ({
         qrUrl={effectiveQr}
         onClose={() => setShowFullQr(false)}
       />
+
+      {/* Profile Photo Action Sheet Modal */}
+      {showPhotoActionSheet && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="photo-actions-title"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            className="w-full sm:max-w-sm bg-white dark:bg-[#181820] rounded-t-3xl sm:rounded-2xl border border-slate-200 dark:border-[#27354A] p-5 shadow-2xl space-y-4 animate-in slide-in-from-bottom-4 duration-200"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 id="photo-actions-title" className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Profile Photo
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Manage how you appear to roommates
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhotoActionSheet(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-[#20202A] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Current Avatar Preview */}
+            <div className="flex items-center justify-center py-2">
+              <UserAvatar
+                src={effectiveAvatar}
+                name={currentUser.name}
+                size="2xl"
+                roundedClassName="rounded-3xl"
+                showBorder={true}
+                borderColorClassName="border-slate-200 dark:border-[#27354A]"
+                className="shadow-md"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={handleUploadDp}
+                disabled={isUploadingDp}
+                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload New Photo</span>
+              </button>
+
+              {googlePhotoAvailable && googlePhotoAvailable !== effectiveAvatar && (
+                <button
+                  type="button"
+                  onClick={handleApplyGooglePhoto}
+                  disabled={isUploadingDp}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#20202A] dark:hover:bg-[#272738] active:scale-98 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-200 dark:border-[#27354A] transition-all"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>Use Google Account Photo</span>
+                </button>
+              )}
+
+              {effectiveAvatar && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={isUploadingDp}
+                  className="w-full py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 active:scale-98 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center gap-2 border border-rose-200/80 dark:border-rose-900/40 transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Remove Photo (Use Default Avatar)</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowPhotoActionSheet(false)}
+                className="w-full py-2 px-4 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

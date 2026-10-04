@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
   AlertCircle,
   Mail,
+  Phone,
   MessageSquare,
 } from 'lucide-react';
-import { User } from '../../../../types';
+import { User, PlatformSettings } from '../../../../types';
 import { hapticSelection, hapticImpact } from '../../../../lib/native/haptics';
 import { ShakeBugReportModal } from '../../ShakeBugReportModal';
+import { db } from '../../../../lib/storage/mockStorage';
 
 interface HelpSupportTabProps {
   currentUser: User;
+  platformSettings?: PlatformSettings;
   onShowToast: (msg: string) => void;
 }
 
@@ -47,10 +50,39 @@ const FAQS: FaqItem[] = [
 
 export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
   currentUser,
+  platformSettings,
   onShowToast,
 }) => {
   const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [liveSettings, setLiveSettings] = useState<PlatformSettings>(
+    platformSettings || db.getPlatformSettings()
+  );
+
+  useEffect(() => {
+    if (platformSettings) {
+      setLiveSettings(platformSettings);
+    }
+  }, [platformSettings]);
+
+  useEffect(() => {
+    const handleSettingsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<PlatformSettings>;
+      if (customEvent.detail) {
+        setLiveSettings((prev) => ({ ...prev, ...customEvent.detail }));
+      } else {
+        setLiveSettings(db.getPlatformSettings());
+      }
+    };
+
+    window.addEventListener('roommate_platform_settings_updated', handleSettingsUpdate);
+    return () => {
+      window.removeEventListener('roommate_platform_settings_updated', handleSettingsUpdate);
+    };
+  }, []);
+
+  const effectiveEmail = (liveSettings.supportEmail || 'support@roommate.app').trim();
+  const effectivePhone = (liveSettings.supportPhone || '').trim();
 
   const toggleFaq = (id: string) => {
     hapticSelection();
@@ -131,7 +163,7 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
         </button>
       </div>
 
-      {/* Card 3: Support Channels */}
+      {/* Card 3: Direct Support Channels — Dynamically Reflects SuperAdmin Dashboard Configuration */}
       <div className="rounded-2xl bg-white dark:bg-[#181820] border border-slate-200/90 dark:border-[#27354A] p-4 space-y-3 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center space-x-2">
           <Mail className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -140,11 +172,30 @@ export const HelpSupportTab: React.FC<HelpSupportTabProps> = ({
           </h4>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/70 dark:border-[#27354A] space-y-1 text-xs">
-          <div className="text-slate-500 dark:text-slate-400 text-[10px] font-medium">Developer & Support Desk</div>
-          <div className="font-mono text-slate-900 dark:text-slate-100 font-semibold select-all">
-            support@roommate.app
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#20202A] border border-slate-200/70 dark:border-[#27354A] space-y-2 text-xs">
+          <div>
+            <div className="text-slate-500 dark:text-slate-400 text-[10px] font-medium">Developer & Support Desk</div>
+            <a
+              href={`mailto:${effectiveEmail}?subject=Resident%20Support%20Request`}
+              className="font-mono text-slate-900 dark:text-slate-100 font-semibold select-all block hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            >
+              {effectiveEmail}
+            </a>
           </div>
+
+          {effectivePhone && (
+            <div className="pt-1 border-t border-slate-200/60 dark:border-[#27354A]">
+              <div className="text-slate-500 dark:text-slate-400 text-[10px] font-medium">Helpline Support Phone</div>
+              <a
+                href={`tel:${effectivePhone.replace(/[\s()-]/g, '')}`}
+                className="font-mono text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1.5 hover:underline mt-0.5"
+              >
+                <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span>{effectivePhone}</span>
+              </a>
+            </div>
+          )}
+
           <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1">
             Resident inquiries answered within 24 hours.
           </p>
