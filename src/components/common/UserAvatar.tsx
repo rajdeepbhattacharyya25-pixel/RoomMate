@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { isGoogleDefaultAvatar, isGoogleDefaultAvatarSync } from '../../lib/utils/avatarUtils';
 
 export interface UserAvatarProps {
   user?: {
@@ -70,9 +71,41 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const effectiveSrc = (src !== undefined ? src : user?.avatarUrl) || null;
   const effectiveName = (name !== undefined ? name : user?.name) || 'User';
 
-  // Reset error state if image source changes
+  const [isDefaultAvatar, setIsDefaultAvatar] = useState<boolean>(() => {
+    return isGoogleDefaultAvatarSync(effectiveSrc) === true;
+  });
+
+  // Reset error state and classify image source if changes
   useEffect(() => {
     setImageFailed(false);
+    if (!effectiveSrc) {
+      setIsDefaultAvatar(false);
+      return;
+    }
+
+    const syncCheck = isGoogleDefaultAvatarSync(effectiveSrc);
+    if (syncCheck !== null) {
+      setIsDefaultAvatar(syncCheck);
+      return;
+    }
+
+    if (
+      effectiveSrc.includes('googleusercontent.com') ||
+      effectiveSrc.includes('google.com') ||
+      effectiveSrc.includes('gstatic.com')
+    ) {
+      let isMounted = true;
+      isGoogleDefaultAvatar(effectiveSrc).then((isDef) => {
+        if (isMounted) {
+          setIsDefaultAvatar(isDef);
+        }
+      });
+      return () => {
+        isMounted = false;
+      };
+    } else {
+      setIsDefaultAvatar(false);
+    }
   }, [effectiveSrc]);
 
   const sizeClass = SIZE_MAP[size] || SIZE_MAP.md;
@@ -84,7 +117,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
       className={`relative shrink-0 overflow-hidden flex items-center justify-center select-none ${sizeClass} ${effectiveRounding} ${borderClass} ${className}`}
       data-testid="user-avatar"
     >
-      {effectiveSrc && !imageFailed ? (
+      {effectiveSrc && !imageFailed && !isDefaultAvatar ? (
         <img
           src={effectiveSrc}
           alt={alt || effectiveName}

@@ -26,6 +26,7 @@ import {
 import { enqueueOfflineItem } from './offlineQueue';
 import { validateStrict4DigitPin, hashPin, clearResidentSession, createResidentToken } from '../auth/jwtService';
 import { isNativeApp } from '../platform/deviceDetector';
+import { isGoogleDefaultAvatar } from '../utils/avatarUtils';
 
 export const IS_LIVE_SYNC_ENABLED =
   isSupabaseConfigured && import.meta.env.VITE_USE_LIVE_SUPABASE === 'true';
@@ -1874,13 +1875,21 @@ export async function syncOAuthSessionToProfile(sessionUser: {
     user_metadata?: Record<string, unknown>;
     identities?: Array<{ identity_data?: Record<string, unknown> }>;
   };
-  const avatarUrl =
+  const rawAvatarUrl =
     (rawSessionUser.user_metadata?.avatar_url as string) ||
     (rawSessionUser.user_metadata?.picture as string) ||
     (rawSessionUser.user_metadata?.photo_url as string) ||
     (rawSessionUser.identities?.[0]?.identity_data?.avatar_url as string) ||
     (rawSessionUser.identities?.[0]?.identity_data?.picture as string) ||
     undefined;
+
+  let avatarUrl = rawAvatarUrl;
+  if (rawAvatarUrl) {
+    const isDefault = await isGoogleDefaultAvatar(rawAvatarUrl);
+    if (isDefault) {
+      avatarUrl = undefined;
+    }
+  }
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionUser.id);
 
@@ -1944,14 +1953,22 @@ export async function syncOAuthSessionToProfile(sessionUser: {
       ? localStorage.getItem(`roommate_avatar_custom_${sessionUser.id}`)
       : null;
 
+  let existingAvatar = (existingProfile?.avatar_url as string) || localUser?.avatarUrl;
+  if (existingAvatar) {
+    const isDefault = await isGoogleDefaultAvatar(existingAvatar);
+    if (isDefault) {
+      existingAvatar = undefined;
+    }
+  }
+
   let resolvedAvatarUrl: string | undefined;
   if (customAvatarPref === 'removed') {
     resolvedAvatarUrl = undefined;
   } else if (customAvatarPref === 'custom') {
-    resolvedAvatarUrl = (existingProfile?.avatar_url as string) || localUser?.avatarUrl || avatarUrl;
+    resolvedAvatarUrl = existingAvatar || avatarUrl;
   } else {
-    // Default flow: Google DP takes immediate precedence if present, then existing profile / local user
-    resolvedAvatarUrl = avatarUrl || (existingProfile?.avatar_url as string) || localUser?.avatarUrl;
+    // Default flow: Genuine Google custom DP takes immediate precedence if present, then existing profile / local user
+    resolvedAvatarUrl = avatarUrl || existingAvatar;
   }
 
   const resolvedUser: User = {

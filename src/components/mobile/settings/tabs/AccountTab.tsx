@@ -21,6 +21,7 @@ import { pickImageFile, uploadImage } from '../../../../lib/services/imageUpload
 import { updateProfileAvatar, updateUpiQrUrl, updateProfileUpiId } from '../../../../lib/storage/cloudStorageAdapter';
 import { supabase, isSupabaseConfigured } from '../../../../lib/supabase/client';
 import { UserAvatar } from '../../../common/UserAvatar';
+import { isGoogleDefaultAvatar } from '../../../../lib/utils/avatarUtils';
 import { decodeQrFromImage } from '../../../../lib/services/qrDecoder';
 import { extractUpiIdFromQrPayload } from '../../../../lib/payments/upiExtraction';
 import { hapticSuccess, hapticImpact, hapticWarning } from '../../../../lib/native/haptics';
@@ -67,6 +68,22 @@ export const AccountTab: React.FC<AccountTabProps> = ({
   useEffect(() => {
     async function checkGoogleAvatar() {
       if (!isSupabaseConfigured) return;
+
+      // If current profile avatar is a Google default letter avatar, clean it up immediately
+      if (
+        currentUser.avatarUrl &&
+        (currentUser.avatarUrl.includes('googleusercontent.com') ||
+          currentUser.avatarUrl.includes('google.com') ||
+          currentUser.avatarUrl.includes('gstatic.com'))
+      ) {
+        const isCurrentDefault = await isGoogleDefaultAvatar(currentUser.avatarUrl);
+        if (isCurrentDefault) {
+          await updateProfileAvatar(currentUser.id, null);
+          setAvatarUrlOverride('');
+          if (onProfileUpdated) onProfileUpdated();
+        }
+      }
+
       const customPref = typeof localStorage !== 'undefined'
         ? localStorage.getItem(`roommate_avatar_custom_${currentUser.id}`)
         : null;
@@ -83,6 +100,12 @@ export const AccountTab: React.FC<AccountTabProps> = ({
           (session?.user?.identities?.[0]?.identity_data?.picture as string);
 
         if (googlePhoto) {
+          const isDefault = await isGoogleDefaultAvatar(googlePhoto);
+          if (isDefault) {
+            setGooglePhotoAvailable(null);
+            return;
+          }
+
           setGooglePhotoAvailable(googlePhoto);
           if (googlePhoto !== currentUser.avatarUrl) {
             await updateProfileAvatar(currentUser.id, googlePhoto);
@@ -109,7 +132,13 @@ export const AccountTab: React.FC<AccountTabProps> = ({
           (session?.user?.identities?.[0]?.identity_data?.avatar_url as string) ||
           (session?.user?.identities?.[0]?.identity_data?.picture as string) ||
           null;
-        setGooglePhotoAvailable(googlePhoto);
+
+        if (googlePhoto) {
+          const isDefault = await isGoogleDefaultAvatar(googlePhoto);
+          setGooglePhotoAvailable(isDefault ? null : googlePhoto);
+        } else {
+          setGooglePhotoAvailable(null);
+        }
       } catch {
         setGooglePhotoAvailable(null);
       }

@@ -90,4 +90,16 @@ describe('UserAvatar & Instagram Fallback Test Suite', () => {
     expect(html).toContain('P');
     expect(html).toContain('bg-indigo-600');
   });
+
+  it('renders Instagram fallback when src is a known Google default avatar', () => {
+    const defaultGoogleAvatar = 'https://lh3.googleusercontent.com/a/default-user=s96-c';
+    const html = renderToString(
+      <UserAvatar src={defaultGoogleAvatar} name="Raju" />
+    );
+
+    expect(html).toContain('fill="#797E87"');
+    expect(html).toContain('fill="#FFFFFF"');
+    expect(html).not.toContain('<img');
+  });
 });
+
