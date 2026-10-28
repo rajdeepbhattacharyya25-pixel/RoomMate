@@ -3011,6 +3011,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           ]}
           initialPayeeId={settlePayeeId}
           roomName={activeRoom.name}
+          roomId={activeRoom.id}
           initialAmount={Number(settleAmount) || 0}
           onPaymentCompleted={handleUpiPaymentCompleted}
         />

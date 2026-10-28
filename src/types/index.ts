@@ -239,6 +239,7 @@ export type NotificationActionType =
   | 'VIEW_DETAILS'
   | 'VIEW_BALANCE'
   | 'FORCE_LOGOUT'
+  | 'UPDATE_UPI'
   | 'NONE';
 
 export interface InAppNotification {

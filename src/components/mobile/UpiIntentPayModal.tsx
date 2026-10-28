@@ -2,11 +2,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, PaymentMethod } from '../../types';
 import {
   launchUpiIntent,
-  generateUpiQrCodeUrl,
   generateSettlementToken,
   isMobileDevice,
   UpiAppTarget,
 } from '../../lib/payments/upiIntentService';
+import {
+  validatePayeeUpi,
+  generateDynamicUpiQrCode,
+  dispatchUpiNudgeNotification,
+  buildWhatsAppNudgeUrl,
+} from '../../lib/payments/upiProfileService';
 import { hapticSelection, hapticImpact, hapticSuccess } from '../../lib/native/haptics';
 import { UpiQrScannerModal } from './UpiQrScannerModal';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -14,7 +19,6 @@ import { CurrencyInput } from '../common/CurrencyInput';
 import {
   QrCode,
   Copy,
-  Check,
   CheckCheck,
   ShieldCheck,
   Smartphone,
@@ -24,6 +28,12 @@ import {
   Camera,
   Image as ImageIcon,
   FileCheck2,
+  AlertCircle,
+  AlertTriangle,
+  MessageCircle,
+  ExternalLink,
+  Loader2,
+  Check,
 } from 'lucide-react';
 
 interface UpiIntentPayModalProps {
@@ -33,6 +43,7 @@ interface UpiIntentPayModalProps {
   availablePayees: User[];
   initialPayeeId?: string;
   roomName: string;
+  roomId?: string;
   initialAmount?: number;
   onPaymentCompleted: (details: {
     payeeId: string;
@@ -52,6 +63,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   availablePayees,
   initialPayeeId,
   roomName,
+  roomId = 'room-general',
   initialAmount = 0,
   onPaymentCompleted,
 }) => {
@@ -65,6 +77,10 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   const [payAmount, setPayAmount] = useState<string>(() =>
     initialAmount > 0 ? initialAmount.toFixed(2) : '0.00'
   );
+  const [debouncedAmount, setDebouncedAmount] = useState<number>(() => Number(initialAmount) || 0);
+  const [isQrRefreshing, setIsQrRefreshing] = useState(false);
+  const [dynamicQrUrl, setDynamicQrUrl] = useState<string>('');
+
   const [selectedApp, setSelectedApp] = useState<UpiAppTarget>('generic');
   const [appLaunched, setAppLaunched] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -77,6 +93,11 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   const [generatedRef] = useState(() => generateSettlementToken());
   const proofFileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // In-app Nudge State
+  const [isNudging, setIsNudging] = useState(false);
+  const [nudgeMsg, setNudgeMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
   // Synchronize modal state whenever opened or when target payee/amount changes
   useEffect(() => {
     if (isOpen) {
@@ -87,6 +108,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
       }
       if (initialAmount > 0) {
         setPayAmount(initialAmount.toFixed(2));
+        setDebouncedAmount(initialAmount);
       }
       setAppLaunched(false);
       setCopiedUpi(false);
@@ -96,6 +118,8 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
       setCustomPayeeName(null);
       setUserUtr('');
       setProofImage(null);
+      setNudgeMsg(null);
+      setCooldownRemaining(0);
     }
   }, [isOpen, initialPayeeId, initialAmount, availablePayees]);
 
@@ -104,35 +128,82 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
     return availablePayees.find((u) => u.id === selectedPayeeId) || availablePayees[0];
   }, [availablePayees, selectedPayeeId]);
 
-  // Determine Payee's VPA / UPI ID
-  const payeeUpiId = useMemo(() => {
-    if (customPayeeVpa) return customPayeeVpa;
-    if (activePayee?.upiId) return activePayee.upiId;
-    if (activePayee?.email) {
-      return `${activePayee.name.toLowerCase().replace(/\s+/g, '')}@okaxis`;
+  // Strict Payee UPI Validation (Payee-first approach; no synthetic fallback)
+  const upiStatus = useMemo(() => {
+    if (customPayeeVpa) {
+      return {
+        hasValidUpi: true,
+        upiId: customPayeeVpa,
+        payeeName: customPayeeName || activePayee?.name || 'Roommate',
+        payeePhone: activePayee?.phone,
+      };
     }
-    return 'roommate@upi';
-  }, [customPayeeVpa, activePayee]);
+    return validatePayeeUpi(activePayee);
+  }, [customPayeeVpa, customPayeeName, activePayee]);
 
+  const hasValidUpi = upiStatus.hasValidUpi;
+  const payeeUpiId = upiStatus.upiId || '';
   const payeeDisplayName = customPayeeName || activePayee?.name || 'Roommate';
 
   const numAmount = Number(payAmount) || 0;
+  const isOversettlement = initialAmount > 0 && numAmount > initialAmount;
 
-  const upiOptions = useMemo(() => {
-    return {
-      pa: payeeUpiId,
-      pn: payeeDisplayName,
-      am: numAmount,
-      tn: `${roomName.replace(/\s+/g, '_')}_Settlement`,
-      tr: generatedRef,
+  // Debounce amount changes by 300ms to avoid camera scanning races during live edits
+  useEffect(() => {
+    setIsQrRefreshing(true);
+    const timer = setTimeout(() => {
+      const parsed = Number(payAmount) || 0;
+      setDebouncedAmount(parsed);
+      setIsQrRefreshing(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [payAmount]);
+
+  // Generate dynamic offline QR code locally whenever debounced amount or valid UPI changes
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!hasValidUpi || isOversettlement || debouncedAmount <= 0) {
+      setDynamicQrUrl('');
+      return;
+    }
+
+    generateDynamicUpiQrCode({
+      upiId: payeeUpiId,
+      payeeName: payeeDisplayName,
+      amount: debouncedAmount,
+      roomName,
+      transactionRef: generatedRef,
+    }).then(({ dataUrl, error }) => {
+      if (isMounted) {
+        if (!error && dataUrl) {
+          setDynamicQrUrl(dataUrl);
+        } else {
+          setDynamicQrUrl('');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
     };
-  }, [payeeUpiId, payeeDisplayName, numAmount, roomName, generatedRef]);
+  }, [hasValidUpi, isOversettlement, debouncedAmount, payeeUpiId, payeeDisplayName, roomName, generatedRef]);
 
-  const qrCodeUrl = useMemo(() => {
-    return generateUpiQrCodeUrl(upiOptions, 260);
-  }, [upiOptions]);
+  // WhatsApp Nudge URL
+  const whatsAppNudgeUrl = useMemo(() => {
+    if (!activePayee) return '';
+    return buildWhatsAppNudgeUrl({
+      payeePhone: activePayee.phone,
+      payeeName: activePayee.name,
+      payerName: currentUser.name,
+      amount: initialAmount > 0 ? initialAmount : (numAmount > 0 ? numAmount : 0),
+      roomName,
+    });
+  }, [activePayee, currentUser.name, initialAmount, numAmount, roomName]);
 
   const handleCopyUpiId = async () => {
+    if (!payeeUpiId) return;
     try {
       await navigator.clipboard.writeText(payeeUpiId);
       await hapticSelection();
@@ -144,19 +215,61 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
   };
 
   const handleLaunchApp = async (app: UpiAppTarget) => {
+    if (!hasValidUpi || isOversettlement || numAmount <= 0) return;
     await hapticImpact('MEDIUM');
     setSelectedApp(app);
     setAppLaunched(true);
+
     try {
       sessionStorage.setItem('roommate_upi_intent_active', 'true');
     } catch {
       // Ignore sessionStorage error
     }
-    launchUpiIntent(app, upiOptions);
+
+    launchUpiIntent(app, {
+      pa: payeeUpiId,
+      pn: payeeDisplayName,
+      am: numAmount,
+      tn: `${roomName.replace(/\s+/g, '_')}_Settlement`,
+      tr: generatedRef,
+    });
+  };
+
+  const handleSendInAppNudge = async () => {
+    if (!activePayee || isNudging) return;
+    setIsNudging(true);
+    setNudgeMsg(null);
+
+    try {
+      const res = await dispatchUpiNudgeNotification({
+        payerId: currentUser.id,
+        payerName: currentUser.name,
+        payeeId: activePayee.id,
+        payeeName: activePayee.name,
+        amount: initialAmount > 0 ? initialAmount : (numAmount > 0 ? numAmount : 0),
+        roomId,
+        roomName,
+        roomMemberIds: availablePayees.map((u) => u.id).concat(currentUser.id),
+      });
+
+      if (res.success) {
+        setNudgeMsg({ type: 'success', text: res.message });
+        setCooldownRemaining(300);
+      } else {
+        setNudgeMsg({ type: 'error', text: res.message });
+        if (res.cooldownSecondsRemaining) {
+          setCooldownRemaining(res.cooldownSecondsRemaining);
+        }
+      }
+    } catch {
+      setNudgeMsg({ type: 'error', text: 'Failed to send notification.' });
+    } finally {
+      setIsNudging(false);
+    }
   };
 
   const handleConfirmPaid = async () => {
-    if (!activePayee || numAmount <= 0) return;
+    if (!activePayee || numAmount <= 0 || isOversettlement) return;
     await hapticSuccess();
 
     const appNameMap: Record<UpiAppTarget, string> = {
@@ -204,15 +317,18 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
       }
     >
       <div className="space-y-4 pb-4">
-
         {/* Custom Payee Notification Badge if Scanned from QR */}
         {customPayeeVpa && (
           <div className="p-2.5 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/50 text-xs flex items-center justify-between animate-in fade-in">
             <div className="flex items-center space-x-2 truncate">
               <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <div className="truncate">
-                <div className="font-bold text-slate-900 dark:text-white truncate">{customPayeeName || 'Scanned Payee'}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">{customPayeeVpa}</div>
+                <div className="font-bold text-slate-900 dark:text-white truncate">
+                  {customPayeeName || 'Scanned Payee'}
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                  {customPayeeVpa}
+                </div>
               </div>
             </div>
             <button
@@ -261,30 +377,104 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-900 dark:text-white">{activePayee.name}</span>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                {hasValidUpi && (
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                )}
               </div>
               <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                <span>{payeeUpiId}</span>
+                {hasValidUpi ? (
+                  <span>{payeeUpiId}</span>
+                ) : (
+                  <span className="text-amber-500 font-sans">No UPI ID configured</span>
+                )}
               </div>
             </div>
           </div>
-          <button
-            onClick={handleCopyUpiId}
-            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#272738] text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 shadow-2xs active:scale-95 transition-all"
-          >
-            {copiedUpi ? (
-              <>
-                <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-emerald-700 dark:text-emerald-400">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
+          {hasValidUpi && (
+            <button
+              onClick={handleCopyUpiId}
+              className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#272738] text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 shadow-2xs active:scale-95 transition-all"
+            >
+              {copiedUpi ? (
+                <>
+                  <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-700 dark:text-emerald-400">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
+
+        {/* PAYEE-PROFILE-FIRST FALLBACK: If recipient has NO valid UPI ID */}
+        {!hasValidUpi && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left space-y-3 animate-in fade-in">
+            <div className="flex items-start space-x-2.5">
+              <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-amber-500 dark:text-amber-400">
+                  Your roommate hasn&apos;t added a UPI ID yet.
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {activePayee.name} needs to save their UPI ID in Settings before you can pay them via UPI QR or 1-Tap apps.
+                </p>
+              </div>
+            </div>
+
+            {/* Nudge Actions (Dual Dispatch: In-App + WhatsApp) */}
+            <div className="pt-1 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleSendInAppNudge}
+                disabled={isNudging || cooldownRemaining > 0}
+                className="flex-1 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              >
+                {isNudging ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : cooldownRemaining > 0 ? (
+                  <span>Nudge sent (Wait {cooldownRemaining}s)</span>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Send In-App Reminder</span>
+                  </>
+                )}
+              </button>
+
+              <a
+                href={whatsAppNudgeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp Nudge</span>
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </a>
+            </div>
+
+            {nudgeMsg && (
+              <p
+                className={`text-[11px] font-semibold flex items-center gap-1 ${
+                  nudgeMsg.type === 'success' ? 'text-emerald-500' : 'text-rose-400'
+                }`}
+              >
+                {nudgeMsg.text}
+              </p>
+            )}
+
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 border-t border-amber-500/20 pt-2">
+              💡 You can still pay outside (Cash, NetBanking) and confirm the payment below.
+            </p>
+          </div>
+        )}
 
         {/* Amount Input & Quick Chips */}
         <div className="space-y-2">
@@ -298,6 +488,16 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
             onChange={(val) => setPayAmount(val)}
             placeholder="0"
           />
+
+          {/* Oversettlement Warning */}
+          {isOversettlement && (
+            <p className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                Amount exceeds outstanding balance (₹{initialAmount.toFixed(2)}). Over-settlement is prohibited.
+              </span>
+            </p>
+          )}
 
           {/* Quick Split Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
@@ -338,143 +538,169 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
           </div>
         </div>
 
-        {/* 1-Tap App Selector Grid */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Choose Payment App (1-Tap Switch)
-            </label>
-            {!isMobile && (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Desktop Preview Mode</span>
-            )}
+        {/* 1-Tap App Selector Grid (Only available when payee has valid UPI and amount is valid) */}
+        {hasValidUpi && !isOversettlement && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Choose Payment App (1-Tap Switch)
+              </label>
+              {!isMobile && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                  Desktop Preview Mode
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Google Pay */}
+              <button
+                type="button"
+                onClick={() => handleLaunchApp('gpay')}
+                disabled={numAmount <= 0}
+                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
+                  selectedApp === 'gpay'
+                    ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-700 ring-2 ring-blue-500/20'
+                    : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center font-bold text-sm text-[#4285F4]">
+                    G
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">Google Pay</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">tez:// scheme</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              </button>
+
+              {/* PhonePe */}
+              <button
+                type="button"
+                onClick={() => handleLaunchApp('phonepe')}
+                disabled={numAmount <= 0}
+                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
+                  selectedApp === 'phonepe'
+                    ? 'bg-purple-50/70 dark:bg-purple-950/40 border-purple-400 dark:border-purple-700 ring-2 ring-purple-500/20'
+                    : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600 shadow-2xs flex items-center justify-center font-bold text-xs text-white">
+                    पे
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">PhonePe</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">phonepe://</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              </button>
+
+              {/* Paytm */}
+              <button
+                type="button"
+                onClick={() => handleLaunchApp('paytm')}
+                disabled={numAmount <= 0}
+                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
+                  selectedApp === 'paytm'
+                    ? 'bg-sky-50/70 dark:bg-sky-950/40 border-sky-400 dark:border-sky-700 ring-2 ring-sky-500/20'
+                    : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#00BAF2] shadow-2xs flex items-center justify-center font-extrabold text-[11px] text-white">
+                    Pay
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">Paytm</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">paytmmp://</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              </button>
+
+              {/* Any UPI / Generic */}
+              <button
+                type="button"
+                onClick={() => handleLaunchApp('generic')}
+                disabled={numAmount <= 0}
+                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
+                  selectedApp === 'generic'
+                    ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-500/20'
+                    : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 shadow-2xs flex items-center justify-center font-bold text-xs text-white">
+                    UPI
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">Any App</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">OS Intent Chooser</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              </button>
+            </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {/* Google Pay */}
-            <button
-              type="button"
-              onClick={() => handleLaunchApp('gpay')}
-              disabled={numAmount <= 0}
-              className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
-                selectedApp === 'gpay'
-                  ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-700 ring-2 ring-blue-500/20'
-                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center font-bold text-sm text-[#4285F4]">
-                  G
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Google Pay</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">tez:// scheme</div>
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            </button>
-
-            {/* PhonePe */}
-            <button
-              type="button"
-              onClick={() => handleLaunchApp('phonepe')}
-              disabled={numAmount <= 0}
-              className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
-                selectedApp === 'phonepe'
-                  ? 'bg-purple-50/70 dark:bg-purple-950/40 border-purple-400 dark:border-purple-700 ring-2 ring-purple-500/20'
-                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-600 shadow-2xs flex items-center justify-center font-bold text-xs text-white">
-                  पे
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">PhonePe</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">phonepe://</div>
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            </button>
-
-            {/* Paytm */}
-            <button
-              type="button"
-              onClick={() => handleLaunchApp('paytm')}
-              disabled={numAmount <= 0}
-              className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
-                selectedApp === 'paytm'
-                  ? 'bg-sky-50/70 dark:bg-sky-950/40 border-sky-400 dark:border-sky-700 ring-2 ring-sky-500/20'
-                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#00BAF2] shadow-2xs flex items-center justify-center font-extrabold text-[11px] text-white">
-                  Pay
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Paytm</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">paytmmp://</div>
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            </button>
-
-            {/* Any UPI / CRED */}
-            <button
-              type="button"
-              onClick={() => handleLaunchApp('generic')}
-              disabled={numAmount <= 0}
-              className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-97 shadow-2xs ${
-                selectedApp === 'generic'
-                  ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-500/20'
-                  : 'bg-slate-50/80 dark:bg-[#1C1C25] border-slate-200 dark:border-[#27354A] hover:bg-slate-100/70 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 shadow-2xs flex items-center justify-center font-bold text-xs text-white">
-                  UPI
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Any App</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">OS Intent Chooser</div>
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* QR Code Scannable Drawer Toggle (Desktop & In-Person) */}
-        <div className="pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              hapticSelection();
-              setShowQrCode(!showQrCode);
-            }}
-            className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-200 border border-transparent dark:border-[#27354A] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            <span>{showQrCode ? 'Hide Scannable QR Code' : 'Show In-Person Scannable QR Code'}</span>
-          </button>
+        {hasValidUpi && !isOversettlement && numAmount > 0 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                hapticSelection();
+                setShowQrCode(!showQrCode);
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#272738] text-slate-700 dark:text-slate-200 border border-transparent dark:border-[#27354A] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+              <span>{showQrCode ? 'Hide Scannable QR Code' : 'Show In-Person Scannable QR Code'}</span>
+            </button>
 
-          {showQrCode && (
-            <div className="mt-3 p-4 bg-slate-900 dark:bg-[#15151E] rounded-2xl border border-transparent dark:border-[#27354A] text-center space-y-3 animate-in fade-in zoom-in-95">
-              <div className="inline-block p-3 bg-white rounded-xl shadow-lg">
-                <img
-                  src={activePayee.upiQrUrl || qrCodeUrl}
-                  alt="UPI QR Code"
-                  className="w-44 h-44 mx-auto rounded-lg object-contain bg-white"
-                />
+            {showQrCode && (
+              <div className="mt-3 p-4 bg-slate-900 dark:bg-[#15151E] rounded-2xl border border-transparent dark:border-[#27354A] text-center space-y-3 animate-in fade-in zoom-in-95 relative">
+                {/* Visual Dim / Overlay during 300ms debounce to prevent stale QR scan */}
+                {isQrRefreshing ? (
+                  <div className="py-12 space-y-2">
+                    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto" />
+                    <p className="text-xs font-bold text-indigo-300">
+                      Updating QR for ₹{numAmount.toFixed(2)}...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="inline-block p-3 bg-white rounded-xl shadow-lg relative">
+                      <img
+                        src={dynamicQrUrl || activePayee.upiQrUrl || ''}
+                        alt="UPI QR Code"
+                        className="w-44 h-44 mx-auto rounded-lg object-contain bg-white"
+                      />
+                    </div>
+                    {/* Exact amount badge attached to validated QR */}
+                    <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-extrabold tracking-wide">
+                      <span>Exact Amount:</span>
+                      <span className="font-mono">₹{debouncedAmount.toFixed(2)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 dark:text-slate-400">
+                      Scan with any UPI app to pay ₹{debouncedAmount.toFixed(2)} to {payeeDisplayName}
+                    </p>
+                  </>
+                )}
+
+                {/* Explicit Disclaimer (Decoupled settlement requirement) */}
+                <p className="text-[10px] text-amber-400/90 bg-amber-950/40 border border-amber-500/20 p-2 rounded-lg">
+                  ⚠️ Scanning the QR code does NOT automatically mark this debt as settled. Tap <strong>Confirm Paid</strong> below after transferring.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-300 dark:text-slate-400">
-                {activePayee.upiQrUrl
-                  ? `Scan ${activePayee.name}'s verified UPI QR code on any phone`
-                  : `Scan with GPay, PhonePe, or Paytm on any phone to pay ₹${numAmount.toFixed(2)} to ${activePayee.name}`}
-              </p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* App Switcher Banner / Post-Launch Status */}
         {appLaunched && (
@@ -569,7 +795,7 @@ export const UpiIntentPayModal: React.FC<UpiIntentPayModalProps> = ({
           <button
             type="button"
             onClick={handleConfirmPaid}
-            disabled={numAmount <= 0}
+            disabled={numAmount <= 0 || isOversettlement}
             className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all"
           >
             <Check className="w-4 h-4 stroke-[3]" />

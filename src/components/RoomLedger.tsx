@@ -42,7 +42,16 @@ import {
   AlertTriangle,
   CheckCircle2,
   ShieldAlert,
+  ExternalLink,
+  MessageCircle,
+  Loader2,
 } from 'lucide-react';
+import {
+  validatePayeeUpi,
+  generateDynamicUpiQrCode,
+  dispatchUpiNudgeNotification,
+  buildWhatsAppNudgeUrl,
+} from '../lib/payments/upiProfileService';
 import confetti from 'canvas-confetti';
 
 interface RoomLedgerProps {
@@ -425,6 +434,118 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
     if (!found) return 0;
     return Math.abs(found.netAmount);
   }, [settlePayeeId, summary.pairwiseDebts, currentUser.id]);
+
+  // Selected Payee User & Strict UPI Status (NPCI-compliant, no fake @okaxis synthesis)
+  const selectedPayeeUser = useMemo(() => {
+    return allUsers.find((u) => u.id === settlePayeeId);
+  }, [allUsers, settlePayeeId]);
+
+  const payeeUpiStatus = useMemo(() => {
+    return validatePayeeUpi(selectedPayeeUser);
+  }, [selectedPayeeUser]);
+
+  // Settle Amount Debouncing (300ms) for QR code generation
+  const [debouncedSettleAmount, setDebouncedSettleAmount] = useState<number>(0);
+  const [isQrRefreshing, setIsQrRefreshing] = useState(false);
+  const [dynamicQrDataUrl, setDynamicQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    setIsQrRefreshing(true);
+    const timer = setTimeout(() => {
+      const amt = Number(settleAmount) || 0;
+      setDebouncedSettleAmount(amt);
+      setIsQrRefreshing(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [settleAmount]);
+
+  // Generate dynamic QR code locally whenever debounced amount and payee UPI change
+  useEffect(() => {
+    let isMounted = true;
+    const isOversettlement = maxOwedToPayee > 0 && debouncedSettleAmount > maxOwedToPayee;
+
+    if (
+      !payeeUpiStatus.hasValidUpi ||
+      !payeeUpiStatus.upiId ||
+      debouncedSettleAmount <= 0 ||
+      isOversettlement ||
+      !activeRoom
+    ) {
+      setDynamicQrDataUrl('');
+      return;
+    }
+
+    generateDynamicUpiQrCode({
+      upiId: payeeUpiStatus.upiId,
+      payeeName: payeeUpiStatus.payeeName,
+      amount: debouncedSettleAmount,
+      roomName: activeRoom.name,
+      transactionRef,
+    }).then(({ dataUrl, error }) => {
+      if (isMounted) {
+        if (!error && dataUrl) {
+          setDynamicQrDataUrl(dataUrl);
+        } else {
+          setDynamicQrDataUrl('');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [payeeUpiStatus, debouncedSettleAmount, maxOwedToPayee, activeRoom, transactionRef]);
+
+  // Nudge state & Dual dispatch handler
+  const [isNudging, setIsNudging] = useState(false);
+  const [nudgeResultMsg, setNudgeResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [nudgeCooldownSeconds, setNudgeCooldownSeconds] = useState(0);
+
+  const whatsAppNudgeUrl = useMemo(() => {
+    if (!selectedPayeeUser || !activeRoom) return '';
+    const amt = maxOwedToPayee > 0 ? maxOwedToPayee : (Number(settleAmount) || 0);
+    return buildWhatsAppNudgeUrl({
+      payeePhone: selectedPayeeUser.phone,
+      payeeName: selectedPayeeUser.name,
+      payerName: currentUser.name,
+      amount: amt,
+      roomName: activeRoom.name,
+    });
+  }, [selectedPayeeUser, activeRoom, maxOwedToPayee, settleAmount, currentUser.name]);
+
+  const handleSendInAppNudge = async () => {
+    if (!selectedPayeeUser || !activeRoom || isNudging) return;
+    setIsNudging(true);
+    setNudgeResultMsg(null);
+    const amt = maxOwedToPayee > 0 ? maxOwedToPayee : (Number(settleAmount) || 0);
+
+    try {
+      const res = await dispatchUpiNudgeNotification({
+        payerId: currentUser.id,
+        payerName: currentUser.name,
+        payeeId: selectedPayeeUser.id,
+        payeeName: selectedPayeeUser.name,
+        amount: amt,
+        roomId: activeRoom.id,
+        roomName: activeRoom.name,
+        roomMemberIds: roomMembers.filter((m) => m.roomId === activeRoom.id).map((m) => m.userId),
+      });
+
+      if (res.success) {
+        setNudgeResultMsg({ type: 'success', text: res.message });
+        setNudgeCooldownSeconds(300);
+      } else {
+        setNudgeResultMsg({ type: 'error', text: res.message });
+        if (res.cooldownSecondsRemaining) {
+          setNudgeCooldownSeconds(res.cooldownSecondsRemaining);
+        }
+      }
+    } catch {
+      setNudgeResultMsg({ type: 'error', text: 'Failed to send in-app reminder.' });
+    } finally {
+      setIsNudging(false);
+    }
+  };
 
   if (!activeRoom) {
     return (
@@ -1479,6 +1600,121 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Dynamic NPCI UPI QR & Payee-First Profile Verification */}
+              {paymentMethod === 'UPI' && settlePayeeId && (
+                <>
+                  {!payeeUpiStatus.hasValidUpi ? (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 text-left animate-in fade-in">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-amber-400">Your roommate hasn&apos;t added a UPI ID yet.</h4>
+                          <p className="text-[11px] text-gray-300 mt-0.5 leading-relaxed">
+                            {selectedPayeeUser?.name || 'Roommate'} needs to configure their UPI ID in Settings before you can pay them via UPI QR.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dual-dispatch nudge: In-App notification + optional WhatsApp reminder */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSendInAppNudge}
+                          disabled={isNudging || nudgeCooldownSeconds > 0}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        >
+                          {isNudging ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Sending...</span>
+                            </>
+                          ) : nudgeCooldownSeconds > 0 ? (
+                            <span>Nudge sent (Wait {nudgeCooldownSeconds}s)</span>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Send In-App Reminder</span>
+                            </>
+                          )}
+                        </button>
+
+                        {whatsAppNudgeUrl && (
+                          <a
+                            href={whatsAppNudgeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WhatsApp Nudge</span>
+                            <ExternalLink className="w-3 h-3 opacity-80" />
+                          </a>
+                        )}
+                      </div>
+
+                      {nudgeResultMsg && (
+                        <p className={`text-[11px] font-semibold ${nudgeResultMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {nudgeResultMsg.text}
+                        </p>
+                      )}
+
+                      <p className="text-[10px] text-gray-400 border-t border-amber-500/20 pt-1.5">
+                        💡 You can still log an external settlement via Cash or Bank Transfer below.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-900 border border-indigo-500/30 text-center space-y-3 relative animate-in fade-in">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-left">
+                        <div>
+                          <span className="text-xs font-bold text-white flex items-center gap-1">
+                            <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Instant UPI QR</span>
+                          </span>
+                          <span className="text-[11px] text-gray-400">Pay to {payeeUpiStatus.upiId}</span>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          NPCI Dynamic
+                        </span>
+                      </div>
+
+                      {isQrRefreshing ? (
+                        <div className="py-8 space-y-2">
+                          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin mx-auto" />
+                          <p className="text-xs font-bold text-indigo-300">
+                            Updating QR for {formatInrExact(Number(settleAmount) || 0)}...
+                          </p>
+                        </div>
+                      ) : dynamicQrDataUrl ? (
+                        <div className="space-y-2">
+                          <div className="inline-block p-2.5 bg-white rounded-xl shadow-md">
+                            <img
+                              src={dynamicQrDataUrl}
+                              alt="UPI QR Code"
+                              className="w-36 h-36 mx-auto object-contain bg-white"
+                            />
+                          </div>
+                          <div>
+                            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
+                              <span>Exact Amount:</span>
+                              <span className="font-mono">{formatInrExact(debouncedSettleAmount)}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-300 mt-1">
+                              Scan with GPay, PhonePe, Paytm, or BHIM to pay {selectedPayeeUser?.name}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 py-3">Enter an amount above to generate a dynamic UPI QR.</p>
+                      )}
+
+                      <p className="text-[10px] text-amber-400/90 bg-amber-950/40 border border-amber-500/20 p-2 rounded-lg">
+                        ⚠️ Scanning the QR code does NOT automatically record the settlement. Click <strong>Record Settlement</strong> below after payment.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
 
               <div>
                 <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
