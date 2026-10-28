@@ -195,10 +195,26 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
     const localState = db.getState();
 
     // 8. Personal Expenses (Merged with local cache to prevent data-loss flicker)
-    const { data: rawPersonal, error: personalErr } = await supabase
-      .from('personal_expenses')
-      .select('*')
-      .order('expense_date', { ascending: false });
+    // Defense-in-depth: query personal expenses strictly scoped to the authenticated session owner
+    let rawPersonal: any[] | null = null;
+    let personalErr: any = null;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUserId = sessionData?.session?.user?.id;
+
+      if (authUserId) {
+        const res = await supabase
+          .from('personal_expenses')
+          .select('*')
+          .eq('user_id', authUserId)
+          .order('expense_date', { ascending: false });
+        rawPersonal = res.data;
+        personalErr = res.error;
+      }
+    } catch (sessionErr) {
+      console.warn('Personal expenses session check failed, using local cache:', sessionErr);
+    }
 
     const localPersonal = localState.personalExpenses || [];
     let personalExpenses: PersonalExpense[];
@@ -579,9 +595,15 @@ export async function addPersonalExpenseCloud(data: {
     expenseDate,
   });
 
+  // Offline mock personas (e.g. 'user-1') remain strictly local and never invoke cloud RPCs
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId);
+  if (!isUuid) {
+    return localExp;
+  }
+
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      // 1. Try secure SECURITY DEFINER RPC first (works reliably across anon & authenticated sessions)
+      // 1. Try secure SECURITY DEFINER RPC first (enforces caller identity auth.uid() = p_user_id)
       const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('submit_personal_expense_secure', {
         p_id: localExp.id.length === 36 ? localExp.id : undefined,
         p_user_id: data.userId,
@@ -596,7 +618,7 @@ export async function addPersonalExpenseCloud(data: {
         return localExp;
       }
 
-      // 2. Fallback to direct table upsert
+      // 2. Fallback to direct table upsert (guarded by owner-only RLS policy)
       const { error } = await supabase.from('personal_expenses').upsert({
         id: localExp.id.length === 36 ? localExp.id : undefined,
         user_id: data.userId,
@@ -634,9 +656,15 @@ export async function addPersonalExpenseCloud(data: {
 export async function deletePersonalExpenseCloud(userId: string, id: string): Promise<void> {
   db.deletePersonalExpense(userId, id);
 
+  // Offline mock personas remain local-only
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+  if (!isUuid) {
+    return;
+  }
+
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      // 1. Try secure RPC first
+      // 1. Try secure RPC first (enforces caller identity auth.uid() = p_user_id)
       const { error: rpcErr } = await (supabase.rpc as any)('delete_personal_expense_secure', {
         p_id: id,
         p_user_id: userId,
@@ -646,8 +674,8 @@ export async function deletePersonalExpenseCloud(userId: string, id: string): Pr
         return;
       }
 
-      // 2. Fallback to direct table delete
-      await supabase.from('personal_expenses').delete().eq('id', id);
+      // 2. Fallback to direct table delete (guarded by owner-only RLS policy)
+      await supabase.from('personal_expenses').delete().eq('id', id).eq('user_id', userId);
     } catch (err) {
       console.warn('Async personal expense deletion failed:', err);
     }

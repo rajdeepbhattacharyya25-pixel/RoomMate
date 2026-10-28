@@ -253,7 +253,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       count: 0,
     });
 
-    // Also include past months from data
+    // Also include past months from personal expenses
     for (const exp of userExpenses) {
       const parsed = parseExpenseDate(exp.expenseDate || exp.createdAt);
       const y = parsed.year;
@@ -268,11 +268,33 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       }
     }
 
+    // Also include past months from user's room share splits
+    const activeShared = (sharedExpenses || []).filter((e) => !e.isDeleted);
+    const activeSharedMap = new Map(activeShared.map((e) => [e.id, e]));
+    const mySplits = (expenseSplits || []).filter(
+      (s) => s.userId === currentUser.id && activeSharedMap.has(s.sharedExpenseId)
+    );
+    for (const split of mySplits) {
+      const parentExp = activeSharedMap.get(split.sharedExpenseId);
+      if (!parentExp) continue;
+      const parsed = parseExpenseDate(parentExp.expenseDate || parentExp.createdAt);
+      const y = parsed.year;
+      const m = parsed.month;
+      const key = `${y}-${m}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.total += split.shareAmount;
+        existing.count += 1;
+      } else {
+        map.set(key, { year: y, monthIndex: m, total: split.shareAmount, count: 1 });
+      }
+    }
+
     return Array.from(map.values()).sort((a, b) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.monthIndex - a.monthIndex;
     });
-  }, [userExpenses, currentActualYear, currentActualMonth]);
+  }, [userExpenses, sharedExpenses, expenseSplits, currentUser.id, currentActualYear, currentActualMonth]);
 
   // Step to Previous Month
   const handlePrevMonth = () => {
@@ -313,6 +335,12 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
     weeklyTotal,
     selectedMonthTotal,
     allTimeTotal,
+    weeklyPersonalTotal,
+    weeklyRoomShareTotal,
+    selectedMonthPersonalTotal,
+    selectedMonthRoomShareTotal,
+    allTimePersonalTotal,
+    allTimeRoomShareTotal,
     weeklyDaysData,
     daysLeftInMonth,
     safeDailySpend,
@@ -363,8 +391,40 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
       }
     }
 
+    // Room Share Contribution (Canonical source: expense_splits.share_amount for active shared expenses)
+    const activeShared = (sharedExpenses || []).filter((e) => !e.isDeleted);
+    const activeSharedMap = new Map(activeShared.map((e) => [e.id, e]));
+    const myRoomSplits = (expenseSplits || []).filter(
+      (s) => s.userId === currentUser.id && activeSharedMap.has(s.sharedExpenseId)
+    );
+
+    let roomWeekSum = 0;
+    let roomMonthSum = 0;
+    let roomAllSum = 0;
+
+    for (const split of myRoomSplits) {
+      const parentExp = activeSharedMap.get(split.sharedExpenseId)!;
+      const parsed = parseExpenseDate(parentExp.expenseDate || parentExp.createdAt);
+      const expDate = parsed.date;
+      roomAllSum += split.shareAmount;
+
+      if (parsed.month === selectedMonthIndex && parsed.year === selectedYear) {
+        roomMonthSum += split.shareAmount;
+      }
+
+      if (expDate >= monday && expDate <= sunday) {
+        roomWeekSum += split.shareAmount;
+        const dayIdx = (expDate.getDay() + 6) % 7;
+        dailySpend[dayIdx] += split.shareAmount;
+      }
+    }
+
+    const totalWeeklyOutflow = weekSum + roomWeekSum;
+    const totalMonthOutflow = monthSum + roomMonthSum;
+    const totalAllTimeOutflow = allSum + roomAllSum;
+
     const monthlyBudget = budgetConfig.monthlyAllowance;
-    const remainingMonthlyBudget = Math.max(0, monthlyBudget - monthSum);
+    const remainingMonthlyBudget = Math.max(0, monthlyBudget - totalMonthOutflow);
     const dailySafe = remainingDays > 0 ? Math.round(remainingMonthlyBudget / remainingDays) : 0;
 
     const maxDaySpend = Math.max(...dailySpend, 1);
@@ -378,14 +438,20 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
     return {
       thisWeekExpenses: weekList,
       selectedMonthExpenses: monthList,
-      weeklyTotal: weekSum,
-      selectedMonthTotal: monthSum,
-      allTimeTotal: allSum,
+      weeklyTotal: totalWeeklyOutflow,
+      selectedMonthTotal: totalMonthOutflow,
+      allTimeTotal: totalAllTimeOutflow,
+      weeklyPersonalTotal: weekSum,
+      weeklyRoomShareTotal: roomWeekSum,
+      selectedMonthPersonalTotal: monthSum,
+      selectedMonthRoomShareTotal: roomMonthSum,
+      allTimePersonalTotal: allSum,
+      allTimeRoomShareTotal: roomAllSum,
       weeklyDaysData: daysData,
       daysLeftInMonth: remainingDays,
       safeDailySpend: dailySafe,
     };
-  }, [userExpenses, now, selectedYear, selectedMonthIndex, isCurrentMonth, budgetConfig.monthlyAllowance]);
+  }, [userExpenses, sharedExpenses, expenseSplits, currentUser.id, now, selectedYear, selectedMonthIndex, isCurrentMonth, budgetConfig.monthlyAllowance]);
 
   // Active period list
   const activePeriodExpenses = useMemo(() => {
@@ -539,12 +605,45 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
   const budgetLimit = selectedPeriod === 'WEEK' ? weeklyAllowance : monthlyAllowance;
   const budgetPercentage = Math.min(100, Math.round((currentDisplayTotal / budgetLimit) * 100));
 
-  // Category Breakdown & Caps Analysis
+  // Category Breakdown & Caps Analysis (Combines private spending + room share contributions)
   const categoryBreakdown = useMemo(() => {
     const spentMap: Record<string, number> = {};
     for (const exp of activePeriodExpenses) {
       spentMap[exp.category] = (spentMap[exp.category] || 0) + exp.amount;
     }
+
+    // Include room share splits for the active period
+    const activeShared = (sharedExpenses || []).filter((e) => !e.isDeleted);
+    const activeSharedMap = new Map(activeShared.map((e) => [e.id, e]));
+    const myRoomSplits = (expenseSplits || []).filter(
+      (s) => s.userId === currentUser.id && activeSharedMap.has(s.sharedExpenseId)
+    );
+
+    const d = new Date(now);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    for (const split of myRoomSplits) {
+      const parentExp = activeSharedMap.get(split.sharedExpenseId)!;
+      const parsed = parseExpenseDate(parentExp.expenseDate || parentExp.createdAt);
+      const matchesPeriod =
+        selectedPeriod === 'WEEK'
+          ? (parsed.date >= monday && parsed.date <= sunday)
+          : selectedPeriod === 'MONTH'
+          ? (parsed.month === selectedMonthIndex && parsed.year === selectedYear)
+          : true;
+
+      if (matchesPeriod) {
+        const cat = parentExp.category as PersonalExpense['category'];
+        spentMap[cat] = (spentMap[cat] || 0) + split.shareAmount;
+      }
+    }
+
     return CATEGORIES.map((cat) => {
       const spent = spentMap[cat.name] || 0;
       const cap = budgetConfig.categoryCaps[cat.name] || 0;
@@ -558,7 +657,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         isOver: cap > 0 && spent > cap,
       };
     });
-  }, [activePeriodExpenses, budgetConfig.categoryCaps]);
+  }, [activePeriodExpenses, sharedExpenses, expenseSplits, currentUser.id, selectedPeriod, selectedMonthIndex, selectedYear, now, budgetConfig.categoryCaps]);
 
   // Burn-Rate Velocity Health Indicator
   const velocityInfo = useMemo(() => {
@@ -700,14 +799,23 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           <div>
             <span className="text-xs text-slate-500 dark:text-slate-400 block">
               {selectedPeriod === 'WEEK'
-                ? 'Spent This Week (Mon–Sun)'
+                ? 'Total Outflow This Week'
                 : selectedPeriod === 'MONTH'
-                ? `Spent in ${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`
-                : 'Lifetime Private Spending'}
+                ? `Total Outflow in ${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`
+                : 'Total Lifetime Spending'}
             </span>
             <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">
               ₹{currentDisplayTotal.toLocaleString('en-IN')}
             </span>
+            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              <span className="text-emerald-600 dark:text-emerald-400">
+                Private: ₹{(selectedPeriod === 'WEEK' ? weeklyPersonalTotal : selectedPeriod === 'MONTH' ? selectedMonthPersonalTotal : allTimePersonalTotal).toLocaleString('en-IN')}
+              </span>
+              <span>+</span>
+              <span className="text-cyan-600 dark:text-cyan-400">
+                Room Share: ₹{(selectedPeriod === 'WEEK' ? weeklyRoomShareTotal : selectedPeriod === 'MONTH' ? selectedMonthRoomShareTotal : allTimeRoomShareTotal).toLocaleString('en-IN')}
+              </span>
+            </div>
           </div>
 
           {selectedPeriod !== 'ALL' && (

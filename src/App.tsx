@@ -2028,6 +2028,11 @@ export function AppContent() {
             personalExpenses={dbState.personalExpenses}
             onAddExpense={handleAddPersonalExpense}
             onDeleteExpense={(id) => handleDeletePersonalExpense(id)}
+            sharedExpenses={dbState.sharedExpenses}
+            expenseSplits={dbState.expenseSplits}
+            activeRoom={activeRoom}
+            allUsers={dbState.users}
+            settlementPayments={dbState.settlementPayments}
           />
         )}
 

@@ -250,6 +250,8 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [dbFinancialSummary, setDbFinancialSummary] = useState<DbFinancialSummaryV2 | null>(null);
   const [financialError, setFinancialError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
+  // Debt Simplification (Transitive Min-Cash-Flow by default) vs Pairwise Bilateral Audit Ledger
+  const [balanceViewMode, setBalanceViewMode] = useState<'SIMPLIFIED' | 'PAIRWISE_AUDIT'>('SIMPLIFIED');
 
   useEffect(() => {
     if (!activeRoom?.id) return;
@@ -324,7 +326,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
     }
 
@@ -334,7 +339,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
         const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
           dbFinancialSummary,
           currentUser.id,
-          allUsers
+          allUsers,
+          sharedExpenses,
+          expenseSplits,
+          settlementPayments
         );
         staleSummary.isStale = true;
         staleSummary.error = financialError;
@@ -376,7 +384,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
       prevSummary.financialState = 'LOADING';
       return prevSummary;
@@ -394,6 +405,26 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       }
     );
   }, [financialState, dbFinancialSummary, financialError, activeRoom, currentUser.id, sharedExpenses, expenseSplits, settlementPayments, allUsers]);
+
+  // Choose debts list based on view mode (SIMPLIFIED by default, or PAIRWISE_AUDIT)
+  const displayDebts = useMemo(() => {
+    if (balanceViewMode === 'PAIRWISE_AUDIT' && summary.pairwiseAuditDebts) {
+      return summary.pairwiseAuditDebts;
+    }
+    return summary.pairwiseDebts;
+  }, [balanceViewMode, summary.pairwiseDebts, summary.pairwiseAuditDebts]);
+
+  // Outstanding debt current user owes to the currently selected settle payee
+  const maxOwedToPayee = useMemo(() => {
+    if (!settlePayeeId) return 0;
+    const found = summary.pairwiseDebts.find(
+      (d) =>
+        (d.userAId === currentUser.id && d.userBId === settlePayeeId && d.netAmount < 0) ||
+        (d.userBId === currentUser.id && d.userAId === settlePayeeId && d.netAmount > 0)
+    );
+    if (!found) return 0;
+    return Math.abs(found.netAmount);
+  }, [settlePayeeId, summary.pairwiseDebts, currentUser.id]);
 
   if (!activeRoom) {
     return (
@@ -744,16 +775,63 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 
         {/* Right 2 Cols: Precise Pairwise Debts Matrix */}
         <div className="lg:col-span-2 glass-card p-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>Room Balances & Settlements</span>
+              <span>{balanceViewMode === 'SIMPLIFIED' ? 'Simplified Room Debts' : 'Detailed Bilateral Ledger'}</span>
               <span className="text-[10px] text-gray-400 font-normal">
-                (Who owes who)
+                ({displayDebts.length} active {displayDebts.length === 1 ? 'balance' : 'balances'})
               </span>
             </h3>
+
+            {/* Toggle Segmented Control: Simplified (Default) vs Audit Ledger */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-slate-800 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('SIMPLIFIED')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  balanceViewMode === 'SIMPLIFIED'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Minimizes payments needed across roommates using Splitwise-style transitive simplification"
+              >
+                <Zap className="w-3 h-3 text-amber-300" />
+                <span>Simplified (Default)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('PAIRWISE_AUDIT')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  balanceViewMode === 'PAIRWISE_AUDIT'
+                    ? 'bg-purple-900/70 text-purple-200 border border-purple-500/40 shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="View original pairwise bilateral debts with full bill and payment breakdown"
+              >
+                <Receipt className="w-3 h-3 text-purple-400" />
+                <span>Audit Ledger</span>
+              </button>
+            </div>
           </div>
 
-          {summary.pairwiseDebts.length === 0 ? (
+          {/* Educational View Banner */}
+          {balanceViewMode === 'SIMPLIFIED' ? (
+            <div className="text-[11px] text-indigo-300/90 bg-indigo-950/40 border border-indigo-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>
+                <strong>Transitive Simplification Active:</strong> Minimizes transactions to settle the room. Original pairwise records and splits remain fully auditable in the Audit Ledger.
+              </span>
+            </div>
+          ) : (
+            <div className="text-[11px] text-purple-300/90 bg-purple-950/40 border border-purple-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span>
+                <strong>Bilateral Audit Ledger:</strong> Shows direct bill obligations and payments between each pair of roommates.
+              </span>
+            </div>
+          )}
+
+          {displayDebts.length === 0 ? (
             <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-[var(--border-subtle)]">
               <Check className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
               <p className="text-xs text-gray-300 font-semibold">You're all settled 🎉</p>
@@ -761,7 +839,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             </div>
           ) : (
             <div className="space-y-2">
-              {summary.pairwiseDebts.map((debt, idx) => {
+              {displayDebts.map((debt, idx) => {
                 const bOwesA = debt.netAmount > 0;
                 const creditor = bOwesA ? debt.userAName : debt.userBName;
                 const debtor = bOwesA ? debt.userBName : debt.userAName;
@@ -807,7 +885,9 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-[var(--text-subtle)]">
-                          Bills: {formatInrExact(bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA)} | Direct Paid: {formatInrExact(bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB)}
+                          {balanceViewMode === 'PAIRWISE_AUDIT'
+                            ? `Bills: ${formatInrExact(bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA)} | Direct Paid: ${formatInrExact(bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB)}`
+                            : 'Splitwise transitive transfer to balance room accounts'}
                         </span>
                       </div>
                     </div>
@@ -831,7 +911,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                             setSettleAmount(String(absAmount));
                             setShowSettleModal(true);
                           }}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40 cursor-pointer"
                         >
                           Settle up
                         </button>
@@ -1095,9 +1175,39 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 
               {/* Participants Selector (Point-in-Time Frozen) */}
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1.5">
-                  Split Among ({selectedParticipants.length} selected)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[var(--text-muted)] block">
+                    Split Among ({selectedParticipants.length} of {currentMembers.length} selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParticipants(currentMembers.map((m) => m.userId))}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParticipants([currentUser.id])}
+                      className="text-[10px] text-gray-400 hover:text-gray-300 font-medium cursor-pointer"
+                    >
+                      Just Me
+                    </button>
+                  </div>
+                </div>
+
+                {splitMethod === 'EQUAL' && numAmount > 0 && selectedParticipants.length > 0 && (
+                  <div className="mb-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-300 flex items-center justify-between">
+                    <span>
+                      ₹{numAmount.toLocaleString('en-IN')} split equally among {selectedParticipants.length} roommates
+                    </span>
+                    <span className="font-bold text-white tabular-nums">
+                      = ₹{(numAmount / selectedParticipants.length).toFixed(2)}/person
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {currentMembers.map((m) => {
                     const isChecked = selectedParticipants.includes(m.userId);
@@ -1305,9 +1415,20 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
-                  Amount Paid (₹) *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-[var(--text-muted)] block">
+                    Amount Paid (₹) *
+                  </label>
+                  {maxOwedToPayee > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSettleAmount(String(maxOwedToPayee))}
+                      className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded cursor-pointer"
+                    >
+                      Fill Full Balance ({formatInrExact(maxOwedToPayee)})
+                    </button>
+                  )}
+                </div>
                 <input
                   type="number"
                   step="0.01"
@@ -1317,6 +1438,12 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   className="w-full"
                   required
                 />
+                {maxOwedToPayee > 0 && Number(settleAmount) > maxOwedToPayee && (
+                  <p className="text-[11px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Amount exceeds outstanding balance ({formatInrExact(maxOwedToPayee)}). Over-settlement is prohibited.</span>
+                  </p>
+                )}
                 <p className="text-[10px] text-[var(--text-subtle)] mt-1">
                   Supports partial payments! (e.g. ₹25 owed - ₹20 paid = ₹5 remaining)
                 </p>
@@ -1397,8 +1524,14 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingSettle || !settlePayeeId || !settleAmount || Number(settleAmount) <= 0}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                  disabled={
+                    isSubmittingSettle ||
+                    !settlePayeeId ||
+                    !settleAmount ||
+                    Number(settleAmount) <= 0 ||
+                    (maxOwedToPayee > 0 && Number(settleAmount) > maxOwedToPayee)
+                  }
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
                 >
                   {isSubmittingSettle ? (
                     <>

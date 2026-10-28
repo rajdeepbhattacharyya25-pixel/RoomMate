@@ -543,7 +543,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
     }
 
@@ -553,7 +556,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
           dbFinancialSummary,
           currentUser.id,
-          allUsers
+          allUsers,
+          sharedExpenses,
+          expenseSplits,
+          settlementPayments
         );
         staleSummary.isStale = true;
         staleSummary.error = financialError;
@@ -595,7 +601,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
       prevSummary.financialState = 'LOADING';
       return prevSummary;
@@ -677,32 +686,39 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
   // Toggle for other room balances not involving current user
   const [showOtherDebts, setShowOtherDebts] = useState(false);
+  // Transitive Debt Simplification (Splitwise-style, default) vs Pairwise Bilateral Audit Ledger
+  const [balanceViewMode, setBalanceViewMode] = useState<'SIMPLIFIED' | 'PAIRWISE_AUDIT'>('SIMPLIFIED');
+
+  const activeDebtsList = useMemo(() => {
+    if (!summary) return [];
+    if (balanceViewMode === 'PAIRWISE_AUDIT' && summary.pairwiseAuditDebts) {
+      return summary.pairwiseAuditDebts;
+    }
+    return summary.pairwiseDebts;
+  }, [summary, balanceViewMode]);
 
   // Categorized debts involving current user
   const myDebtsToPay = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
       return debtorId === currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   const myDebtsToReceive = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
       return creditorId === currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   const otherDebts = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
       const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
       return debtorId !== currentUser.id && creditorId !== currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   // WhatsApp Nudge Studio target state
   const [nudgeTarget, setNudgeTarget] = useState<{
@@ -1411,14 +1427,43 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Roommate Balances
+              {balanceViewMode === 'SIMPLIFIED' ? 'Simplified Debts' : 'Pairwise Audit Ledger'}
             </h2>
-            {summary && summary.pairwiseDebts.length > 0 && (
-              <span className="text-[10px] text-slate-400 font-medium">
-                {myDebtsToPay.length + myDebtsToReceive.length} involving you
-              </span>
-            )}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('SIMPLIFIED')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  balanceViewMode === 'SIMPLIFIED'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                Simplified
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('PAIRWISE_AUDIT')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  balanceViewMode === 'PAIRWISE_AUDIT'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                Audit
+              </button>
+            </div>
           </div>
+
+          {balanceViewMode === 'SIMPLIFIED' ? (
+            <p className="text-[10px] text-indigo-600 dark:text-indigo-400 px-1">
+              ⚡ Minimized settlements (Splitwise algorithm). Original bills & splits remain safely recorded.
+            </p>
+          ) : (
+            <p className="text-[10px] text-purple-600 dark:text-purple-400 px-1">
+              📜 Bilateral audit view: Direct bill obligations and payments between roommates.
+            </p>
+          )}
 
           {/* 1. Debts You Owe Others */}
           {myDebtsToPay.length > 0 && (

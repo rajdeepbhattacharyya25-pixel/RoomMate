@@ -215,11 +215,33 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     }
   }
 
+  // Room Share contribution in current month and current week (Phase 9F)
+  let thisMonthRoomShare = 0;
+  let thisWeekRoomShare = 0;
+  const activeSharedList = (sharedExpenses || []).filter((e) => !e.isDeleted);
+  const activeSharedMap = new Map(activeSharedList.map((e) => [e.id, e]));
+
+  for (const s of expenseSplits || []) {
+    if (s.userId !== currentUser.id) continue;
+    const parentExp = activeSharedMap.get(s.sharedExpenseId);
+    if (!parentExp) continue;
+    const expDate = new Date(parentExp.expenseDate || parentExp.createdAt);
+    if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+      thisMonthRoomShare += s.shareAmount;
+    }
+    if (expDate >= monday && expDate <= sunday) {
+      thisWeekRoomShare += s.shareAmount;
+    }
+  }
+
+  const thisMonthTotalSpending = thisMonthPersonal + thisMonthRoomShare;
+  const thisWeekTotalSpending = thisWeekPersonal + thisWeekRoomShare;
+
   const userBudget = getUserBudget(currentUser.id);
   const monthlyAllowance = userBudget.monthlyAllowance || 8000;
   const weeklyAllowance = Math.round(monthlyAllowance / 4);
-  const monthlyBudgetPercentage = Math.min(100, Math.round((thisMonthPersonal / monthlyAllowance) * 100));
-  const weeklyBudgetPercentage = Math.min(100, Math.round((thisWeekPersonal / weeklyAllowance) * 100));
+  const monthlyBudgetPercentage = Math.min(100, Math.round((thisMonthTotalSpending / monthlyAllowance) * 100));
+  const weeklyBudgetPercentage = Math.min(100, Math.round((thisWeekTotalSpending / weeklyAllowance) * 100));
 
   const formatInr = (val: number) => {
     const abs = Math.abs(val);
@@ -647,8 +669,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               This Week
             </span>
             <span className="text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums block mt-0.5">
-              ₹{formatInr(thisWeekPersonal)}
+              ₹{formatInr(thisWeekTotalSpending)}
             </span>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+              Priv ₹{formatInr(thisWeekPersonal)} + Room ₹{formatInr(thisWeekRoomShare)}
+            </div>
             <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <div
                 className="h-full bg-indigo-600 rounded-full"
@@ -666,8 +691,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               This Month
             </span>
             <span className="text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums block mt-0.5">
-              ₹{formatInr(thisMonthPersonal)}
+              ₹{formatInr(thisMonthTotalSpending)}
             </span>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+              Priv ₹{formatInr(thisMonthPersonal)} + Room ₹{formatInr(thisMonthRoomShare)}
+            </div>
             <div className="mt-1.5 w-full h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <div
                 className={`h-full rounded-full ${

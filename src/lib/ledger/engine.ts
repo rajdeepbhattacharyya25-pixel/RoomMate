@@ -100,101 +100,10 @@ export function calculateSplits(
 }
 
 /**
- * Calculates two-way pairwise net balances between all members in a room.
- * Formula for Pair (A, B):
- * NetBalance(A -> B) = Obligations(B -> A) - Obligations(A -> B) + Settlements(A -> B) - Settlements(B -> A)
- *
- * Positive NetBalance: B owes A
- * Negative NetBalance: A owes B
- * 
- * @deprecated Legacy pairwise calculation. Produces O(N^2) pairwise debts and circular loops.
- * Authoritative financial calculation is provided by V2 Multilateral Min-Cash-Flow engine (`calculateRoomFinancialSummaryV2`).
+ * Calculates raw, unsimplified bilateral pairwise debts between members.
+ * Preserves the exact auditable trail of who paid for whom and direct settlement transfers.
  */
-export function calculateRoomPairwiseDebts(
-  expenses: SharedExpense[],
-  splits: ExpenseSplit[],
-  settlements: SettlementPayment[],
-  users: User[]
-): PairwiseDebt[] {
-  const userMap = new Map<string, User>(users.map((u) => [u.id, u]));
-  const activeExpenses = expenses.filter((e) => !e.isDeleted);
-  const expenseMap = new Map<string, SharedExpense>(activeExpenses.map((e) => [e.id, e]));
-
-  // Track raw obligations and direct settlement transfers
-  // Key format: `${payerId}:::${debtorId}` represents "debtor owes payer"
-  const rawObligations = new Map<string, number>();
-  const rawSettlements = new Map<string, number>();
-
-  const getPairKey = (payerId: string, debtorId: string) => `${payerId}:::${debtorId}`;
-
-  // 1. Process Expense Splits
-  for (const split of splits) {
-    const expense = expenseMap.get(split.sharedExpenseId);
-    if (!expense) continue;
-
-    const payerId = expense.paidBy;
-    const debtorId = split.userId;
-
-    if (payerId !== debtorId) {
-      const key = getPairKey(payerId, debtorId);
-      const current = rawObligations.get(key) || 0;
-      rawObligations.set(key, round2(current + split.shareAmount));
-    }
-  }
-
-  // 2. Process Settlement Payments
-  for (const pmt of settlements) {
-    const payerId = pmt.payerId; // Money sender
-    const payeeId = pmt.payeeId; // Money receiver
-
-    const key = getPairKey(payerId, payeeId);
-    const current = rawSettlements.get(key) || 0;
-    rawSettlements.set(key, round2(current + pmt.amount));
-  }
-
-  // 3. Consolidate Unique Pairs
-  const allUserIds = Array.from(userMap.keys());
-  const pairwiseResults: PairwiseDebt[] = [];
-
-  for (let i = 0; i < allUserIds.length; i++) {
-    for (let j = i + 1; j < allUserIds.length; j++) {
-      const uA = allUserIds[i];
-      const uB = allUserIds[j];
-
-      // Obligations
-      const bOwesAForBills = rawObligations.get(getPairKey(uA, uB)) || 0;
-      const aOwesBForBills = rawObligations.get(getPairKey(uB, uA)) || 0;
-
-      // Direct Payments / Settlements
-      const aPaidBDirectly = rawSettlements.get(getPairKey(uA, uB)) || 0;
-      const bPaidADirectly = rawSettlements.get(getPairKey(uB, uA)) || 0;
-
-      // Net from A's perspective:
-      // What B owes A = bOwesAForBills - bPaidADirectly
-      // What A owes B = aOwesBForBills - aPaidBDirectly
-      // NetBalance(A <-> B) = (What B owes A) - (What A owes B)
-      const netAmount = round2(bOwesAForBills - aOwesBForBills + aPaidBDirectly - bPaidADirectly);
-
-      if (Math.abs(netAmount) >= 0.01) {
-        pairwiseResults.push({
-          userAId: uA,
-          userBId: uB,
-          userAName: userMap.get(uA)?.name || 'Unknown',
-          userBName: userMap.get(uB)?.name || 'Unknown',
-          netAmount,
-          explanation: {
-            aPaidForB: bOwesAForBills,
-            bPaidForA: aOwesBForBills,
-            settlementsAToB: aPaidBDirectly,
-            settlementsBToA: bPaidADirectly,
-          },
-        });
-      }
-    }
-  }
-
-  return pairwiseResults;
-}
+export { calculateRoomPairwiseDebts } from './financialIntegrationService';
 
 // Export Canonical Financial Integration Service (Phase 4)
 export * from './financialIntegrationService';
