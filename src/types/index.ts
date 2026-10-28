@@ -142,6 +142,18 @@ export interface ExpenseSplit {
   createdAt: string;
 }
 
+export type SettlementStatus =
+  | 'PENDING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'AUTO_CONFIRMED'
+  | 'DISPUTED'
+  | 'CANCELLED';
+
+export type SettlementConfirmationMethod =
+  | 'MANUAL'
+  | 'AUTOMATIC'
+  | 'ADMIN_RESOLUTION';
+
 export interface SettlementPayment {
   id: string;
   roomId: string;
@@ -153,6 +165,18 @@ export interface SettlementPayment {
   notes?: string;
   paymentDate: string;
   createdAt: string;
+  status?: SettlementStatus;
+  confirmationDeadline?: string;
+  reminderSentAt?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmationMethod?: SettlementConfirmationMethod;
+  disputedAt?: string;
+  disputedBy?: string;
+  disputeReason?: string;
+  evidenceUtr?: string;
+  evidenceUrl?: string;
+  cancelledAt?: string;
 }
 
 export interface AuditLog {
@@ -215,6 +239,7 @@ export type NotificationType =
   | 'ACCOUNT_SECURITY'
   | 'PAYMENT_FAILED'
   | 'EXPENSE_DISPUTE'
+  | 'SETTLEMENT_DISPUTED'
   | 'ROOM_POLICY_CHANGED'
   // MEDIUM Priority (Shared bills & active room changes)
   | 'EXPENSE_ADDED'
@@ -223,6 +248,7 @@ export type NotificationType =
   | 'MEMBER_JOINED'
   | 'EXPENSE_MODIFIED'
   | 'SETTLEMENT_REMINDER'
+  | 'SETTLEMENT_CONFIRMED'
   | 'BUDGET_THRESHOLD_REACHED'
   // LOW / CASUAL Priority (Informational & settled state)
   | 'EXPENSE_SETTLED'

@@ -56,6 +56,7 @@ import {
   History,
   MoreVertical,
   Bell,
+  Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useNetworkStatus } from '../../context/NetworkContext';
@@ -2859,6 +2860,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
+                  </p>
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400/90 flex items-center gap-1.5 pt-1.5 border-t border-slate-200/80 dark:border-[#27354A]">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                    <span>Settlements enter <strong>Pending Confirmation</strong> until verified by your roommate, or auto-confirmed after 72 hours.</span>
                   </p>
                 </div>
               )}

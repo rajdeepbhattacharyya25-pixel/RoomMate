@@ -86,6 +86,9 @@ export function calculateRoomPairwiseDebts(
 
   // 2. Process Settlement Payments
   for (const pmt of settlements) {
+    if (pmt.status === 'DISPUTED' || pmt.status === 'CANCELLED') {
+      continue;
+    }
     const payerId = pmt.payerId;
     const payeeId = pmt.payeeId;
 
@@ -184,6 +187,7 @@ export function adaptLegacySettlementToV2(settlement: SettlementPayment): Settle
     amountPaise: rupeesToPaise(settlement.amount),
     paymentDate: settlement.paymentDate,
     createdAt: settlement.createdAt,
+    status: settlement.status,
   };
 }
 
@@ -456,5 +460,40 @@ export const financialIntegrationService = {
     amount: number
   ): Promise<RecordSettlementV2Result> {
     return supabaseService.recordRoomSettlementV2(roomId, payerId, payeeId, amount);
+  },
+
+  /**
+   * Confirms receipt of a settlement payment
+   */
+  async confirmRoomSettlement(settlementId: string): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.confirmRoomSettlement(settlementId);
+  },
+
+  /**
+   * Disputes a settlement payment
+   */
+  async disputeRoomSettlement(
+    settlementId: string,
+    reason: string
+  ): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.disputeRoomSettlement(settlementId, reason);
+  },
+
+  /**
+   * Cancels a pending settlement claim
+   */
+  async cancelRoomSettlement(settlementId: string): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.cancelRoomSettlement(settlementId);
+  },
+
+  /**
+   * Submits evidence / UTR for a disputed settlement
+   */
+  async submitSettlementEvidence(
+    settlementId: string,
+    utr: string,
+    evidenceUrl?: string
+  ): Promise<{ success: boolean; error?: string; evidenceUtr?: string }> {
+    return supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
   },
 };

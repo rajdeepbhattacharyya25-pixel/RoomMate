@@ -432,6 +432,18 @@ export type Database = {
           notes: string | null;
           payment_date: string;
           created_at: string;
+          status: 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'AUTO_CONFIRMED' | 'DISPUTED' | 'CANCELLED';
+          confirmation_deadline: string | null;
+          reminder_sent_at: string | null;
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          confirmation_method: 'MANUAL' | 'AUTOMATIC' | 'ADMIN_RESOLUTION' | null;
+          disputed_at: string | null;
+          disputed_by: string | null;
+          dispute_reason: string | null;
+          evidence_utr: string | null;
+          evidence_url: string | null;
+          cancelled_at: string | null;
         };
         Insert: {
           id?: string;
@@ -444,6 +456,18 @@ export type Database = {
           notes?: string | null;
           payment_date?: string;
           created_at?: string;
+          status?: 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'AUTO_CONFIRMED' | 'DISPUTED' | 'CANCELLED';
+          confirmation_deadline?: string | null;
+          reminder_sent_at?: string | null;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          confirmation_method?: 'MANUAL' | 'AUTOMATIC' | 'ADMIN_RESOLUTION' | null;
+          disputed_at?: string | null;
+          disputed_by?: string | null;
+          dispute_reason?: string | null;
+          evidence_utr?: string | null;
+          evidence_url?: string | null;
+          cancelled_at?: string | null;
         };
         Update: {
           id?: string;
@@ -456,6 +480,18 @@ export type Database = {
           notes?: string | null;
           payment_date?: string;
           created_at?: string;
+          status?: 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'AUTO_CONFIRMED' | 'DISPUTED' | 'CANCELLED';
+          confirmation_deadline?: string | null;
+          reminder_sent_at?: string | null;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          confirmation_method?: 'MANUAL' | 'AUTOMATIC' | 'ADMIN_RESOLUTION' | null;
+          disputed_at?: string | null;
+          disputed_by?: string | null;
+          dispute_reason?: string | null;
+          evidence_utr?: string | null;
+          evidence_url?: string | null;
+          cancelled_at?: string | null;
         };
         Relationships: [];
       };
@@ -689,6 +725,37 @@ export type Database = {
           p_payee_id: string;
           p_amount: number;
         };
+        Returns: Json;
+      };
+      confirm_room_settlement_secure: {
+        Args: {
+          p_settlement_id: string;
+        };
+        Returns: Json;
+      };
+      dispute_room_settlement_secure: {
+        Args: {
+          p_settlement_id: string;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
+      cancel_room_settlement_secure: {
+        Args: {
+          p_settlement_id: string;
+        };
+        Returns: Json;
+      };
+      submit_settlement_evidence_secure: {
+        Args: {
+          p_settlement_id: string;
+          p_utr: string;
+          p_evidence_url?: string | null;
+        };
+        Returns: Json;
+      };
+      process_settlement_auto_confirmations: {
+        Args: Record<string, never>;
         Returns: Json;
       };
       leave_room: {

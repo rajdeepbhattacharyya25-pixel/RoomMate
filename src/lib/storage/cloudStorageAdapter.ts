@@ -189,6 +189,18 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       notes: p.notes || undefined,
       paymentDate: p.payment_date || p.created_at || new Date().toISOString(),
       createdAt: p.created_at || new Date().toISOString(),
+      status: p.status || 'CONFIRMED',
+      confirmationDeadline: p.confirmation_deadline || undefined,
+      reminderSentAt: p.reminder_sent_at || undefined,
+      confirmedAt: p.confirmed_at || undefined,
+      confirmedBy: p.confirmed_by || undefined,
+      confirmationMethod: p.confirmation_method || undefined,
+      disputedAt: p.disputed_at || undefined,
+      disputedBy: p.disputed_by || undefined,
+      disputeReason: p.dispute_reason || undefined,
+      evidenceUtr: p.evidence_utr || undefined,
+      evidenceUrl: p.evidence_url || undefined,
+      cancelledAt: p.cancelled_at || undefined,
     }));
 
     // Subscriptions and logs fallback to local/empty
@@ -499,6 +511,8 @@ export async function recordSettlementCloud(data: {
     const localSettlement = db.recordSettlementPayment(data.payerId, {
       ...data,
       id: v2Result.settlement_id || data.id,
+      status: (v2Result.status as SettlementPayment['status']) || 'PENDING_CONFIRMATION',
+      confirmationDeadline: v2Result.confirmation_deadline,
     });
     return localSettlement;
   }
@@ -511,6 +525,65 @@ export async function recordSettlementCloud(data: {
   });
 
   return localSettlement;
+}
+
+// Confirm Settlement in Cloud + Local
+export async function confirmSettlementCloud(
+  userId: string,
+  settlementId: string
+): Promise<SettlementPayment> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    const res = await supabaseService.confirmRoomSettlement(settlementId);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to confirm settlement');
+    }
+  }
+  return db.confirmSettlementPayment(userId, settlementId);
+}
+
+// Dispute Settlement in Cloud + Local
+export async function disputeSettlementCloud(
+  userId: string,
+  settlementId: string,
+  reason: string
+): Promise<SettlementPayment> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    const res = await supabaseService.disputeRoomSettlement(settlementId, reason);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to dispute settlement');
+    }
+  }
+  return db.disputeSettlementPayment(userId, settlementId, reason);
+}
+
+// Cancel Settlement Claim in Cloud + Local
+export async function cancelSettlementCloud(
+  userId: string,
+  settlementId: string
+): Promise<SettlementPayment> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    const res = await supabaseService.cancelRoomSettlement(settlementId);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to cancel settlement');
+    }
+  }
+  return db.cancelSettlementPayment(userId, settlementId);
+}
+
+// Submit Settlement Evidence in Cloud + Local
+export async function submitSettlementEvidenceCloud(
+  userId: string,
+  settlementId: string,
+  utr: string,
+  evidenceUrl?: string
+): Promise<SettlementPayment> {
+  if (IS_LIVE_SYNC_ENABLED) {
+    const res = await supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to submit settlement evidence');
+    }
+  }
+  return db.submitSettlementEvidence(userId, settlementId, utr, evidenceUrl);
 }
 
 // Leave Room in Cloud + Local (Atomic via Postgres RPC)

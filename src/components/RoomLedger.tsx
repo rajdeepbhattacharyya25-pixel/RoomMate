@@ -20,7 +20,13 @@ import {
 import { CanonicalRoomSummaryResult } from '../lib/ledger/financialIntegrationService';
 import { DbFinancialSummaryV2, FinancialDataState } from '../lib/ledger/v2';
 import { isSupabaseConfigured } from '../lib/supabase/client';
-import { isUuid } from '../lib/storage/cloudStorageAdapter';
+import {
+  isUuid,
+  confirmSettlementCloud,
+  disputeSettlementCloud,
+  cancelSettlementCloud,
+  submitSettlementEvidenceCloud,
+} from '../lib/storage/cloudStorageAdapter';
 import { UserAvatar } from './common/UserAvatar';
 import { formatInrExact } from '../lib/utils/currencyFormatter';
 import {
@@ -45,6 +51,9 @@ import {
   ExternalLink,
   MessageCircle,
   Loader2,
+  Clock,
+  X,
+  Upload,
 } from 'lucide-react';
 import {
   validatePayeeUpi,
@@ -90,6 +99,10 @@ interface RoomLedgerProps {
   onJoinRoom: (code: string) => void;
   onLeaveRoom?: (roomId: string) => Promise<void>;
   onRemoveMember?: (roomId: string, targetUserId: string) => Promise<void>;
+  onConfirmSettlement?: (settlementId: string) => Promise<void>;
+  onDisputeSettlement?: (settlementId: string, reason: string) => Promise<void>;
+  onCancelSettlement?: (settlementId: string) => Promise<void>;
+  onSubmitSettlementEvidence?: (settlementId: string, utr: string, evidenceUrl?: string) => Promise<void>;
 }
 
 export const RoomLedger: React.FC<RoomLedgerProps> = ({
@@ -109,6 +122,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   onJoinRoom,
   onLeaveRoom,
   onRemoveMember,
+  onConfirmSettlement,
+  onDisputeSettlement,
+  onCancelSettlement,
+  onSubmitSettlementEvidence,
 }) => {
   // Modals
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -143,6 +160,15 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [transactionRef, setTransactionRef] = useState('');
   const [settleNotes, setSettleNotes] = useState('');
   const [isSubmittingSettle, setIsSubmittingSettle] = useState(false);
+
+  // Recipient Settlement Confirmation & Dispute State
+  const [disputingSettlementId, setDisputingSettlementId] = useState<string | null>(null);
+  const [disputeReasonInput, setDisputeReasonInput] = useState('');
+  const [evidenceSettlementId, setEvidenceSettlementId] = useState<string | null>(null);
+  const [evidenceUtrInput, setEvidenceUtrInput] = useState('');
+  const [evidenceUrlInput, setEvidenceUrlInput] = useState('');
+  const [settlementActionLoadingId, setSettlementActionLoadingId] = useState<string | null>(null);
+  const [settlementActionError, setSettlementActionError] = useState<string | null>(null);
 
   // Create & Join Room Form State
   const [newRoomName, setNewRoomName] = useState('');
@@ -690,6 +716,80 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
     }
   };
 
+  const handleConfirmReceipt = async (settlementId: string) => {
+    setSettlementActionLoadingId(settlementId);
+    setSettlementActionError(null);
+    try {
+      if (onConfirmSettlement) {
+        await onConfirmSettlement(settlementId);
+      } else {
+        await confirmSettlementCloud(currentUser.id, settlementId);
+      }
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to confirm settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleDisputeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputingSettlementId || !disputeReasonInput.trim()) return;
+    setSettlementActionLoadingId(disputingSettlementId);
+    setSettlementActionError(null);
+    try {
+      if (onDisputeSettlement) {
+        await onDisputeSettlement(disputingSettlementId, disputeReasonInput.trim());
+      } else {
+        await disputeSettlementCloud(currentUser.id, disputingSettlementId, disputeReasonInput.trim());
+      }
+      setDisputingSettlementId(null);
+      setDisputeReasonInput('');
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to dispute settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleCancelClaim = async (settlementId: string) => {
+    if (!window.confirm('Are you sure you want to cancel this settlement claim? Your balance will be restored.')) return;
+    setSettlementActionLoadingId(settlementId);
+    setSettlementActionError(null);
+    try {
+      if (onCancelSettlement) {
+        await onCancelSettlement(settlementId);
+      } else {
+        await cancelSettlementCloud(currentUser.id, settlementId);
+      }
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to cancel settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleEvidenceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!evidenceSettlementId || !evidenceUtrInput.trim()) return;
+    setSettlementActionLoadingId(evidenceSettlementId);
+    setSettlementActionError(null);
+    try {
+      if (onSubmitSettlementEvidence) {
+        await onSubmitSettlementEvidence(evidenceSettlementId, evidenceUtrInput.trim(), evidenceUrlInput.trim() || undefined);
+      } else {
+        await submitSettlementEvidenceCloud(currentUser.id, evidenceSettlementId, evidenceUtrInput.trim(), evidenceUrlInput.trim() || undefined);
+      }
+      setEvidenceSettlementId(null);
+      setEvidenceUtrInput('');
+      setEvidenceUrlInput('');
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to submit evidence');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
   const copyInvite = () => {
     if (invitation) {
       navigator.clipboard.writeText(invitation.inviteCode);
@@ -1137,25 +1237,164 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             <p className="text-xs text-[var(--text-subtle)] py-6 text-center">No payment transfers recorded yet.</p>
           ) : (
             <div className="space-y-2">
+              {settlementActionError && (
+                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+                  <span>{settlementActionError}</span>
+                  <button onClick={() => setSettlementActionError(null)} className="text-gray-400 hover:text-white">✕</button>
+                </div>
+              )}
               {roomSettlements.map((pmt) => {
                 const payer = allUsers.find((u) => u.id === pmt.payerId);
                 const payee = allUsers.find((u) => u.id === pmt.payeeId);
+                const isPayer = pmt.payerId === currentUser.id;
+                const isPayee = pmt.payeeId === currentUser.id;
+                const status = pmt.status || 'CONFIRMED';
+                const isPending = status === 'PENDING_CONFIRMATION';
+                const isDisputed = status === 'DISPUTED';
+                const isCancelled = status === 'CANCELLED';
 
                 return (
-                  <div key={pmt.id} className="p-3 rounded-xl bg-slate-950/60 border border-[var(--border-subtle)] space-y-1">
+                  <div key={pmt.id} className="p-3 rounded-xl bg-slate-950/60 border border-[var(--border-subtle)] space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold text-white">
-                      <div className="flex items-center gap-1">
-                        <span>{pmt.payerId === currentUser.id ? 'You' : payer?.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>{isPayer ? 'You' : (payer?.name || 'Roommate')}</span>
                         <ArrowRight className="w-3 h-3 text-emerald-400" />
-                        <span>{pmt.payeeId === currentUser.id ? 'You' : payee?.name}</span>
+                        <span>{isPayee ? 'You' : (payee?.name || 'Roommate')}</span>
                       </div>
-                      <span className="text-emerald-400 font-extrabold">+₹{pmt.amount}</span>
+                      <span className={`font-extrabold ${isDisputed || isCancelled ? 'text-gray-500 line-through' : 'text-emerald-400'}`}>
+                        +₹{pmt.amount}
+                      </span>
                     </div>
+
+                    {/* Status Badge */}
+                    <div className="flex items-center justify-between text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            Pending Confirmation
+                          </span>
+                        )}
+                        {status === 'CONFIRMED' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            Confirmed
+                          </span>
+                        )}
+                        {status === 'AUTO_CONFIRMED' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 border border-teal-500/30 font-semibold">
+                            <CheckCircle2 className="w-3 h-3 text-teal-400" />
+                            Auto-Confirmed (72h)
+                          </span>
+                        )}
+                        {isDisputed && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 font-semibold">
+                            <AlertTriangle className="w-3 h-3 text-rose-400" />
+                            Disputed
+                          </span>
+                        )}
+                        {isCancelled && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/30 font-semibold">
+                            <X className="w-3 h-3 text-gray-400" />
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[var(--text-subtle)]">{pmt.paymentDate}</span>
+                    </div>
+
                     <div className="flex items-center justify-between text-[10px] text-[var(--text-subtle)]">
                       <span>Method: {pmt.paymentMethod}</span>
-                      <span>{pmt.paymentDate}</span>
+                      {pmt.confirmationDeadline && isPending && (
+                        <span>Deadline: {new Date(pmt.confirmationDeadline).toLocaleDateString()}</span>
+                      )}
                     </div>
+
                     {pmt.notes && <p className="text-[10px] text-gray-400 italic">{pmt.notes}</p>}
+
+                    {/* Dispute Info */}
+                    {isDisputed && pmt.disputeReason && (
+                      <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-500/20 text-[11px] text-rose-300 space-y-1">
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Dispute Reason:</span>
+                        </div>
+                        <p className="italic text-gray-300 pl-4">"{pmt.disputeReason}"</p>
+                        {pmt.evidenceUtr && (
+                          <p className="text-emerald-400 font-mono text-[10px] pt-1">
+                            Proof UTR: {pmt.evidenceUtr}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 pt-1">
+                      {isPending && isPayee && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmReceipt(pmt.id)}
+                            disabled={settlementActionLoadingId === pmt.id}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Confirm Receipt</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDisputingSettlementId(pmt.id);
+                              setDisputeReasonInput('');
+                            }}
+                            disabled={settlementActionLoadingId === pmt.id}
+                            className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Dispute</span>
+                          </button>
+                        </>
+                      )}
+
+                      {isPending && isPayer && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelClaim(pmt.id)}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-300 text-[10px] font-medium cursor-pointer"
+                        >
+                          Cancel Claim
+                        </button>
+                      )}
+
+                      {isDisputed && isPayer && !pmt.evidenceUtr && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvidenceSettlementId(pmt.id);
+                            setEvidenceUtrInput('');
+                            setEvidenceUrlInput('');
+                          }}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Submit UTR Proof</span>
+                        </button>
+                      )}
+
+                      {isDisputed && isPayee && pmt.evidenceUtr && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmReceipt(pmt.id)}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Acknowledge & Confirm</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1747,6 +1986,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   <p className="text-[11px] text-gray-400">
                     You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
                   </p>
+                  <p className="text-[10px] text-amber-400/90 flex items-center gap-1.5 pt-1.5 border-t border-slate-800/80">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>Settlements enter <strong>Pending Confirmation</strong> until verified by your roommate, or automatically confirmed after 72 hours.</span>
+                  </p>
                 </div>
               )}
 
@@ -1777,6 +2020,143 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   ) : (
                     <span>Confirm payment</span>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dispute Settlement Modal */}
+      {disputingSettlementId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="glass-card max-w-md w-full p-6 border-rose-500/30 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-rose-500/20">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-bold text-white">Dispute Settlement</h3>
+              </div>
+              <button
+                onClick={() => setDisputingSettlementId(null)}
+                className="text-gray-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Did not receive this payment? Disputing will <strong>immediately reinstate the outstanding balance</strong> across your room ledger and notify the payer to provide bank proof (UTR).
+            </p>
+
+            <form onSubmit={handleDisputeSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Reason for Dispute *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Funds not credited in bank account, incorrect UPI ID used, etc."
+                  value={disputeReasonInput}
+                  onChange={(e) => setDisputeReasonInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDisputingSettlementId(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!disputeReasonInput.trim() || settlementActionLoadingId === disputingSettlementId}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {settlementActionLoadingId === disputingSettlementId ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  )}
+                  <span>Submit Dispute</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Evidence / Proof Modal */}
+      {evidenceSettlementId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="glass-card max-w-md w-full p-6 border-indigo-500/30 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-indigo-500/20">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">Submit Payment Proof</h3>
+              </div>
+              <button
+                onClick={() => setEvidenceSettlementId(null)}
+                className="text-gray-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Provide your 12-digit UPI Transaction ID or Bank Reference (UTR) from your payment app so your roommate can verify and confirm the funds.
+            </p>
+
+            <form onSubmit={handleEvidenceSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Bank Reference / UTR Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 427819283741"
+                  value={evidenceUtrInput}
+                  onChange={(e) => setEvidenceUtrInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Payment Screenshot URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={evidenceUrlInput}
+                  onChange={(e) => setEvidenceUrlInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEvidenceSettlementId(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!evidenceUtrInput.trim() || settlementActionLoadingId === evidenceSettlementId}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {settlementActionLoadingId === evidenceSettlementId ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  <span>Submit Proof</span>
                 </button>
               </div>
             </form>
