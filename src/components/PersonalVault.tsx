@@ -258,7 +258,7 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                 PostgreSQL RLS Owner-Enforced
               </span>
             </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               <span>Personal Expense Vault & Complete Spending</span>
             </h1>
             <p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl leading-relaxed">
@@ -270,10 +270,10 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => setShowRecurringModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-indigo-300 hover:text-white border border-indigo-500/30 font-bold text-xs shadow-md transition-all cursor-pointer relative"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-indigo-300 border border-slate-200 dark:border-indigo-500/30 font-bold text-xs shadow-xs transition-all cursor-pointer relative"
               title="Manage Recurring Bills & Subscriptions"
             >
-              <CalendarClock className="w-4 h-4 text-indigo-400" />
+              <CalendarClock className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
               <span>Recurring Bills</span>
               {pendingBills.length > 0 && (
                 <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center animate-pulse">
@@ -284,9 +284,9 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
 
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>Add Private Expense</span>
             </button>
           </div>
@@ -312,7 +312,7 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
             </span>
             <Receipt className="w-4 h-4 text-emerald-400 opacity-70" />
           </div>
-          <p className="text-3xl font-black text-white mt-1.5 tabular-nums">
+          <p className="text-3xl font-black text-slate-900 dark:text-white mt-1.5 tabular-nums">
             ₹{totalActualSpending.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <div className="text-[11px] text-[var(--text-subtle)] mt-1.5 flex items-center gap-1.5">
@@ -453,14 +453,14 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
         {(activeTab === 'ALL' || activeTab === 'PRIVATE') && (
           <div className="glass-card overflow-hidden">
             <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Lock className="w-4 h-4 text-emerald-400" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Lock className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                 <span>Private Vault Transactions</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-gray-400">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-gray-400">
                   {filteredPrivateExpenses.length}
                 </span>
               </h2>
-              <span className="text-xs text-emerald-400 font-bold">
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                 ₹{filteredPrivateExpenses.reduce((s, e) => s + e.amount, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -489,8 +489,8 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-white">{exp.title}</h3>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{exp.title}</h3>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium border border-emerald-500/20">
                             Private
                           </span>
                         </div>
@@ -509,7 +509,7 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <span className="text-base font-black text-white tabular-nums">
+                      <span className="text-base font-black text-slate-900 dark:text-white tabular-nums">
                         ₹{exp.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                       <button
@@ -531,14 +531,14 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
         {(activeTab === 'ALL' || activeTab === 'ROOM_SHARE') && (
           <div className="glass-card overflow-hidden">
             <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
                 <span>Room Share Split Contributions</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-gray-400">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-gray-400">
                   {filteredRoomShareItems.length}
                 </span>
               </h2>
-              <span className="text-xs text-cyan-400 font-bold">
+              <span className="text-xs text-cyan-600 dark:text-cyan-400 font-bold">
                 ₹{filteredRoomShareItems.reduce((s, i) => s + i.myShare, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -561,7 +561,7 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-white">{item.title}</h3>
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{item.title}</h3>
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-medium border border-cyan-500/20">
                             Room Split
                           </span>
@@ -609,16 +609,16 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
 
       {/* Add Private Expense Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="glass-card max-w-md w-full p-6 border-emerald-500/30 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#12121A] border border-slate-200 dark:border-emerald-500/30 rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#27354A]">
               <div className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Add Private Expense</h3>
+                <Lock className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Add Private Expense</h3>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-white text-xs font-bold cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xs font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -626,7 +626,7 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Expense Title *
                 </label>
                 <input
@@ -634,14 +634,14 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                   placeholder="e.g. Swiggy Snack, Weekend Metro, College Books"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-xs"
+                  className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-emerald-500 outline-none"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                     Amount (₹) *
                   </label>
                   <input
@@ -650,19 +650,19 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                     placeholder="250"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full text-xs"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-emerald-500 outline-none tabular-nums"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                     Category
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value as PersonalExpense['category'])}
-                    className="w-full text-xs"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-emerald-500 outline-none"
                   >
                     <option value="Food">Food / Snacks</option>
                     <option value="Shopping">Shopping</option>
@@ -676,19 +676,19 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Date
                 </label>
                 <input
                   type="date"
                   value={expenseDate}
                   onChange={(e) => setExpenseDate(e.target.value)}
-                  className="w-full text-xs"
+                  className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-emerald-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Private Notes (Optional)
                 </label>
                 <textarea
@@ -696,21 +696,21 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
                   placeholder="Only you will ever see this note..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full text-xs"
+                  className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#20202A] border border-slate-200 dark:border-[#27354A] rounded-xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-emerald-500 outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-[#27354A]">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 cursor-pointer"
                 >
                   Save to Private Vault
                 </button>

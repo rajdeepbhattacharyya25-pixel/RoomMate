@@ -285,14 +285,14 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
       : 'bg-red-500/10 text-red-400 border-red-500/30';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="glass-card max-w-2xl w-full p-6 border-indigo-500/30 space-y-5 max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+      <div className="bg-white dark:bg-[#1C1C25] border border-slate-200/90 dark:border-[#27354A] shadow-2xl rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4.5 max-h-[92vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-start justify-between pb-3 border-b border-[var(--border-subtle)]">
+        <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-[#27354A]/80">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-                <Receipt className="w-4 h-4" />
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                <Receipt className="w-4.5 h-4.5" />
               </div>
               <div className="flex items-center gap-2">
                 {isEditingVendor ? (
@@ -313,10 +313,10 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-base font-bold text-white">{vendor}</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{vendor}</h3>
                     <button
                       onClick={() => setIsEditingVendor(true)}
-                      className="text-gray-400 hover:text-white p-0.5"
+                      className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-0.5 cursor-pointer"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -330,14 +330,14 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                 </span>
               </div>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Assign line items to individual roommates. Taxes and delivery will be prorated automatically.
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-1 rounded-md transition-colors"
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-md transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -399,13 +399,13 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
         {/* Itemized Line Items List */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
               <span>Receipt Items ({items.length})</span>
             </h4>
             <button
               type="button"
               onClick={handleAddItem}
-              className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+              className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Item</span>
@@ -422,8 +422,8 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   key={item.id}
                   className={`p-3 rounded-xl border transition-all ${
                     assignedCount === 0
-                      ? 'bg-amber-950/20 border-amber-500/40'
-                      : 'bg-slate-900/60 border-[var(--border-subtle)] hover:border-indigo-500/40'
+                      ? 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-300 dark:border-amber-500/40'
+                      : 'bg-slate-50/80 dark:bg-slate-900/60 border-slate-200/90 dark:border-slate-800 hover:border-indigo-400/60'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -432,18 +432,18 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                       type="text"
                       value={item.name}
                       onChange={(e) => handleItemNameChange(item.id, e.target.value)}
-                      className="bg-transparent text-xs font-semibold text-white focus:bg-slate-950/80 px-2 py-1 rounded border border-transparent focus:border-indigo-500/50 flex-1"
+                      className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950/80 px-2 py-1 rounded border border-transparent focus:border-indigo-500/50 flex-1"
                     />
 
                     {/* Price Input */}
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-xs text-[var(--text-muted)] font-medium">₹</span>
+                      <span className="text-xs text-slate-400 font-medium">₹</span>
                       <input
                         type="number"
                         step="0.01"
                         value={(item.pricePaise / 100).toString()}
                         onChange={(e) => handleItemPriceChange(item.id, e.target.value)}
-                        className="w-20 text-xs font-bold text-right bg-slate-950/80 px-2 py-1 rounded border border-indigo-500/30 text-white"
+                        className="w-20 text-xs font-bold text-right bg-white dark:bg-slate-950/80 px-2 py-1 rounded border border-slate-200 dark:border-indigo-500/30 text-slate-900 dark:text-white"
                       />
                     </div>
 
@@ -459,15 +459,15 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   </div>
 
                   {/* Roommate Assignment Row */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
                         onClick={() => handleAssignAll(item.id)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all ${
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer ${
                           assignedCount === memberUserIds.length
-                            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:text-white'
+                            ? 'bg-indigo-50 dark:bg-indigo-600/30 border-indigo-400 dark:border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         All
@@ -475,10 +475,10 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                       <button
                         type="button"
                         onClick={() => handleAssignOnlyMe(item.id)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all ${
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-all cursor-pointer ${
                           assignedCount === 1 && item.assignedUserIds[0] === currentUserId
-                            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:text-white'
+                            ? 'bg-indigo-50 dark:bg-indigo-600/30 border-indigo-400 dark:border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         Only Me
@@ -494,7 +494,7 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                               type="button"
                               onClick={() => handleToggleRoommate(item.id, member.userId)}
                               title={`${member.name} (${isAssigned ? 'Assigned' : 'Excluded'})`}
-                              className={`relative rounded-full transition-all p-0.5 ${
+                              className={`relative rounded-full transition-all p-0.5 cursor-pointer ${
                                 isAssigned
                                   ? 'ring-2 ring-indigo-500 scale-105 opacity-100'
                                   : 'opacity-35 hover:opacity-75 grayscale'
@@ -512,9 +512,9 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                     </div>
 
                     {/* Per-person estimate label */}
-                    <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                       {assignedCount === 0 ? (
-                        <span className="text-amber-400 font-semibold">⚠️ Unassigned</span>
+                        <span className="text-amber-500 dark:text-amber-400 font-semibold">⚠️ Unassigned</span>
                       ) : (
                         `₹${(perPersonPaise / 100).toFixed(2)}/person (${assignedCount})`
                       )}
@@ -527,25 +527,25 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
         </div>
 
         {/* Taxes, Delivery & Overheads Toggle Card */}
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-slate-900/50 p-3 space-y-2.5">
+        <div className="rounded-xl border border-slate-200/90 dark:border-[#27354A] bg-slate-50/70 dark:bg-slate-900/50 p-3 space-y-2.5">
           <button
             type="button"
             onClick={() => setIsOverheadsExpanded(!isOverheadsExpanded)}
-            className="w-full flex items-center justify-between text-xs font-semibold text-[var(--text-muted)] hover:text-white transition-colors"
+            className="w-full flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               <span>Taxes, Delivery Charges & Discounts</span>
             </div>
-            <span className="text-[11px] text-indigo-400 font-bold">
+            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
               {isOverheadsExpanded ? '▲ Hide' : '▼ Edit Overheads'}
             </span>
           </button>
 
           {isOverheadsExpanded && (
-            <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-800">
+            <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/80 dark:border-slate-800">
               <div>
-                <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Tax / GST (₹)
                 </label>
                 <input
@@ -553,12 +553,12 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   step="0.01"
                   value={taxRupees}
                   onChange={(e) => setTaxRupees(e.target.value)}
-                  className="w-full text-xs bg-slate-950/80 px-2 py-1 rounded border border-indigo-500/30 text-white"
+                  className="w-full text-xs bg-white dark:bg-slate-950/80 px-2 py-1 rounded border border-slate-200 dark:border-indigo-500/30 text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Delivery Fee (₹)
                 </label>
                 <input
@@ -566,12 +566,12 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   step="0.01"
                   value={deliveryRupees}
                   onChange={(e) => setDeliveryRupees(e.target.value)}
-                  className="w-full text-xs bg-slate-950/80 px-2 py-1 rounded border border-indigo-500/30 text-white"
+                  className="w-full text-xs bg-white dark:bg-slate-950/80 px-2 py-1 rounded border border-slate-200 dark:border-indigo-500/30 text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">
+                <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                   Discount (₹)
                 </label>
                 <input
@@ -579,7 +579,7 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                   step="0.01"
                   value={discountRupees}
                   onChange={(e) => setDiscountRupees(e.target.value)}
-                  className="w-full text-xs bg-slate-950/80 px-2 py-1 rounded border border-indigo-500/30 text-white"
+                  className="w-full text-xs bg-white dark:bg-slate-950/80 px-2 py-1 rounded border border-slate-200 dark:border-indigo-500/30 text-slate-900 dark:text-white"
                 />
               </div>
             </div>
@@ -589,11 +589,11 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
         {/* Calculated Roommate Liabilities Breakdown */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-white flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               <span>Calculated Roommate Liabilities</span>
             </span>
-            <span className="text-[11px] text-[var(--text-muted)]">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
               Integer-Paise Precision
             </span>
           </div>
@@ -606,7 +606,7 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
               return (
                 <div
                   key={member.userId}
-                  className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center gap-2"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 flex items-center gap-2"
                 >
                   <UserAvatar
                     src={member.avatarUrl}
@@ -614,10 +614,10 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
                     size="sm"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">
+                    <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
                       {member.name}
                     </p>
-                    <p className="text-[11px] font-bold text-indigo-300">
+                    <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
                       ₹{owedRupees.toFixed(2)}
                     </p>
                   </div>
@@ -631,15 +631,15 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
         <div
           className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
             allocation.isReconciled
-              ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-              : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300'
+              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300'
           }`}
         >
           <div className="flex items-center gap-2">
             {allocation.isReconciled ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             )}
             <div>
               <div className="font-bold">
@@ -655,12 +655,12 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-[#27354A]/80">
           <button
             type="button"
             onClick={handleSave}
             disabled={!allocation.isReconciled || allocation.totalReceiptPaise <= 0}
-            className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+            className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all cursor-pointer"
           >
             <span>Confirm & Split Bill to Room Ledger</span>
             <ArrowRight className="w-4 h-4" />
@@ -670,14 +670,14 @@ export const ReceiptReviewDrawer: React.FC<ReceiptReviewDrawerProps> = ({
             <button
               type="button"
               onClick={handleManualSwitch}
-              className="text-xs text-[var(--text-muted)] hover:text-white py-1 transition-colors"
+              className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white py-1 transition-colors cursor-pointer"
             >
               Switch to Standard Manual Form
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="text-xs text-gray-500 hover:text-red-400 py-1 transition-colors"
+              className="text-xs text-slate-400 hover:text-rose-500 py-1 transition-colors cursor-pointer"
             >
               Discard
             </button>

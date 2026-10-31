@@ -326,7 +326,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         <MobileOfflineBanner />
 
         {/* Scrollable Screen Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-none relative pb-nav-safe">
+        <div className="flex-1 overflow-y-auto scrollbar-none pb-nav-safe">
           {activeTab === 'dashboard' && (
             <MobileDashboard
               currentUser={currentUser}

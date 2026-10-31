@@ -128,7 +128,7 @@ function parseExpenseDate(dateStr?: string): { year: number; month: number; day:
 }
 
 
-const CATEGORY_QUICK_CHIPS: Record<PersonalExpense['category'], string[]> = {
+const _CATEGORY_QUICK_CHIPS: Record<PersonalExpense['category'], string[]> = {
   Food: ['Chai ☕', 'Lunch 🍲', 'Dinner 🍛', 'Groceries 🛒', 'Snacks 🍟', 'Swiggy 🍕'],
   Shopping: ['Clothes 👕', 'Toiletries 🧴', 'Stationery ✏️', 'Amazon Order 📦'],
   Travel: ['Auto / Cab 🛺', 'Metro 🚇', 'Bus Ticket 🚌', 'Petrol ⛽'],
@@ -1476,18 +1476,18 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         title="Add Private Expense"
         subtitle="Saved securely in your personal vault"
         icon={<Lock className="w-4.5 h-4.5" />}
-        maxHeight="92vh"
+        maxHeight="88%"
       >
         {!isOnline && (
-          <div className="mb-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-700 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+          <div className="mb-2.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-700 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
             <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <span className="font-medium">
-              Operating Offline: Expense will be saved to your local vault immediately & synced once reconnected.
+              Operating Offline: Saved to your local vault immediately & synced once reconnected.
             </span>
           </div>
         )}
 
-        <form onSubmit={handleCreate} className="space-y-4 pb-4">
+        <form onSubmit={handleCreate} className="space-y-3 pb-2">
           {/* Amount Display with Currency */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between mb-1">
@@ -1525,13 +1525,13 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           </div>
 
           {/* Quick Preset Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
             {PRESETS.map((val) => (
               <button
                 key={val}
                 type="button"
                 onClick={() => handleAddPreset(val)}
-                className="h-8 px-3 min-w-[52px] rounded-lg bg-slate-100 dark:bg-[#20202A] hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-[#27354A]"
+                className="h-7 px-3 min-w-[50px] rounded-lg bg-slate-100 dark:bg-[#20202A] hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-[#27354A] cursor-pointer"
               >
                 +₹{val}
               </button>
@@ -1575,47 +1575,20 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                 <span>{validationErrors.title}</span>
               </p>
             )}
-
-            {/* Quick Suggestions based on Selected Category */}
-            <div className="pt-2">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block mb-1">
-                Quick 1-tap presets for {category}:
-              </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                {(CATEGORY_QUICK_CHIPS[category] || []).map((chip) => {
-                  const cleanName = chip.replace(/\s[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-                  const isSelected = title.toLowerCase() === cleanName.toLowerCase();
-                  return (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => {
-                        hapticSelection();
-                        setTitle(cleanName);
-                        if (validationErrors.title) {
-                          setValidationErrors((prev) => ({ ...prev, title: undefined }));
-                        }
-                        titleInputRef.current?.focus();
-                      }}
-                      className={`h-7 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all active:scale-95 flex items-center gap-1 border shrink-0 ${
-                        isSelected
-                          ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 font-bold shadow-2xs'
-                          : 'bg-slate-100 dark:bg-[#20202A] hover:bg-slate-200/80 dark:hover:bg-[#27354A] text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-[#27354A]'
-                      }`}
-                    >
-                      {chip}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
 
           {/* Category Grid */}
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
-              Category
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                Category
+              </label>
+              {selectedCategoryCap > 0 && (
+                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                  {category} Limit: ₹{selectedCategoryCap.toLocaleString('en-IN')}/mo
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-4 gap-1.5">
               {CATEGORIES.map((cat) => {
                 const isSelected = category === cat.name;
@@ -1627,53 +1600,49 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
                       hapticSelection();
                       setCategory(cat.name);
                     }}
-                    className={`min-h-[52px] py-2 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border transition-all active:scale-95 ${
+                    className={`min-h-[46px] py-1.5 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border transition-all active:scale-95 cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
                         : 'bg-slate-50 dark:bg-[#20202A] border-slate-200 dark:border-[#27354A] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#27354A]'
                     }`}
                   >
-                    <cat.icon className="w-4.5 h-4.5" />
+                    <cat.icon className="w-4 h-4" />
                     <span>{cat.name}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Category Cap & Spend Preview */}
+            {/* Subtle Category Cap & Spend Preview */}
             {selectedCategoryCap > 0 && (
               <div
-                className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between transition-colors ${
+                className={`mt-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] flex items-center justify-between transition-colors ${
                   willExceedCategoryCap
-                    ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200'
-                    : 'bg-slate-50 dark:bg-[#181820] border-slate-200/80 dark:border-[#27354A] text-slate-700 dark:text-slate-300'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200'
+                    : 'bg-slate-50/80 dark:bg-[#181820] border-slate-200/80 dark:border-[#27354A] text-slate-600 dark:text-slate-400'
                 }`}
               >
                 <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                  <HeartPulse className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <div className="truncate">
-                    <span className="font-semibold">{category} Limit:</span>{' '}
-                    <span>₹{selectedCategoryCap.toLocaleString('en-IN')}/mo</span>
-                    {willExceedCategoryCap && (
-                      <span className="text-[11px] block text-amber-700 dark:text-amber-300 font-medium">
-                        Will exceed limit by ₹{(projectedCategoryTotal - selectedCategoryCap).toLocaleString('en-IN')}. (Saved normally)
-                      </span>
-                    )}
-                  </div>
+                  <HeartPulse className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="truncate">
+                    {willExceedCategoryCap
+                      ? `Exceeds cap by ₹${(projectedCategoryTotal - selectedCategoryCap).toLocaleString('en-IN')}`
+                      : `${category} spend progress`}
+                  </span>
                 </div>
-                <div className="text-right text-[11px] font-bold shrink-0">
+                <div className="text-right font-bold shrink-0 text-[10px]">
                   <span className={willExceedCategoryCap ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}>
                     ₹{projectedCategoryTotal.toLocaleString('en-IN')}
                   </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-normal">
-                    {Math.round((projectedCategoryTotal / selectedCategoryCap) * 100)}% of limit
+                  <span className="text-slate-400 dark:text-slate-500 font-normal ml-1">
+                    ({Math.round((projectedCategoryTotal / selectedCategoryCap) * 100)}%)
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Date */}
+          {/* Date Field */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               Date
@@ -1686,11 +1655,11 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             />
           </div>
 
-          {/* Submit - Always responsive with guided validation */}
-          <div className="pt-2 pb-2">
+          {/* Submit */}
+          <div className="pt-2">
             <button
               type="submit"
-              className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all"
+              className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all cursor-pointer"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
               <span>Save Private Expense</span>
@@ -1856,7 +1825,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         onExport={handleExport}
       />
 
-      {/* Recurring Bills Modal */}
+      {/* Recurring Bills Modal (renders as native MobileBottomSheet on mobile) */}
       <RecurringBillsModal
         isOpen={showRecurringModal}
         onClose={() => setShowRecurringModal(false)}
@@ -1864,6 +1833,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         rules={recurringRules}
         onRulesUpdated={loadRecurringData}
         activeRoom={activeRoom}
+        isMobileView={true}
       />
     </div>
   );

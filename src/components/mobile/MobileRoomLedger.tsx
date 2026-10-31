@@ -241,7 +241,14 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   const [parsedReceipt, setParsedReceipt] = useState<ParsedReceiptData | null>(null);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showRoomActionSheet, setShowRoomActionSheet] = useState(false);
   const [reviewingJoinRequest, setReviewingJoinRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
+
+  // Dismiss Room Action Sheet on Android hardware back button
+  useBackButton(() => {
+    setShowRoomActionSheet(false);
+    return true;
+  }, showRoomActionSheet);
 
   // Dismiss Create Room dialog on Android hardware back button
   useBackButton(() => {
@@ -1071,41 +1078,39 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   return (
     <div className="space-y-4 pb-28 sm:pb-nav-safe px-4 pt-3 bg-[#F9F9FF] dark:bg-[#0B0B10] min-h-full text-slate-900 dark:text-slate-100">
       {/* Horizontal Room Switcher Bar */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
-        {rooms.map((room) => {
-          const isActive = activeRoom?.id === room.id;
-          return (
-            <button
-              key={room.id}
-              onClick={() => onSelectRoom(room)}
-              className={`min-h-[38px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
-                isActive
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>{room.name}</span>
-            </button>
-          );
-        })}
+      {rooms.length > 0 && (
+        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+          {rooms.map((room) => {
+            const isActive = activeRoom?.id === room.id;
+            return (
+              <button
+                key={room.id}
+                onClick={() => onSelectRoom(room)}
+                className={`min-h-[38px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
+                  isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>{room.name}</span>
+              </button>
+            );
+          })}
 
-        <button
-          onClick={() => setShowCreateRoomModal(true)}
-          className="min-h-[38px] px-3 rounded-full bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/60 text-xs font-semibold flex items-center gap-1 whitespace-nowrap hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-2xs"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Room</span>
-        </button>
-
-        <button
-          onClick={() => setShowJoinModal(true)}
-          className="min-h-[38px] px-3 rounded-full bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] text-xs font-semibold flex items-center gap-1 whitespace-nowrap hover:bg-slate-50 dark:hover:bg-[#20202A] shadow-2xs"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Join</span>
-        </button>
-      </div>
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(true);
+            }}
+            className="min-h-[38px] w-9 h-9 rounded-full bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center justify-center shrink-0 shadow-2xs cursor-pointer transition-all active:scale-95"
+            aria-label="Add or join another room"
+            title="Add or join another room"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </div>
+      )}
 
       {/* 0-Rooms Empty State Card */}
       {rooms.length === 0 && (
@@ -1393,14 +1398,17 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 setShowReceiptCapture(true);
               }}
               disabled={activeRoom.isFrozen}
-              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 border transition-all ${
+              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${
                 activeRoom.isFrozen
-                  ? 'opacity-40 cursor-not-allowed border-slate-700'
-                  : 'bg-indigo-950/60 hover:bg-indigo-900/70 border-indigo-500/40 text-indigo-300 active:scale-98'
+                  ? 'bg-slate-100 dark:bg-[#1C1C25] text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-[#27354A] cursor-not-allowed'
+                  : 'bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 active:scale-98 cursor-pointer'
               }`}
             >
-              <Camera className="w-4 h-4 text-indigo-400" />
+              <Camera className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Scan Receipt</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-200/70 dark:bg-indigo-800/60 text-indigo-800 dark:text-indigo-200">
+                AI
+              </span>
             </button>
           </div>
 
@@ -2118,17 +2126,17 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         {/* Form Body */}
         <div className="space-y-4 pb-4">
           {/* Quick Action: Scan Receipt via OCR / Gemini AI */}
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 flex items-center justify-between gap-3">
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/30 border border-indigo-100 dark:border-indigo-800/40 flex items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-600/20 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
                 <Camera className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <span>Have a receipt?</span>
-                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-500/30">AI / OCR</span>
+                  <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-200 dark:border-indigo-500/30">AI / OCR</span>
                 </div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   Scan to extract items, taxes & split with roommates
                 </div>
               </div>
@@ -2960,6 +2968,58 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 </button>
               </div>
             </form>
+      </MobileBottomSheet>
+
+      {/* Add or Join Room Action Sheet */}
+      <MobileBottomSheet
+        isOpen={showRoomActionSheet}
+        onClose={() => setShowRoomActionSheet(false)}
+        title="Add or Join a Room"
+        subtitle="Manage your flats, hostels, or group ledgers"
+        icon={<Plus className="w-4.5 h-4.5" />}
+        maxHeight="50vh"
+      >
+        <div className="p-4 space-y-3">
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(false);
+              setShowCreateRoomModal(true);
+            }}
+            className="w-full p-3.5 rounded-2xl bg-white dark:bg-[#161622] border border-slate-200/80 dark:border-slate-800/80 hover:border-indigo-300 dark:hover:border-indigo-700/60 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 flex items-center gap-3.5 text-left transition-all active:scale-[0.98] shadow-2xs group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Home className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">Create a New Room</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Set up a shared ledger for your flat, PG, or hostel
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0" />
+          </button>
+
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(false);
+              setShowJoinModal(true);
+            }}
+            className="w-full p-3.5 rounded-2xl bg-white dark:bg-[#161622] border border-slate-200/80 dark:border-slate-800/80 hover:border-emerald-300 dark:hover:border-emerald-700/60 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 flex items-center gap-3.5 text-left transition-all active:scale-[0.98] shadow-2xs group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">Join Another Room</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Enter a 6-character room code or scan flatmate QR
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors shrink-0" />
+          </button>
+        </div>
       </MobileBottomSheet>
 
       {/* Create Room Modal */}

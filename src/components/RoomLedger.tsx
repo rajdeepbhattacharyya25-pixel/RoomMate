@@ -893,7 +893,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               onClick={() => setShowJoinModal(true)}
               className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-gray-300 border border-slate-700"
             >
-              Join Another
+              Join Another Room
             </button>
             <button
               onClick={() => setShowCreateRoomModal(true)}
@@ -924,11 +924,14 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             )}
             <button
               onClick={() => setShowReceiptCapture(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 shadow-xs transition-all active:scale-95 cursor-pointer"
               title="Scan receipt to split line items"
             >
-              <Camera className="w-4 h-4 text-indigo-400" />
+              <Camera className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Scan Receipt</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-200/60 dark:bg-indigo-800/60 text-indigo-800 dark:text-indigo-200">
+                AI
+              </span>
             </button>
             <button
               onClick={openAddExpense}
