@@ -753,6 +753,20 @@ class MockDatabase {
     return count;
   }
 
+  /**
+   * Reverts / removes an optimistic settlement payment that was rejected
+   * by the server on offline queue replay (e.g. OVERSETTLEMENT_EXCEEDS_DEBT).
+   */
+  public revertDiscardedSettlement(settlementId: string): boolean {
+    const idx = this.state.settlementPayments.findIndex((s) => s.id === settlementId);
+    if (idx !== -1) {
+      this.state.settlementPayments.splice(idx, 1);
+      this.save(this.state);
+      return true;
+    }
+    return false;
+  }
+
   public leaveRoom(
     requesterUserId: string,
     roomId: string

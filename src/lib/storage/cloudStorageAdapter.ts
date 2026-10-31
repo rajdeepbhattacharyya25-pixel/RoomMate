@@ -499,6 +499,29 @@ export async function addSharedExpenseCloud(data: {
   return { expense: localExpense, splits: localSplits };
 }
 
+function isLikelyNetworkError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (
+    msg.includes('payer_is_not_a_debtor') ||
+    msg.includes('oversettlement') ||
+    msg.includes('invalid_settlement') ||
+    msg.includes('access_denied') ||
+    msg.includes('not_found') ||
+    msg.includes('invalid_transition')
+  ) {
+    return false;
+  }
+  return (
+    msg.includes('network') ||
+    msg.includes('fetch') ||
+    msg.includes('offline') ||
+    msg.includes('timeout') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('connection')
+  );
+}
+
 // Record Settlement to Cloud + Local with Idempotency
 export async function recordSettlementCloud(data: {
   id?: string;
@@ -564,23 +587,44 @@ export async function confirmSettlementCloud(
   userId: string,
   settlementId: string
 ): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
   if (IS_LIVE_SYNC_ENABLED) {
-    const res = await supabaseService.confirmRoomSettlement(settlementId);
-    if (!res.success) {
-      throw new Error(res.error || 'Failed to confirm settlement');
+    try {
+      const res = await supabaseService.confirmRoomSettlement(settlementId);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to confirm settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
     }
+  } else {
+    enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+    isEnqueuedOffline = true;
   }
+
   const settlement = db.confirmSettlementPayment(userId, settlementId);
-  sendRoommatePushEvent({
-    eventType: 'SETTLEMENT_CONFIRMED',
-    recipientUserIds: [settlement.payerId],
-    actorId: userId,
-    roomId: settlement.roomId,
-    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
-    title: 'Settlement Confirmed',
-    body: `Your payment of ₹${settlement.amount} was confirmed by the payee.`,
-    extraData: { settlementId },
-  }).catch((err) => console.warn('[Push] Settlement confirm push notice:', err));
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_CONFIRMED',
+      recipientUserIds: [settlement.payerId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Confirmed',
+      body: `Your payment of ₹${settlement.amount} was confirmed by the payee.`,
+      extraData: { settlementId },
+    }).catch((err) => console.warn('[Push] Settlement confirm push notice:', err));
+  }
   return settlement;
 }
 
@@ -590,23 +634,44 @@ export async function disputeSettlementCloud(
   settlementId: string,
   reason: string
 ): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
   if (IS_LIVE_SYNC_ENABLED) {
-    const res = await supabaseService.disputeRoomSettlement(settlementId, reason);
-    if (!res.success) {
-      throw new Error(res.error || 'Failed to dispute settlement');
+    try {
+      const res = await supabaseService.disputeRoomSettlement(settlementId, reason);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to dispute settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
     }
+  } else {
+    enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+    isEnqueuedOffline = true;
   }
+
   const settlement = db.disputeSettlementPayment(userId, settlementId, reason);
-  sendRoommatePushEvent({
-    eventType: 'SETTLEMENT_DISPUTED',
-    recipientUserIds: [settlement.payerId],
-    actorId: userId,
-    roomId: settlement.roomId,
-    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
-    title: 'Settlement Disputed: Payment Not Received',
-    body: `Your payment claim of ₹${settlement.amount} was disputed: "${reason}". Please provide bank UTR proof.`,
-    extraData: { settlementId, reason },
-  }).catch((err) => console.warn('[Push] Settlement dispute push notice:', err));
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_DISPUTED',
+      recipientUserIds: [settlement.payerId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Disputed: Payment Not Received',
+      body: `Your payment claim of ₹${settlement.amount} was disputed: "${reason}". Please provide bank UTR proof.`,
+      extraData: { settlementId, reason },
+    }).catch((err) => console.warn('[Push] Settlement dispute push notice:', err));
+  }
   return settlement;
 }
 
@@ -615,23 +680,44 @@ export async function cancelSettlementCloud(
   userId: string,
   settlementId: string
 ): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
   if (IS_LIVE_SYNC_ENABLED) {
-    const res = await supabaseService.cancelRoomSettlement(settlementId);
-    if (!res.success) {
-      throw new Error(res.error || 'Failed to cancel settlement');
+    try {
+      const res = await supabaseService.cancelRoomSettlement(settlementId);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to cancel settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
     }
+  } else {
+    enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+    isEnqueuedOffline = true;
   }
+
   const settlement = db.cancelSettlementPayment(userId, settlementId);
-  sendRoommatePushEvent({
-    eventType: 'SETTLEMENT_CANCELLED',
-    recipientUserIds: [settlement.payeeId],
-    actorId: userId,
-    roomId: settlement.roomId,
-    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
-    title: 'Settlement Claim Cancelled',
-    body: `The pending settlement of ₹${settlement.amount} was cancelled by the payer.`,
-    extraData: { settlementId },
-  }).catch((err) => console.warn('[Push] Settlement cancel push notice:', err));
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_CANCELLED',
+      recipientUserIds: [settlement.payeeId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Claim Cancelled',
+      body: `The pending settlement of ₹${settlement.amount} was cancelled by the payer.`,
+      extraData: { settlementId },
+    }).catch((err) => console.warn('[Push] Settlement cancel push notice:', err));
+  }
   return settlement;
 }
 
@@ -642,23 +728,44 @@ export async function submitSettlementEvidenceCloud(
   utr: string,
   evidenceUrl?: string
 ): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
   if (IS_LIVE_SYNC_ENABLED) {
-    const res = await supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
-    if (!res.success) {
-      throw new Error(res.error || 'Failed to submit settlement evidence');
+    try {
+      const res = await supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to submit settlement evidence');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
     }
+  } else {
+    enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+    isEnqueuedOffline = true;
   }
+
   const settlement = db.submitSettlementEvidence(userId, settlementId, utr, evidenceUrl);
-  sendRoommatePushEvent({
-    eventType: 'EVIDENCE_SUBMITTED',
-    recipientUserIds: [settlement.payeeId],
-    actorId: userId,
-    roomId: settlement.roomId,
-    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
-    title: 'Payment Proof Submitted',
-    body: `Payer submitted bank reference (UTR: ${utr}) for disputed settlement of ₹${settlement.amount}.`,
-    extraData: { settlementId, utr },
-  }).catch((err) => console.warn('[Push] Evidence submit push notice:', err));
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'EVIDENCE_SUBMITTED',
+      recipientUserIds: [settlement.payeeId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Payment Proof Submitted',
+      body: `Payer submitted bank reference (UTR: ${utr}) for disputed settlement of ₹${settlement.amount}.`,
+      extraData: { settlementId, utr },
+    }).catch((err) => console.warn('[Push] Evidence submit push notice:', err));
+  }
   return settlement;
 }
 

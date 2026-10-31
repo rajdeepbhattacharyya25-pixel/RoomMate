@@ -377,6 +377,42 @@ export function AppContent() {
     };
   }, []);
 
+  // Offline Queue Conflict & Discard Listener
+  useEffect(() => {
+    const handleConflictDiscarded = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        itemId: string;
+        type: string;
+        error: string;
+        amount?: number;
+      }>;
+      const detail = customEvent.detail;
+      const typeLabel =
+        detail?.type === 'RECORD_SETTLEMENT'
+          ? 'Offline settlement'
+          : detail?.type === 'CONFIRM_SETTLEMENT'
+          ? 'Settlement confirmation'
+          : detail?.type === 'DISPUTE_SETTLEMENT'
+          ? 'Settlement dispute'
+          : 'Offline mutation';
+
+      const amountLabel = detail?.amount ? ` of ₹${detail.amount}` : '';
+      setRemoteSyncToast(`⚠️ ${typeLabel}${amountLabel} reverted: debt balance changed while offline`);
+      hapticWarning();
+      setTimeout(() => setRemoteSyncToast(null), 5000);
+
+      // Re-hydrate canonical database state from cloud
+      fetchCloudDatabaseState().then((fresh) => {
+        if (fresh) setDbState(fresh);
+      });
+    };
+
+    window.addEventListener('roommate_sync_conflict_discarded', handleConflictDiscarded);
+    return () => {
+      window.removeEventListener('roommate_sync_conflict_discarded', handleConflictDiscarded);
+    };
+  }, []);
+
   // Analytics & Diagnostics: User Identity Sync
   useEffect(() => {
     if (currentUser && currentUser.id !== DEFAULT_RESIDENT.id) {
