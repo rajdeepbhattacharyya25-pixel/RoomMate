@@ -56,6 +56,7 @@ import {
   History,
   MoreVertical,
   Bell,
+  Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useNetworkStatus } from '../../context/NetworkContext';
@@ -77,6 +78,7 @@ import { JoinRoomModal } from './JoinRoomModal';
 import { JoinRequestReviewModal } from './JoinRequestReviewModal';
 import { useBackButton } from '../../lib/native/backButton';
 import { RoomActivitySection } from './RoomActivitySection';
+import { RoomReconciliationCard } from '../reconciliation/RoomReconciliationCard';
 import { CurrencyInput } from '../common/CurrencyInput';
 import {
   RoomExportFormat,
@@ -85,6 +87,9 @@ import {
   MONTH_NAMES,
 } from '../../lib/services/roomExpenseExportService';
 import { hapticImpact, hapticSelection, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
+import { ParsedReceiptData } from '../../lib/ocr/receiptTextParser';
+import { ReceiptCaptureModal } from '../ocr/ReceiptCaptureModal';
+import { ReceiptReviewDrawer } from '../ocr/ReceiptReviewDrawer';
 
 interface MobileRoomLedgerProps {
   currentUser: User;
@@ -171,6 +176,18 @@ const SHARED_QUICK_CHIPS = [
   'Cleaning Items 🧼',
 ];
 
+const SHARED_QUICK_CHIP_MAP: Record<string, { title: string; category: SharedExpense['category'] }> = {
+  'WiFi Bill 📶': { title: 'WiFi Bill', category: 'Wi-Fi' },
+  'Room Groceries 🛒': { title: 'Room Groceries', category: 'Groceries' },
+  'Electricity ⚡': { title: 'Electricity', category: 'Electricity' },
+  'Maid / Cook 🧹': { title: 'Maid / Cook', category: 'Cleaning' },
+  'Water Cans 💧': { title: 'Water Cans', category: 'Water' },
+  'Dinner Swiggy 🍕': { title: 'Dinner Swiggy', category: 'Food' },
+  'Flat Rent 🏠': { title: 'Flat Rent', category: 'Rent' },
+  'Gas Cylinder ⛽': { title: 'Gas Cylinder', category: 'Gas' },
+  'Cleaning Items 🧼': { title: 'Cleaning Items', category: 'Cleaning' },
+};
+
 export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   currentUser,
   allUsers,
@@ -231,9 +248,19 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   const [showUpiPayModal, setShowUpiPayModal] = useState(false);
   const [activeProofData, setActiveProofData] = useState<SettlementReceiptData | null>(null);
   const [showProofModal, setShowProofModal] = useState(false);
+  const [showReceiptCapture, setShowReceiptCapture] = useState(false);
+  const [showReceiptReview, setShowReceiptReview] = useState(false);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceiptData | null>(null);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showRoomActionSheet, setShowRoomActionSheet] = useState(false);
   const [reviewingJoinRequest, setReviewingJoinRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
+
+  // Dismiss Room Action Sheet on Android hardware back button
+  useBackButton(() => {
+    setShowRoomActionSheet(false);
+    return true;
+  }, showRoomActionSheet);
 
   // Dismiss Create Room dialog on Android hardware back button
   useBackButton(() => {
@@ -543,7 +570,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
     }
 
@@ -553,7 +583,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
           dbFinancialSummary,
           currentUser.id,
-          allUsers
+          allUsers,
+          sharedExpenses,
+          expenseSplits,
+          settlementPayments
         );
         staleSummary.isStale = true;
         staleSummary.error = financialError;
@@ -595,7 +628,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
       const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
       prevSummary.financialState = 'LOADING';
       return prevSummary;
@@ -677,32 +713,39 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
   // Toggle for other room balances not involving current user
   const [showOtherDebts, setShowOtherDebts] = useState(false);
+  // Transitive Debt Simplification (Splitwise-style, default) vs Pairwise Bilateral Audit Ledger
+  const [balanceViewMode, setBalanceViewMode] = useState<'SIMPLIFIED' | 'PAIRWISE_AUDIT'>('SIMPLIFIED');
+
+  const activeDebtsList = useMemo(() => {
+    if (!summary) return [];
+    if (balanceViewMode === 'PAIRWISE_AUDIT' && summary.pairwiseAuditDebts) {
+      return summary.pairwiseAuditDebts;
+    }
+    return summary.pairwiseDebts;
+  }, [summary, balanceViewMode]);
 
   // Categorized debts involving current user
   const myDebtsToPay = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
       return debtorId === currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   const myDebtsToReceive = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
       return creditorId === currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   const otherDebts = useMemo(() => {
-    if (!summary) return [];
-    return summary.pairwiseDebts.filter((d) => {
+    return activeDebtsList.filter((d) => {
       const debtorId = d.netAmount > 0 ? d.userBId : d.userAId;
       const creditorId = d.netAmount > 0 ? d.userAId : d.userBId;
       return debtorId !== currentUser.id && creditorId !== currentUser.id;
     });
-  }, [summary, currentUser.id]);
+  }, [activeDebtsList, currentUser.id]);
 
   // WhatsApp Nudge Studio target state
   const [nudgeTarget, setNudgeTarget] = useState<{
@@ -1047,41 +1090,39 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   return (
     <div className="space-y-4 pb-28 sm:pb-nav-safe px-4 pt-3 bg-[#F9F9FF] dark:bg-[#0B0B10] min-h-full text-slate-900 dark:text-slate-100">
       {/* Horizontal Room Switcher Bar */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
-        {rooms.map((room) => {
-          const isActive = activeRoom?.id === room.id;
-          return (
-            <button
-              key={room.id}
-              onClick={() => onSelectRoom(room)}
-              className={`min-h-[38px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
-                isActive
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>{room.name}</span>
-            </button>
-          );
-        })}
+      {rooms.length > 0 && (
+        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+          {rooms.map((room) => {
+            const isActive = activeRoom?.id === room.id;
+            return (
+              <button
+                key={room.id}
+                onClick={() => onSelectRoom(room)}
+                className={`min-h-[38px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
+                  isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] hover:bg-slate-50 dark:hover:bg-[#20202A]'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>{room.name}</span>
+              </button>
+            );
+          })}
 
-        <button
-          onClick={() => setShowCreateRoomModal(true)}
-          className="min-h-[38px] px-3 rounded-full bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/60 text-xs font-semibold flex items-center gap-1 whitespace-nowrap hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-2xs"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Room</span>
-        </button>
-
-        <button
-          onClick={() => setShowJoinModal(true)}
-          className="min-h-[38px] px-3 rounded-full bg-white dark:bg-[#1C1C25] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#27354A] text-xs font-semibold flex items-center gap-1 whitespace-nowrap hover:bg-slate-50 dark:hover:bg-[#20202A] shadow-2xs"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Join</span>
-        </button>
-      </div>
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(true);
+            }}
+            className="min-h-[38px] w-9 h-9 rounded-full bg-white dark:bg-[#1C1C25] text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center justify-center shrink-0 shadow-2xs cursor-pointer transition-all active:scale-95"
+            aria-label="Add or join another room"
+            title="Add or join another room"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </div>
+      )}
 
       {/* 0-Rooms Empty State Card */}
       {rooms.length === 0 && (
@@ -1344,12 +1385,12 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
             )
           )}
 
-          {/* Primary Financial Action: Full Width Add Bill / Split */}
-          <div>
+          {/* Primary Financial Action: Add Bill & Scan Receipt */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleOpenSplit}
               disabled={activeRoom.isFrozen}
-              className={`w-full h-11 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-all ${
+              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all ${
                 activeRoom.isFrozen
                   ? 'bg-slate-100 dark:bg-[#1C1C25] text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-[#27354A] cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-98'
@@ -1360,7 +1401,26 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               ) : (
                 <Plus className="w-4 h-4 stroke-[2.5]" />
               )}
-              <span>{activeRoom.isFrozen ? 'Ledger Frozen (Read Only)' : '+ Add Bill / Split'}</span>
+              <span>{activeRoom.isFrozen ? 'Frozen' : 'Add Bill'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                hapticImpact('MEDIUM');
+                setShowReceiptCapture(true);
+              }}
+              disabled={activeRoom.isFrozen}
+              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                activeRoom.isFrozen
+                  ? 'bg-slate-100 dark:bg-[#1C1C25] text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-[#27354A] cursor-not-allowed'
+                  : 'bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 active:scale-98 cursor-pointer'
+              }`}
+            >
+              <Camera className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Scan Receipt</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-200/70 dark:bg-indigo-800/60 text-indigo-800 dark:text-indigo-200">
+                AI
+              </span>
             </button>
           </div>
 
@@ -1406,19 +1466,61 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
         </div>
       )}
 
+      {/* Track 4: Monthly Reconciliation & Certified Audit Card */}
+      {activeRoom && (
+        <RoomReconciliationCard
+          currentUser={currentUser}
+          activeRoom={activeRoom}
+          roomMembers={roomMembers}
+          allUsers={allUsers}
+          sharedExpenses={sharedExpenses}
+          expenseSplits={expenseSplits}
+          settlementPayments={settlementPayments}
+        />
+      )}
+
       {/* Roommate Balances (Person-to-Person Settlement Cards) */}
       {activeRoom && (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Roommate Balances
+              {balanceViewMode === 'SIMPLIFIED' ? 'Simplified Debts' : 'Pairwise Audit Ledger'}
             </h2>
-            {summary && summary.pairwiseDebts.length > 0 && (
-              <span className="text-[10px] text-slate-400 font-medium">
-                {myDebtsToPay.length + myDebtsToReceive.length} involving you
-              </span>
-            )}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('SIMPLIFIED')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  balanceViewMode === 'SIMPLIFIED'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                Simplified
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('PAIRWISE_AUDIT')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  balanceViewMode === 'PAIRWISE_AUDIT'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                Audit
+              </button>
+            </div>
           </div>
+
+          {balanceViewMode === 'SIMPLIFIED' ? (
+            <p className="text-[10px] text-indigo-600 dark:text-indigo-400 px-1">
+              ⚡ Minimized settlements (Splitwise algorithm). Original bills & splits remain safely recorded.
+            </p>
+          ) : (
+            <p className="text-[10px] text-purple-600 dark:text-purple-400 px-1">
+              📜 Bilateral audit view: Direct bill obligations and payments between roommates.
+            </p>
+          )}
 
           {/* 1. Debts You Owe Others */}
           {myDebtsToPay.length > 0 && (
@@ -2035,6 +2137,35 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
         {/* Form Body */}
         <div className="space-y-4 pb-4">
+          {/* Quick Action: Scan Receipt via OCR / Gemini AI */}
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/30 border border-indigo-100 dark:border-indigo-800/40 flex items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-600/20 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span>Have a receipt?</span>
+                  <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-200 dark:border-indigo-500/30">AI / OCR</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Scan to extract items, taxes & split with roommates
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSplitModal(false);
+                setShowReceiptCapture(true);
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 active:scale-95 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Scan</span>
+            </button>
+          </div>
+
               {/* Hero Input & Details Card */}
               <div className="bg-white dark:bg-[#1C1C25] rounded-2xl border border-slate-200/80 dark:border-[#27354A] p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] space-y-3">
                 {/* Big Prominent Amount Input */}
@@ -2147,7 +2278,13 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                               type="button"
                               onClick={() => {
                                 hapticSelection();
-                                setTitle(cleanName);
+                                const chipConfig = SHARED_QUICK_CHIP_MAP[chip];
+                                if (chipConfig) {
+                                  setTitle(chipConfig.title);
+                                  setCategory(chipConfig.category);
+                                } else {
+                                  setTitle(cleanName);
+                                }
                                 if (splitValidationErrors.title) {
                                   setSplitValidationErrors((prev) => ({ ...prev, title: undefined }));
                                 }
@@ -2815,6 +2952,10 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
                   </p>
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400/90 flex items-center gap-1.5 pt-1.5 border-t border-slate-200/80 dark:border-[#27354A]">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                    <span>Settlements enter <strong>Pending Confirmation</strong> until verified by your roommate, or auto-confirmed after 72 hours.</span>
+                  </p>
                 </div>
               )}
 
@@ -2845,6 +2986,58 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                 </button>
               </div>
             </form>
+      </MobileBottomSheet>
+
+      {/* Add or Join Room Action Sheet */}
+      <MobileBottomSheet
+        isOpen={showRoomActionSheet}
+        onClose={() => setShowRoomActionSheet(false)}
+        title="Add or Join a Room"
+        subtitle="Manage your flats, hostels, or group ledgers"
+        icon={<Plus className="w-4.5 h-4.5" />}
+        maxHeight="50vh"
+      >
+        <div className="p-4 space-y-3">
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(false);
+              setShowCreateRoomModal(true);
+            }}
+            className="w-full p-3.5 rounded-2xl bg-white dark:bg-[#161622] border border-slate-200/80 dark:border-slate-800/80 hover:border-indigo-300 dark:hover:border-indigo-700/60 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 flex items-center gap-3.5 text-left transition-all active:scale-[0.98] shadow-2xs group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Home className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">Create a New Room</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Set up a shared ledger for your flat, PG, or hostel
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0" />
+          </button>
+
+          <button
+            onClick={() => {
+              hapticSelection();
+              setShowRoomActionSheet(false);
+              setShowJoinModal(true);
+            }}
+            className="w-full p-3.5 rounded-2xl bg-white dark:bg-[#161622] border border-slate-200/80 dark:border-slate-800/80 hover:border-emerald-300 dark:hover:border-emerald-700/60 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 flex items-center gap-3.5 text-left transition-all active:scale-[0.98] shadow-2xs group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">Join Another Room</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Enter a 6-character room code or scan flatmate QR
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors shrink-0" />
+          </button>
+        </div>
       </MobileBottomSheet>
 
       {/* Create Room Modal */}
@@ -2966,6 +3159,7 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           ]}
           initialPayeeId={settlePayeeId}
           roomName={activeRoom.name}
+          roomId={activeRoom.id}
           initialAmount={Number(settleAmount) || 0}
           onPaymentCompleted={handleUpiPaymentCompleted}
         />
@@ -3203,6 +3397,57 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           expenseSplits={expenseSplits}
           settlementPayments={settlementPayments}
           allUsers={allUsers}
+        />
+      )}
+      {/* Smart Receipt OCR & Itemized Split Modals */}
+      {activeRoom && (
+        <ReceiptCaptureModal
+          isOpen={showReceiptCapture}
+          onClose={() => setShowReceiptCapture(false)}
+          roomId={activeRoom.id}
+          onScanComplete={(data) => {
+            setParsedReceipt(data);
+            setShowReceiptReview(true);
+          }}
+        />
+      )}
+
+      {activeRoom && parsedReceipt && (
+        <ReceiptReviewDrawer
+          isOpen={showReceiptReview}
+          onClose={() => {
+            setShowReceiptReview(false);
+            setParsedReceipt(null);
+          }}
+          parsedData={parsedReceipt}
+          members={activeUserObjects.map((u) => ({
+            userId: u.id,
+            name: u.name,
+            avatarUrl: u.avatarUrl,
+          }))}
+          currentUserId={currentUser.id}
+          onSaveExpense={(expenseData) => {
+            onAddSharedExpense({
+              roomId: activeRoom.id,
+              paidBy: expenseData.paidBy,
+              title: expenseData.title,
+              totalAmount: expenseData.totalAmount,
+              category: expenseData.category,
+              splitMethod: expenseData.splitMethod,
+              participantUserIds: expenseData.participantUserIds,
+              customValues: expenseData.customValues,
+              notes: expenseData.notes,
+              expenseDate: expenseData.expenseDate,
+            });
+            hapticSuccess();
+          }}
+          onSwitchToManual={(prefill) => {
+            setTitle(prefill.title);
+            setAmount(prefill.amount.toString());
+            setNotes(prefill.notes);
+            if (prefill.date) setExpenseDate(prefill.date);
+            setShowSplitModal(true);
+          }}
         />
       )}
     </div>

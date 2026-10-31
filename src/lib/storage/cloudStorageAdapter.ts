@@ -27,6 +27,7 @@ import { enqueueOfflineItem } from './offlineQueue';
 import { validateStrict4DigitPin, hashPin, clearResidentSession, createResidentToken } from '../auth/jwtService';
 import { isNativeApp } from '../platform/deviceDetector';
 import { isGoogleDefaultAvatar } from '../utils/avatarUtils';
+import { sendRoommatePushEvent } from '../firebase/pushService';
 
 export const IS_LIVE_SYNC_ENABLED =
   isSupabaseConfigured && import.meta.env.VITE_USE_LIVE_SUPABASE === 'true';
@@ -189,16 +190,44 @@ export async function fetchCloudDatabaseState(): Promise<DatabaseState | null> {
       notes: p.notes || undefined,
       paymentDate: p.payment_date || p.created_at || new Date().toISOString(),
       createdAt: p.created_at || new Date().toISOString(),
+      status: p.status || 'CONFIRMED',
+      confirmationDeadline: p.confirmation_deadline || undefined,
+      reminderSentAt: p.reminder_sent_at || undefined,
+      confirmedAt: p.confirmed_at || undefined,
+      confirmedBy: p.confirmed_by || undefined,
+      confirmationMethod: p.confirmation_method || undefined,
+      disputedAt: p.disputed_at || undefined,
+      disputedBy: p.disputed_by || undefined,
+      disputeReason: p.dispute_reason || undefined,
+      evidenceUtr: p.evidence_utr || undefined,
+      evidenceUrl: p.evidence_url || undefined,
+      cancelledAt: p.cancelled_at || undefined,
     }));
 
     // Subscriptions and logs fallback to local/empty
     const localState = db.getState();
 
     // 8. Personal Expenses (Merged with local cache to prevent data-loss flicker)
-    const { data: rawPersonal, error: personalErr } = await supabase
-      .from('personal_expenses')
-      .select('*')
-      .order('expense_date', { ascending: false });
+    // Defense-in-depth: query personal expenses strictly scoped to the authenticated session owner
+    let rawPersonal: any[] | null = null;
+    let personalErr: any = null;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUserId = sessionData?.session?.user?.id;
+
+      if (authUserId) {
+        const res = await supabase
+          .from('personal_expenses')
+          .select('*')
+          .eq('user_id', authUserId)
+          .order('expense_date', { ascending: false });
+        rawPersonal = res.data;
+        personalErr = res.error;
+      }
+    } catch (sessionErr) {
+      console.warn('Personal expenses session check failed, using local cache:', sessionErr);
+    }
 
     const localPersonal = localState.personalExpenses || [];
     let personalExpenses: PersonalExpense[];
@@ -448,7 +477,49 @@ export async function addSharedExpenseCloud(data: {
     }
   }
 
+  // Trigger FCM push to other room participants (excluding creator/payer)
+  try {
+    const otherParticipants = (data.participantUserIds || []).filter((uid) => uid !== data.paidBy);
+    if (otherParticipants.length > 0) {
+      sendRoommatePushEvent({
+        eventType: 'NEW_SHARED_EXPENSE',
+        recipientUserIds: otherParticipants,
+        actorId: data.paidBy,
+        roomId: data.roomId,
+        senderName: db.getState().users.find((u) => u.id === data.paidBy)?.name || 'Roommate',
+        title: `New Shared Bill: ${data.title}`,
+        body: `A new bill of ₹${data.totalAmount} was added for ${data.category}.`,
+        extraData: { expenseId: localExpense.id },
+      }).catch((err) => console.warn('[Push] Expense push dispatch notice:', err));
+    }
+  } catch {
+    // Non-blocking
+  }
+
   return { expense: localExpense, splits: localSplits };
+}
+
+function isLikelyNetworkError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (
+    msg.includes('payer_is_not_a_debtor') ||
+    msg.includes('oversettlement') ||
+    msg.includes('invalid_settlement') ||
+    msg.includes('access_denied') ||
+    msg.includes('not_found') ||
+    msg.includes('invalid_transition')
+  ) {
+    return false;
+  }
+  return (
+    msg.includes('network') ||
+    msg.includes('fetch') ||
+    msg.includes('offline') ||
+    msg.includes('timeout') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('connection')
+  );
 }
 
 // Record Settlement to Cloud + Local with Idempotency
@@ -483,7 +554,21 @@ export async function recordSettlementCloud(data: {
     const localSettlement = db.recordSettlementPayment(data.payerId, {
       ...data,
       id: v2Result.settlement_id || data.id,
+      status: (v2Result.status as SettlementPayment['status']) || 'PENDING_CONFIRMATION',
+      confirmationDeadline: v2Result.confirmation_deadline,
     });
+
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_RECORDED',
+      recipientUserIds: [data.payeeId],
+      actorId: data.payerId,
+      roomId: data.roomId,
+      senderName: db.getState().users.find((u) => u.id === data.payerId)?.name || 'Roommate',
+      title: 'Settlement Payment Claimed',
+      body: `A roommate recorded a payment of ₹${data.amount}. Please verify and confirm receipt.`,
+      extraData: { settlementId: localSettlement.id },
+    }).catch((err) => console.warn('[Push] Settlement recorded push notice:', err));
+
     return localSettlement;
   }
 
@@ -495,6 +580,193 @@ export async function recordSettlementCloud(data: {
   });
 
   return localSettlement;
+}
+
+// Confirm Settlement in Cloud + Local
+export async function confirmSettlementCloud(
+  userId: string,
+  settlementId: string
+): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const res = await supabaseService.confirmRoomSettlement(settlementId);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to confirm settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    enqueueOfflineItem('CONFIRM_SETTLEMENT', { settlementId, userId });
+    isEnqueuedOffline = true;
+  }
+
+  const settlement = db.confirmSettlementPayment(userId, settlementId);
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_CONFIRMED',
+      recipientUserIds: [settlement.payerId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Confirmed',
+      body: `Your payment of ₹${settlement.amount} was confirmed by the payee.`,
+      extraData: { settlementId },
+    }).catch((err) => console.warn('[Push] Settlement confirm push notice:', err));
+  }
+  return settlement;
+}
+
+// Dispute Settlement in Cloud + Local
+export async function disputeSettlementCloud(
+  userId: string,
+  settlementId: string,
+  reason: string
+): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const res = await supabaseService.disputeRoomSettlement(settlementId, reason);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to dispute settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    enqueueOfflineItem('DISPUTE_SETTLEMENT', { settlementId, userId, reason });
+    isEnqueuedOffline = true;
+  }
+
+  const settlement = db.disputeSettlementPayment(userId, settlementId, reason);
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_DISPUTED',
+      recipientUserIds: [settlement.payerId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Disputed: Payment Not Received',
+      body: `Your payment claim of ₹${settlement.amount} was disputed: "${reason}". Please provide bank UTR proof.`,
+      extraData: { settlementId, reason },
+    }).catch((err) => console.warn('[Push] Settlement dispute push notice:', err));
+  }
+  return settlement;
+}
+
+// Cancel Settlement Claim in Cloud + Local
+export async function cancelSettlementCloud(
+  userId: string,
+  settlementId: string
+): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const res = await supabaseService.cancelRoomSettlement(settlementId);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to cancel settlement');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    enqueueOfflineItem('CANCEL_SETTLEMENT', { settlementId, userId });
+    isEnqueuedOffline = true;
+  }
+
+  const settlement = db.cancelSettlementPayment(userId, settlementId);
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_CANCELLED',
+      recipientUserIds: [settlement.payeeId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Settlement Claim Cancelled',
+      body: `The pending settlement of ₹${settlement.amount} was cancelled by the payer.`,
+      extraData: { settlementId },
+    }).catch((err) => console.warn('[Push] Settlement cancel push notice:', err));
+  }
+  return settlement;
+}
+
+// Submit Settlement Evidence in Cloud + Local
+export async function submitSettlementEvidenceCloud(
+  userId: string,
+  settlementId: string,
+  utr: string,
+  evidenceUrl?: string
+): Promise<SettlementPayment> {
+  let isEnqueuedOffline = false;
+  if (IS_LIVE_SYNC_ENABLED) {
+    try {
+      const res = await supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
+      if (!res.success) {
+        if (isLikelyNetworkError(res.error)) {
+          enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+          isEnqueuedOffline = true;
+        } else {
+          throw new Error(res.error || 'Failed to submit settlement evidence');
+        }
+      }
+    } catch (err) {
+      if (isLikelyNetworkError(err)) {
+        enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+        isEnqueuedOffline = true;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    enqueueOfflineItem('SUBMIT_SETTLEMENT_EVIDENCE', { settlementId, userId, utr, evidenceUrl });
+    isEnqueuedOffline = true;
+  }
+
+  const settlement = db.submitSettlementEvidence(userId, settlementId, utr, evidenceUrl);
+  if (!isEnqueuedOffline) {
+    sendRoommatePushEvent({
+      eventType: 'EVIDENCE_SUBMITTED',
+      recipientUserIds: [settlement.payeeId],
+      actorId: userId,
+      roomId: settlement.roomId,
+      senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+      title: 'Payment Proof Submitted',
+      body: `Payer submitted bank reference (UTR: ${utr}) for disputed settlement of ₹${settlement.amount}.`,
+      extraData: { settlementId, utr },
+    }).catch((err) => console.warn('[Push] Evidence submit push notice:', err));
+  }
+  return settlement;
 }
 
 // Leave Room in Cloud + Local (Atomic via Postgres RPC)
@@ -579,9 +851,15 @@ export async function addPersonalExpenseCloud(data: {
     expenseDate,
   });
 
+  // Offline mock personas (e.g. 'user-1') remain strictly local and never invoke cloud RPCs
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId);
+  if (!isUuid) {
+    return localExp;
+  }
+
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      // 1. Try secure SECURITY DEFINER RPC first (works reliably across anon & authenticated sessions)
+      // 1. Try secure SECURITY DEFINER RPC first (enforces caller identity auth.uid() = p_user_id)
       const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('submit_personal_expense_secure', {
         p_id: localExp.id.length === 36 ? localExp.id : undefined,
         p_user_id: data.userId,
@@ -596,7 +874,7 @@ export async function addPersonalExpenseCloud(data: {
         return localExp;
       }
 
-      // 2. Fallback to direct table upsert
+      // 2. Fallback to direct table upsert (guarded by owner-only RLS policy)
       const { error } = await supabase.from('personal_expenses').upsert({
         id: localExp.id.length === 36 ? localExp.id : undefined,
         user_id: data.userId,
@@ -634,9 +912,15 @@ export async function addPersonalExpenseCloud(data: {
 export async function deletePersonalExpenseCloud(userId: string, id: string): Promise<void> {
   db.deletePersonalExpense(userId, id);
 
+  // Offline mock personas remain local-only
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+  if (!isUuid) {
+    return;
+  }
+
   if (IS_LIVE_SYNC_ENABLED) {
     try {
-      // 1. Try secure RPC first
+      // 1. Try secure RPC first (enforces caller identity auth.uid() = p_user_id)
       const { error: rpcErr } = await (supabase.rpc as any)('delete_personal_expense_secure', {
         p_id: id,
         p_user_id: userId,
@@ -646,8 +930,8 @@ export async function deletePersonalExpenseCloud(userId: string, id: string): Pr
         return;
       }
 
-      // 2. Fallback to direct table delete
-      await supabase.from('personal_expenses').delete().eq('id', id);
+      // 2. Fallback to direct table delete (guarded by owner-only RLS policy)
+      await supabase.from('personal_expenses').delete().eq('id', id).eq('user_id', userId);
     } catch (err) {
       console.warn('Async personal expense deletion failed:', err);
     }

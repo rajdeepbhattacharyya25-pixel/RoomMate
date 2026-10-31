@@ -70,19 +70,23 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
   doc.text('Summary', margin, y);
   y += 7;
 
-  const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+  const formatINR = (n: number) =>
+    `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const summaryRows = [
-    ['Personal Spending', formatINR(dataset.totalPersonalSpending)],
-    ['Shared Expenses', formatINR(dataset.totalSharedContribution)],
-    ['Total Spending', formatINR(dataset.totalOverallSpending)],
+    ['Personal Vault Spending', formatINR(dataset.totalPersonalSpending)],
+    ['My Share of Shared Expenses', formatINR(dataset.totalSharedContribution)],
+    ['(Total Household Shared Bills)', formatINR(dataset.totalHouseholdSharedSpending)],
+    ['Total Outflow (Personal + My Share)', formatINR(dataset.totalOverallSpending)],
     ['', ''],
     ['Monthly Budget', formatINR(dataset.monthlyBudget)],
     ['Budget Used', `${dataset.budgetUsedPercent}%`],
     ['Remaining Budget', formatINR(dataset.remainingBudget)],
     ['', ''],
-    ['Average Daily Spend', formatINR(dataset.avgDailySpending)],
-    ...(dataset.safeDailyLimit > 0 ? [['Safe Daily Limit', `${formatINR(dataset.safeDailyLimit)}/day`]] : []),
+    ['Average Daily Spend', `${formatINR(dataset.avgDailySpending)}/day (${dataset.elapsedDays} elapsed days)`],
+    ...(dataset.safeDailyLimit > 0
+      ? [['Safe Daily Limit', `${formatINR(dataset.safeDailyLimit)}/day (${dataset.daysLeft} days remaining)`]]
+      : []),
     ['Total Transactions', String(dataset.transactionCount)],
   ].filter(([a]) => a !== '' || true); // keep spacers
 
@@ -147,7 +151,10 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
         fillColor: lightBg as unknown as number[],
       },
       columnStyles: {
-        0: { cellWidth: 30 },
+        0: { cellWidth: 35 },
+        1: { halign: 'right' },
+        2: { halign: 'right' },
+        3: { halign: 'center' },
         4: { fontStyle: 'bold' },
       },
     });
@@ -175,17 +182,19 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
 
   if (dataset.transactions.length > 0) {
     const txnRows = dataset.transactions.map((t) => [
-      t.date.split(' ').slice(0, 2).join(' '),
+      t.date,
+      t.time,
       t.description,
       t.category,
       t.expenseType,
-      formatINR(t.amount),
+      formatINR(t.totalAmount),
+      formatINR(t.myShare),
     ]);
 
     (doc as any).autoTable({
       startY: y,
       margin: { left: margin, right: margin },
-      head: [['Date', 'Description', 'Category', 'Type', 'Amount']],
+      head: [['Date', 'Time (IST)', 'Description', 'Category', 'Type', 'Total Amount', 'My Share']],
       body: txnRows,
       theme: 'grid',
       headStyles: {
@@ -203,8 +212,12 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
       },
       columnStyles: {
         0: { cellWidth: 22 },
-        1: { cellWidth: 50 },
-        4: { halign: 'right', fontStyle: 'bold' },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 44 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 18 },
+        5: { halign: 'right' },
+        6: { halign: 'right', fontStyle: 'bold' },
       },
     });
     y = (doc as any).lastAutoTable?.finalY ?? y + 30;
@@ -216,7 +229,7 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
     doc.text('No expenses recorded this month.', margin + 2, y);
     y += 7;
     doc.setFontSize(9);
-    doc.text(`Total Spending: ₹0`, margin + 2, y);
+    doc.text(`Total Spending: Rs. 0.00`, margin + 2, y);
     y += 5;
     doc.text(`Budget: ${formatINR(dataset.monthlyBudget)}`, margin + 2, y);
     y += 5;
@@ -234,21 +247,23 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
     doc.setFontSize(12);
     doc.setTextColor(...darkText);
     doc.setFont('helvetica', 'bold');
-    doc.text('Shared Expenses', margin, y);
+    doc.text('Shared Expenses (Household Bills)', margin, y);
     y += 3;
 
     const sharedRows = dataset.sharedContributions.map((sc) => [
       sc.title,
+      sc.category,
+      sc.expenseDate.slice(0, 10),
       formatINR(sc.totalAmount),
       formatINR(sc.myShare),
       sc.paidByName,
-      sc.paidByMe ? 'I Paid' : 'Owed',
+      sc.paymentStatus,
     ]);
 
     (doc as any).autoTable({
       startY: y,
       margin: { left: margin, right: margin },
-      head: [['Title', 'Total', 'My Share', 'Paid By', 'Status']],
+      head: [['Title', 'Category', 'Date', 'Total Bill', 'My Share', 'Paid By', 'Status']],
       body: sharedRows,
       theme: 'grid',
       headStyles: {
@@ -263,6 +278,15 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
       },
       alternateRowStyles: {
         fillColor: lightBg as unknown as number[],
+      },
+      columnStyles: {
+        0: { cellWidth: 32 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 22 },
+        3: { halign: 'right' },
+        4: { halign: 'right', fontStyle: 'bold' },
+        5: { cellWidth: 28 },
+        6: { cellWidth: 28, fontStyle: 'bold' },
       },
     });
     y = (doc as any).lastAutoTable?.finalY ?? y + 30;
@@ -307,11 +331,19 @@ export async function generatePdfBlob(dataset: ExportDataset): Promise<Blob> {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(160, 160, 160);
 
-    const genDate = new Date().toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'long', year: 'numeric',
-    });
+    const genTimestamp = `${new Date().toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })}, ${new Date().toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })} IST`;
     doc.text(
-      `Generated on ${genDate} • This report is private to ${dataset.userName}`,
+      `Generated on ${genTimestamp} • This report is private to ${dataset.userName}`,
       margin,
       footerY
     );

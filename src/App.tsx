@@ -77,7 +77,7 @@ import {
   sendLocalExpenseNotification,
   sendLocalSettlementNotification,
 } from './lib/native/notifications';
-import { playNotificationSound } from './lib/native/notificationSound';
+import { playNotificationSound, playNotificationSoundThrottled } from './lib/native/notificationSound';
 import { hideSplashScreen, setupKeyboardListeners } from './lib/native/statusBar';
 import { listenToNetworkStatus, listenToAppLifecycle } from './lib/native/network';
 import { setupBackButtonListener } from './lib/native/backButton';
@@ -377,6 +377,42 @@ export function AppContent() {
     };
   }, []);
 
+  // Offline Queue Conflict & Discard Listener
+  useEffect(() => {
+    const handleConflictDiscarded = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        itemId: string;
+        type: string;
+        error: string;
+        amount?: number;
+      }>;
+      const detail = customEvent.detail;
+      const typeLabel =
+        detail?.type === 'RECORD_SETTLEMENT'
+          ? 'Offline settlement'
+          : detail?.type === 'CONFIRM_SETTLEMENT'
+          ? 'Settlement confirmation'
+          : detail?.type === 'DISPUTE_SETTLEMENT'
+          ? 'Settlement dispute'
+          : 'Offline mutation';
+
+      const amountLabel = detail?.amount ? ` of ₹${detail.amount}` : '';
+      setRemoteSyncToast(`⚠️ ${typeLabel}${amountLabel} reverted: debt balance changed while offline`);
+      hapticWarning();
+      setTimeout(() => setRemoteSyncToast(null), 5000);
+
+      // Re-hydrate canonical database state from cloud
+      fetchCloudDatabaseState().then((fresh) => {
+        if (fresh) setDbState(fresh);
+      });
+    };
+
+    window.addEventListener('roommate_sync_conflict_discarded', handleConflictDiscarded);
+    return () => {
+      window.removeEventListener('roommate_sync_conflict_discarded', handleConflictDiscarded);
+    };
+  }, []);
+
   // Analytics & Diagnostics: User Identity Sync
   useEffect(() => {
     if (currentUser && currentUser.id !== DEFAULT_RESIDENT.id) {
@@ -407,7 +443,9 @@ export function AppContent() {
             cloudState.users.find((u) => u.email.toLowerCase() === currentUser.email.toLowerCase());
           if (matched) {
             if (currentUser.role === 'SUPER_ADMIN' && matched.role !== 'SUPER_ADMIN') {
-              matched.role = 'SUPER_ADMIN';
+              if (activeTab === 'admin') {
+                setActiveTab('dashboard');
+              }
             }
             setCurrentUser(matched);
           }
@@ -418,107 +456,201 @@ export function AppContent() {
         setIsRealtimeLive(true);
       }
     });
-  }, [isAuthenticated, currentUser.id, currentUser.email, currentUser.role]);
+  }, [isAuthenticated, currentUser.id, currentUser.email, currentUser.role, activeTab]);
 
   // 2. Realtime Room Subscriptions (Multi-Device Broadcast Listener & Native Notifications)
   useEffect(() => {
     if (!IS_LIVE_SYNC_ENABLED || !activeRoom?.id) return;
 
+    // Burst coalescing buffer
+    let pendingEventCount = 0;
+    let coalesceTimeout: NodeJS.Timeout | null = null;
+    let latestToastText = '';
+
     const unsubscribe = subscribeToRoomRealtime(activeRoom.id, (table, eventType, payload) => {
       fetchCloudDatabaseState().then((cloudState) => {
-        if (cloudState) {
-          setDbState(cloudState);
-          const readableTable =
-            table === 'shared_expenses'
-              ? 'Expense'
-              : table === 'expense_splits'
-              ? 'Expense Split'
-              : table === 'settlement_payments'
-              ? 'Settlement'
-              : table === 'room_join_requests'
-              ? 'Join Request'
-              : table === 'room_members'
-              ? 'Member'
-              : table === 'room_invitations'
-              ? 'Invite Code'
-              : table === 'profiles'
-              ? 'Profile'
-              : table === 'in_app_notifications'
-              ? 'Notification'
-              : table;
-          setRemoteSyncToast(`Realtime Sync: ${readableTable} ${eventType.toLowerCase()}d`);
-          setTimeout(() => setRemoteSyncToast(null), 3500);
+        if (!cloudState) return;
 
-          if (table === 'in_app_notifications') {
-            playNotificationSound();
-          }
+        setDbState(cloudState);
 
-          // Handle live room archival or deletion
-          if (table === 'rooms') {
-            const currentRoomInCloud = cloudState.rooms.find((r) => r.id === activeRoom.id);
-            if (!currentRoomInCloud || currentRoomInCloud.isArchived) {
-              hapticWarning();
-              setActiveRoom(null);
-              setRemoteSyncToast(`📁 ${activeRoom.name} was archived by administration`);
-              setTimeout(() => setRemoteSyncToast(null), 4000);
-              return;
-            } else if (currentRoomInCloud.name !== activeRoom.name) {
-              setActiveRoom(currentRoomInCloud);
+        // 1. Identify Actor (Edge Case 1: Multi-device self-action suppression)
+        let actorUserId: string | null = null;
+        if (table === 'shared_expenses') {
+          actorUserId = payload?.new?.paid_by || payload?.new?.created_by || payload?.old?.paid_by || null;
+        } else if (table === 'settlement_payments') {
+          if (eventType === 'INSERT') {
+            actorUserId = payload?.new?.payer_id || null;
+          } else if (eventType === 'UPDATE') {
+            const status = payload?.new?.status;
+            if (status === 'CONFIRMED') {
+              actorUserId = payload?.new?.confirmed_by || payload?.new?.payee_id || null;
+            } else if (status === 'DISPUTED') {
+              actorUserId = payload?.new?.disputed_by || payload?.new?.payee_id || null;
+            } else if (status === 'CANCELLED') {
+              actorUserId = payload?.new?.payer_id || null;
+            } else if (payload?.new?.evidence_utr && !payload?.old?.evidence_utr) {
+              actorUserId = payload?.new?.payer_id || null;
+            } else {
+              actorUserId = payload?.new?.payer_id || null;
             }
           }
+        } else if (table === 'room_members') {
+          actorUserId = payload?.new?.user_id || payload?.old?.user_id || null;
+        } else if (table === 'room_join_requests') {
+          actorUserId = payload?.new?.user_id || null;
+        }
 
-          // Live Admin Auto-Popup for Join Requests on Active Room
-          if (table === 'room_join_requests') {
-            fetchJoinRequests();
-            const isAdmin =
-              activeRoom.createdBy === currentUser.id ||
-              cloudState.roomMembers.some(
-                (m) => m.roomId === activeRoom.id && m.userId === currentUser.id && m.role === 'ROOM_ADMIN'
-              );
-            if (isAdmin && (eventType === 'INSERT' || eventType === 'UPDATE')) {
-              const reqId = payload?.new?.id;
-              const pendingReq = cloudState.roomJoinRequests.find(
-                (r) => (reqId ? r.id === reqId : true) && r.roomId === activeRoom.id && r.status === 'PENDING'
-              );
-              if (pendingReq) {
-                const reqUser =
-                  cloudState.users.find((u) => u.id === pendingReq.userId) ||
-                  ({ id: pendingReq.userId, name: 'Roommate Candidate', email: 'roommate@app' } as any);
-                playNotificationSound();
-                hapticImpact('HEAVY');
-                setLiveAdminReviewRequest({
-                  ...pendingReq,
-                  user: reqUser,
-                  room: activeRoom,
-                });
-                setRemoteSyncToast(`🔔 Join request from ${reqUser.name}`);
-                setTimeout(() => setRemoteSyncToast(null), 4000);
-              }
-            }
+        const isSelfActor = actorUserId === currentUser.id;
+
+        // 2. Format human-friendly event description
+        let eventDescription = '';
+        if (table === 'shared_expenses') {
+          if (eventType === 'INSERT') {
+            const expTitle = payload?.new?.title || 'Shared bill';
+            const expAmount = payload?.new?.total_amount ? ` (₹${payload.new.total_amount})` : '';
+            eventDescription = `New expense: ${expTitle}${expAmount}`;
+          } else if (eventType === 'DELETE') {
+            eventDescription = 'Expense removed from room';
+          } else {
+            eventDescription = 'Shared expense updated';
           }
+        } else if (table === 'settlement_payments') {
+          const status = payload?.new?.status;
+          const amt = payload?.new?.amount ? ` ₹${payload.new.amount}` : '';
+          if (status === 'CONFIRMED') {
+            eventDescription = `Settlement confirmed:${amt}`;
+          } else if (status === 'DISPUTED') {
+            eventDescription = `Settlement disputed:${amt}`;
+          } else if (status === 'CANCELLED') {
+            eventDescription = `Settlement claim cancelled:${amt}`;
+          } else if (status === 'AUTO_CONFIRMED') {
+            eventDescription = `Settlement auto-confirmed:${amt}`;
+          } else if (payload?.new?.evidence_utr && !payload?.old?.evidence_utr) {
+            eventDescription = 'Payment proof UTR submitted';
+          } else {
+            eventDescription = `Settlement recorded:${amt}`;
+          }
+        } else if (table === 'room_members') {
+          eventDescription = eventType === 'DELETE' ? 'A roommate left the room' : 'Room membership updated';
+        } else if (table === 'room_join_requests') {
+          eventDescription = 'Room join request updated';
+        } else {
+          const readableTable = table === 'in_app_notifications' ? 'Notification' : table;
+          eventDescription = `${readableTable} updated`;
+        }
 
-          // Dispatch native notification when remote flatmates make a change
-          if (table === 'shared_expenses' && eventType === 'INSERT') {
-            const latestExp = cloudState.sharedExpenses[0];
-            if (latestExp && latestExp.paidBy !== currentUser.id) {
-              const payer = cloudState.users.find((u) => u.id === latestExp.paidBy);
-              sendLocalExpenseNotification({
-                title: latestExp.title,
-                totalAmount: latestExp.totalAmount,
-                paidByName: payer ? payer.name : 'Flatmate',
-                roomName: activeRoom.name,
+        // 3. Audio & Toast Throttling / Coalescing (Edge Case 2)
+        if (!isSelfActor) {
+          playNotificationSoundThrottled(2000);
+          hapticImpact('LIGHT');
+
+          pendingEventCount += 1;
+          latestToastText = eventDescription;
+
+          if (coalesceTimeout) clearTimeout(coalesceTimeout);
+          coalesceTimeout = setTimeout(() => {
+            if (pendingEventCount > 1) {
+              setRemoteSyncToast(`Room ledger updated (${pendingEventCount} changes synced)`);
+            } else {
+              setRemoteSyncToast(latestToastText);
+            }
+            pendingEventCount = 0;
+            setTimeout(() => setRemoteSyncToast(null), 3500);
+          }, 300);
+        }
+
+        // Handle live room archival or deletion
+        if (table === 'rooms') {
+          const currentRoomInCloud = cloudState.rooms.find((r) => r.id === activeRoom.id);
+          if (!currentRoomInCloud || currentRoomInCloud.isArchived) {
+            hapticWarning();
+            setActiveRoom(null);
+            setRemoteSyncToast(`📁 ${activeRoom.name} was archived by administration`);
+            setTimeout(() => setRemoteSyncToast(null), 4000);
+            return;
+          } else if (currentRoomInCloud.name !== activeRoom.name) {
+            setActiveRoom(currentRoomInCloud);
+          }
+        }
+
+        // Live Admin Auto-Popup for Join Requests on Active Room
+        if (table === 'room_join_requests') {
+          fetchJoinRequests();
+          const isAdmin =
+            activeRoom.createdBy === currentUser.id ||
+            cloudState.roomMembers.some(
+              (m) => m.roomId === activeRoom.id && m.userId === currentUser.id && m.role === 'ROOM_ADMIN'
+            );
+          if (isAdmin && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+            const reqId = payload?.new?.id;
+            const pendingReq = cloudState.roomJoinRequests.find(
+              (r) => (reqId ? r.id === reqId : true) && r.roomId === activeRoom.id && r.status === 'PENDING'
+            );
+            if (pendingReq) {
+              const reqUser =
+                cloudState.users.find((u) => u.id === pendingReq.userId) ||
+                ({ id: pendingReq.userId, name: 'Roommate Candidate', email: 'roommate@app' } as any);
+              playNotificationSoundThrottled(2000);
+              hapticImpact('HEAVY');
+              setLiveAdminReviewRequest({
+                ...pendingReq,
+                user: reqUser,
+                room: activeRoom,
               });
+              setRemoteSyncToast(`🔔 Join request from ${reqUser.name}`);
+              setTimeout(() => setRemoteSyncToast(null), 4000);
             }
-          } else if (table === 'settlement_payments') {
-            const latestSet = cloudState.settlementPayments[0];
-            if (latestSet && latestSet.payeeId === currentUser.id) {
+          }
+        }
+
+        // Dispatch native notification when remote flatmates make a change
+        if (table === 'shared_expenses' && eventType === 'INSERT') {
+          const latestExp = cloudState.sharedExpenses[0];
+          if (latestExp && latestExp.paidBy !== currentUser.id) {
+            const payer = cloudState.users.find((u) => u.id === latestExp.paidBy);
+            sendLocalExpenseNotification({
+              title: latestExp.title,
+              totalAmount: latestExp.totalAmount,
+              paidByName: payer ? payer.name : 'Flatmate',
+              roomName: activeRoom.name,
+            });
+          }
+        } else if (table === 'settlement_payments') {
+          const latestSet = cloudState.settlementPayments[0];
+          if (latestSet) {
+            const status = latestSet.status || 'CONFIRMED';
+            // If settlement is for this user and initiated by another roommate
+            if (latestSet.payeeId === currentUser.id && latestSet.payerId !== currentUser.id && eventType === 'INSERT') {
               const payer = cloudState.users.find((u) => u.id === latestSet.payerId);
               sendLocalSettlementNotification({
                 amount: latestSet.amount,
                 payerName: payer ? payer.name : 'Flatmate',
                 payeeName: currentUser.name,
                 paymentMethod: latestSet.paymentMethod,
+                customTitle: `Settlement Claimed: ₹${latestSet.amount}`,
+                customBody: `${payer?.name || 'A roommate'} recorded ₹${latestSet.amount}. Please verify and confirm.`,
               });
+            } else if (latestSet.payerId === currentUser.id && eventType === 'UPDATE') {
+              if (status === 'CONFIRMED') {
+                const payee = cloudState.users.find((u) => u.id === latestSet.payeeId);
+                sendLocalSettlementNotification({
+                  amount: latestSet.amount,
+                  payerName: currentUser.name,
+                  payeeName: payee?.name || 'Payee',
+                  paymentMethod: latestSet.paymentMethod,
+                  customTitle: `Settlement Confirmed: ₹${latestSet.amount}`,
+                  customBody: `${payee?.name || 'Payee'} confirmed your payment of ₹${latestSet.amount}.`,
+                });
+              } else if (status === 'DISPUTED') {
+                sendLocalSettlementNotification({
+                  amount: latestSet.amount,
+                  payerName: currentUser.name,
+                  payeeName: 'Payee',
+                  paymentMethod: latestSet.paymentMethod,
+                  customTitle: `Settlement Disputed: ₹${latestSet.amount}`,
+                  customBody: `Payment was disputed: "${latestSet.disputeReason || 'Not received'}". Please provide bank UTR.`,
+                });
+              }
             }
           }
         }
@@ -526,6 +658,7 @@ export function AppContent() {
     });
 
     return () => {
+      if (coalesceTimeout) clearTimeout(coalesceTimeout);
       unsubscribe();
     };
   }, [activeRoom, currentUser.id, currentUser.name, fetchJoinRequests]);
@@ -2028,6 +2161,11 @@ export function AppContent() {
             personalExpenses={dbState.personalExpenses}
             onAddExpense={handleAddPersonalExpense}
             onDeleteExpense={(id) => handleDeletePersonalExpense(id)}
+            sharedExpenses={dbState.sharedExpenses}
+            expenseSplits={dbState.expenseSplits}
+            activeRoom={activeRoom}
+            allUsers={dbState.users}
+            settlementPayments={dbState.settlementPayments}
           />
         )}
 

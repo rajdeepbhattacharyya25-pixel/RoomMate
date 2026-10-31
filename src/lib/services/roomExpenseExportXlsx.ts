@@ -18,6 +18,43 @@ export async function generateRoomXlsxBlob(dataset: RoomExportDataset): Promise<
   const wb = XLSX.utils.book_new();
 
   // ═══════════════════════════════════════════════════════
+  // Sheet 0 — Audit Certificate (If reconciliation present)
+  // ═══════════════════════════════════════════════════════
+  if (dataset.reconciliation) {
+    const rec = dataset.reconciliation;
+    const certRows: any[][] = [
+      ['RoomMate — Official Room Financial Statement Audit Certificate'],
+      [''],
+      ['Room Name', dataset.roomName],
+      ['Accounting Period', dataset.monthLabel],
+      ['Statement Status', rec.isCertified ? 'CERTIFIED FINANCIAL STATEMENT' : 'PROVISIONAL / IN REVIEW'],
+      ['Certified Date', rec.period?.certifiedAt ? new Date(rec.period.certifiedAt).toLocaleString('en-IN') : 'Pending Final Sign-Off'],
+      ['Cryptographic SHA-256 Seal', rec.sealHash || 'Pending 100% Unanimous Consensus'],
+      ['Revision Number', rec.period?.revisionCount || 1],
+      [''],
+      ['── Roommate Financial Sign-Off Roster ──'],
+      ['Roommate', 'Status', 'Signed At', 'Digital Verification Stamp'],
+    ];
+
+    if (rec.signoffs && rec.signoffs.length > 0) {
+      for (const s of rec.signoffs) {
+        certRows.push([
+          s.userName || 'Roommate',
+          s.status === 'SIGNED' ? 'APPROVED & SIGNED' : s.status === 'DISPUTED' ? `DISPUTED (${s.disputeReason || 'No reason'})` : 'PENDING REVIEW',
+          s.signedAt ? new Date(s.signedAt).toLocaleString('en-IN') : '—',
+          s.signatureStamp || '—',
+        ]);
+      }
+    } else {
+      certRows.push(['No signatories recorded', '', '', '']);
+    }
+
+    const wsCert = XLSX.utils.aoa_to_sheet(certRows);
+    wsCert['!cols'] = [{ wch: 28 }, { wch: 32 }, { wch: 24 }, { wch: 42 }];
+    XLSX.utils.book_append_sheet(wb, wsCert, 'Audit Certificate');
+  }
+
+  // ═══════════════════════════════════════════════════════
   // Sheet 1 — Monthly Summary
   // ═══════════════════════════════════════════════════════
   const summary = dataset.summary;

@@ -10,13 +10,12 @@ import type { ExportDataset } from './expenseExportService';
 export function generateCsvBlob(dataset: ExportDataset): Blob {
   const headers = [
     'Date',
-    'Time',
+    'Time (IST)',
     'Description',
     'Category',
     'Expense Type',
-    'Amount',
-    'Shared Total',
-    'My Share',
+    'Total Amount (INR)',
+    'My Share (INR)',
     'Paid By',
     'Payment Status',
   ];
@@ -30,9 +29,8 @@ export function generateCsvBlob(dataset: ExportDataset): Blob {
       t.description,
       t.category,
       t.expenseType,
-      String(t.amount),
-      t.sharedTotal != null ? String(t.sharedTotal) : '',
-      t.myShare != null ? String(t.myShare) : '',
+      t.totalAmount.toFixed(2),
+      t.myShare.toFixed(2),
       t.paidBy || '',
       t.paymentStatus || '',
     ]);

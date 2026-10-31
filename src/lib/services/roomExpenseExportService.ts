@@ -15,9 +15,11 @@ import {
   SettlementPayment,
   User,
   Room,
+  RoomReconciliationPeriod,
+  RoomStatementSignoff,
 } from '../../types';
 import { round2 } from '../ledger/engine';
-import { isNativeApp } from '../platform/deviceDetector';
+import { saveFileToDevice } from './fileDownloadService';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -75,6 +77,12 @@ export interface RoomExportDataset {
   settlements: RoommateSettlementRow[];
   expenses: SharedExpense[];
   detailedSplits: DetailedSplitRow[];
+  reconciliation?: {
+    period: RoomReconciliationPeriod | null;
+    signoffs: RoomStatementSignoff[];
+    isCertified: boolean;
+    sealHash?: string;
+  };
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -109,6 +117,12 @@ export interface GatherRoomDataParams {
   expenseSplits: ExpenseSplit[];
   settlementPayments: SettlementPayment[];
   allUsers: User[];
+  reconciliation?: {
+    period: RoomReconciliationPeriod | null;
+    signoffs: RoomStatementSignoff[];
+    isCertified: boolean;
+    sealHash?: string;
+  };
 }
 
 export function gatherRoomExportData(params: GatherRoomDataParams): RoomExportDataset {
@@ -356,52 +370,35 @@ export function gatherRoomExportData(params: GatherRoomDataParams): RoomExportDa
     settlements,
     expenses: roomMonthExpenses,
     detailedSplits,
+    reconciliation: params.reconciliation,
   };
 }
 
 // ─── Filename Generator ─────────────────────────────────────────
 
-export function generateRoomFilename(roomName: string, monthLabel: string, format: RoomExportFormat): string {
+export function generateRoomFilename(
+  roomName: string,
+  monthLabel: string,
+  format: RoomExportFormat,
+  isCertified = false
+): string {
   const cleanRoom = sanitizeRoomName(roomName);
   const cleanMonth = monthLabel.replace(/\s+/g, '_');
   const ext = format === 'pdf' ? 'pdf' : format === 'csv' ? 'csv' : 'xlsx';
-  return `RoomMate_${cleanRoom}_Shared_Expenses_${cleanMonth}.${ext}`;
+  const prefix = isCertified ? 'RoomMate_Certified_Audit' : 'RoomMate_Shared_Expenses';
+  return `${prefix}_${cleanRoom}_${cleanMonth}.${ext}`;
 }
 
 // ─── Native / Browser Download Trigger ──────────────────────────
 
 export async function downloadRoomFile(blob: Blob, filename: string): Promise<void> {
-  const isAndroidOrMobile = isNativeApp() || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  if (isAndroidOrMobile && navigator.canShare) {
-    try {
-      const file = new File([blob], filename, { type: blob.type });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: filename,
-          text: `Shared room expense report from RoomMate: ${filename}`,
-        });
-        return;
-      }
-    } catch {
-      // User cancelled share or share failed; fallback to direct download below
-    }
-  }
-
-  // Standard web browser download fallback
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  }, 250);
+  await saveFileToDevice({
+    blob,
+    filename,
+    shareTitle: filename,
+    shareText: `RoomMate Room Audit Statement: ${filename}`,
+    autoShareOnMobile: true,
+  });
 }
 
 // ─── Format-Specific Export Orchestrator ────────────────────────
@@ -428,6 +425,11 @@ export async function exportRoomToFormat(dataset: RoomExportDataset, format: Roo
     }
   }
 
-  filename = generateRoomFilename(dataset.roomName, dataset.monthLabel, format);
+  filename = generateRoomFilename(
+    dataset.roomName,
+    dataset.monthLabel,
+    format,
+    dataset.reconciliation?.isCertified
+  );
   await downloadRoomFile(blob, filename);
 }

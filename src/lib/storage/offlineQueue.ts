@@ -6,6 +6,10 @@ import { SharedExpense, SplitMethod, SettlementPayment, PersonalExpense } from '
 export type OfflineMutationType =
   | 'ADD_SHARED_EXPENSE'
   | 'RECORD_SETTLEMENT'
+  | 'CONFIRM_SETTLEMENT'
+  | 'DISPUTE_SETTLEMENT'
+  | 'CANCEL_SETTLEMENT'
+  | 'SUBMIT_SETTLEMENT_EVIDENCE'
   | 'ADD_PERSONAL_EXPENSE'
   | 'DELETE_PERSONAL_EXPENSE'
   | 'CREATE_ROOM';
@@ -36,6 +40,33 @@ export interface RecordSettlementPayload {
   notes?: string;
 }
 
+export interface ConfirmSettlementPayload {
+  settlementId: string;
+  userId: string;
+  roomId?: string;
+}
+
+export interface DisputeSettlementPayload {
+  settlementId: string;
+  userId: string;
+  reason: string;
+  roomId?: string;
+}
+
+export interface CancelSettlementPayload {
+  settlementId: string;
+  userId: string;
+  roomId?: string;
+}
+
+export interface SubmitSettlementEvidencePayload {
+  settlementId: string;
+  userId: string;
+  utr: string;
+  evidenceUrl?: string;
+  roomId?: string;
+}
+
 export interface AddPersonalExpensePayload {
   localId?: string;
   userId: string;
@@ -61,17 +92,25 @@ export interface CreateRoomPayload {
 export type OfflineMutationPayload =
   | AddSharedExpensePayload
   | RecordSettlementPayload
+  | ConfirmSettlementPayload
+  | DisputeSettlementPayload
+  | CancelSettlementPayload
+  | SubmitSettlementEvidencePayload
   | AddPersonalExpensePayload
   | DeletePersonalExpensePayload
   | CreateRoomPayload
   | Record<string, unknown>;
 
 export type OfflineQueueItem =
-  | { id: string; clientMutationId?: string; type: 'ADD_SHARED_EXPENSE'; payload: AddSharedExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; clientMutationId?: string; type: 'RECORD_SETTLEMENT'; payload: RecordSettlementPayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; clientMutationId?: string; type: 'ADD_PERSONAL_EXPENSE'; payload: AddPersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; clientMutationId?: string; type: 'DELETE_PERSONAL_EXPENSE'; payload: DeletePersonalExpensePayload; createdAt: number; retryCount: number; lastError?: string; }
-  | { id: string; clientMutationId?: string; type: 'CREATE_ROOM'; payload: CreateRoomPayload; createdAt: number; retryCount: number; lastError?: string; };
+  | { id: string; clientMutationId?: string; type: 'ADD_SHARED_EXPENSE'; payload: AddSharedExpensePayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'RECORD_SETTLEMENT'; payload: RecordSettlementPayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'CONFIRM_SETTLEMENT'; payload: ConfirmSettlementPayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'DISPUTE_SETTLEMENT'; payload: DisputeSettlementPayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'CANCEL_SETTLEMENT'; payload: CancelSettlementPayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'SUBMIT_SETTLEMENT_EVIDENCE'; payload: SubmitSettlementEvidencePayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'ADD_PERSONAL_EXPENSE'; payload: AddPersonalExpensePayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'DELETE_PERSONAL_EXPENSE'; payload: DeletePersonalExpensePayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; }
+  | { id: string; clientMutationId?: string; type: 'CREATE_ROOM'; payload: CreateRoomPayload; createdAt: number; retryCount: number; nextRetryAt?: number; lastError?: string; };
 
 const PRIMARY_STORAGE_KEY = 'roommate_offline_sync_queue';
 const LEGACY_STORAGE_KEY = 'campusflow_offline_sync_queue';
@@ -130,6 +169,14 @@ export function enqueueOfflineItem<T extends OfflineMutationType>(
     ? AddSharedExpensePayload
     : T extends 'RECORD_SETTLEMENT'
     ? RecordSettlementPayload
+    : T extends 'CONFIRM_SETTLEMENT'
+    ? ConfirmSettlementPayload
+    : T extends 'DISPUTE_SETTLEMENT'
+    ? DisputeSettlementPayload
+    : T extends 'CANCEL_SETTLEMENT'
+    ? CancelSettlementPayload
+    : T extends 'SUBMIT_SETTLEMENT_EVIDENCE'
+    ? SubmitSettlementEvidencePayload
     : T extends 'ADD_PERSONAL_EXPENSE'
     ? AddPersonalExpensePayload
     : T extends 'DELETE_PERSONAL_EXPENSE'
@@ -249,8 +296,15 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
     let syncedCount = 0;
     let failedCount = 0;
     const remainingQueue: OfflineQueueItem[] = [];
+    const now = Date.now();
 
     for (const item of queue) {
+      // Check exponential backoff throttle window
+      if (item.nextRetryAt && item.nextRetryAt > now) {
+        remainingQueue.push(item);
+        continue;
+      }
+
       try {
         let success = false;
 
@@ -317,16 +371,7 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
         }
 
         case 'RECORD_SETTLEMENT': {
-          const data = item.payload as {
-            localSettlementId?: string;
-            roomId: string;
-            payerId: string;
-            payeeId: string;
-            amount: number;
-            paymentMethod: SettlementPayment['paymentMethod'];
-            transactionRef?: string;
-            notes?: string;
-          };
+          const data = item.payload as RecordSettlementPayload;
 
           // Canonical V2: Authoritative V2 RPC settlement execution on queue flush
           const rpcRes = await supabaseService.recordRoomSettlementV2(
@@ -341,6 +386,72 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
             throw new Error(`[OfflineQueue] ${rpcRes.error}`);
           }
 
+          // Codex P2: Remap temporary local settlement ID to authoritative server ID
+          // across all remaining queued items (CANCEL, CONFIRM, DISPUTE, SUBMIT_EVIDENCE).
+          const serverSettlementId = (rpcRes as any).settlement_id;
+          const localSettlementId = data.localSettlementId;
+
+          if (serverSettlementId && localSettlementId && localSettlementId !== serverSettlementId) {
+            for (const remainingItem of queue) {
+              if (
+                remainingItem.type === 'CANCEL_SETTLEMENT' ||
+                remainingItem.type === 'CONFIRM_SETTLEMENT' ||
+                remainingItem.type === 'DISPUTE_SETTLEMENT' ||
+                remainingItem.type === 'SUBMIT_SETTLEMENT_EVIDENCE'
+              ) {
+                const p = remainingItem.payload as any;
+                if (p.settlementId === localSettlementId) {
+                  p.settlementId = serverSettlementId;
+                }
+              }
+            }
+            saveQueue(queue);
+          }
+
+          success = true;
+          break;
+        }
+
+        case 'CONFIRM_SETTLEMENT': {
+          const data = item.payload as ConfirmSettlementPayload;
+          const res = await supabaseService.confirmRoomSettlement(data.settlementId);
+          if (!res.success) {
+            throw new Error(`[OfflineQueue] ${res.error || 'Failed to confirm settlement'}`);
+          }
+          success = true;
+          break;
+        }
+
+        case 'DISPUTE_SETTLEMENT': {
+          const data = item.payload as DisputeSettlementPayload;
+          const res = await supabaseService.disputeRoomSettlement(data.settlementId, data.reason);
+          if (!res.success) {
+            throw new Error(`[OfflineQueue] ${res.error || 'Failed to dispute settlement'}`);
+          }
+          success = true;
+          break;
+        }
+
+        case 'CANCEL_SETTLEMENT': {
+          const data = item.payload as CancelSettlementPayload;
+          const res = await supabaseService.cancelRoomSettlement(data.settlementId);
+          if (!res.success) {
+            throw new Error(`[OfflineQueue] ${res.error || 'Failed to cancel settlement'}`);
+          }
+          success = true;
+          break;
+        }
+
+        case 'SUBMIT_SETTLEMENT_EVIDENCE': {
+          const data = item.payload as SubmitSettlementEvidencePayload;
+          const res = await supabaseService.submitSettlementEvidence(
+            data.settlementId,
+            data.utr,
+            data.evidenceUrl
+          );
+          if (!res.success) {
+            throw new Error(`[OfflineQueue] ${res.error || 'Failed to submit settlement evidence'}`);
+          }
           success = true;
           break;
         }
@@ -492,17 +603,43 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
         errorMessage.includes('INVALID_SETTLEMENT') ||
         errorMessage.includes('OVERSETTLEMENT') ||
         errorMessage.includes('PAYER_IS_NOT_A_DEBTOR') ||
-        item.retryCount >= 4; // Exceeded maximum retry attempts
+        errorMessage.includes('INVALID_TRANSITION') ||
+        errorMessage.includes('NOT_FOUND') ||
+        item.retryCount >= 4; // Exceeded maximum retry attempts (5 attempts total)
 
       if (isPermanentConflict) {
         console.warn(`[OfflineQueue] Auto-discarding permanently conflicting mutation ${item.id} (${item.type}): ${errorMessage}`);
+
+        // Auto-revert local optimistic settlement if oversettlement or rejected
+        let localSettlementId: string | undefined;
+        let amount: number | undefined;
+        let roomId: string | undefined;
+
+        if (item.type === 'RECORD_SETTLEMENT') {
+          const payload = item.payload as RecordSettlementPayload;
+          localSettlementId = payload.localSettlementId;
+          amount = payload.amount;
+          roomId = payload.roomId;
+          if (localSettlementId) {
+            db.revertDiscardedSettlement(localSettlementId);
+            console.log(`[OfflineQueue] Reverted optimistic settlement ${localSettlementId} from local ledger.`);
+          }
+        } else if (
+          item.type === 'CONFIRM_SETTLEMENT' ||
+          item.type === 'DISPUTE_SETTLEMENT' ||
+          item.type === 'CANCEL_SETTLEMENT'
+        ) {
+          localSettlementId = (item.payload as any).settlementId;
+          roomId = (item.payload as any).roomId;
+        }
+
         try {
           db.logAdminAudit(
             'SYSTEM',
             'OFFLINE_SYNC_CONFLICT_DISCARDED',
             'OFFLINE_QUEUE',
             item.id,
-            { type: item.type, error: errorMessage }
+            { type: item.type, error: errorMessage, localSettlementId, amount, roomId }
           );
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
@@ -511,6 +648,9 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
                   itemId: item.id,
                   type: item.type,
                   error: errorMessage,
+                  localSettlementId,
+                  amount,
+                  roomId,
                   timestamp: Date.now(),
                 },
               })
@@ -522,6 +662,10 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
       } else {
         item.retryCount += 1;
         item.lastError = errorMessage;
+        // Jittered exponential backoff: base 1.5s, max 15s + random jitter 0-500ms
+        const baseDelay = Math.min(15000, 1500 * Math.pow(2, item.retryCount - 1));
+        const jitter = Math.floor(Math.random() * 500);
+        item.nextRetryAt = Date.now() + baseDelay + jitter;
         remainingQueue.push(item);
       }
     }

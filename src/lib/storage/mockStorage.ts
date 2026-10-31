@@ -569,6 +569,8 @@ class MockDatabase {
       paymentMethod: SettlementPayment['paymentMethod'];
       transactionRef?: string;
       notes?: string;
+      status?: SettlementPayment['status'];
+      confirmationDeadline?: string;
     }
   ): SettlementPayment {
     // Idempotency check: if settlement with this ID already exists, return it
@@ -593,6 +595,9 @@ class MockDatabase {
       throw new Error('ACCESS_DENIED: Inactive members can only record settlements where they are a party');
     }
 
+    const now = new Date();
+    const deadline = new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString();
+
     const newPayment: SettlementPayment = {
       id: data.id || generateSecureUuid(),
       roomId: data.roomId,
@@ -603,12 +608,163 @@ class MockDatabase {
       transactionRef: data.transactionRef,
       notes: data.notes,
       paymentDate: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+      status: data.status || 'PENDING_CONFIRMATION',
+      confirmationDeadline: data.confirmationDeadline || deadline,
     };
 
     this.state.settlementPayments.unshift(newPayment);
     this.save(this.state);
     return newPayment;
+  }
+
+  public confirmSettlementPayment(
+    requesterUserId: string,
+    settlementId: string
+  ): SettlementPayment {
+    const settlement = this.state.settlementPayments.find((s) => s.id === settlementId);
+    if (!settlement) {
+      throw new Error(`NOT_FOUND: Settlement ${settlementId} does not exist`);
+    }
+    const member = this.state.roomMembers.find(
+      (rm) => rm.roomId === settlement.roomId && rm.userId === requesterUserId
+    );
+    if (!member) {
+      throw new Error('ACCESS_DENIED: User has no affiliation with this room');
+    }
+    const isSuperAdmin = this.state.users.find((u) => u.id === requesterUserId)?.role === 'SUPER_ADMIN';
+    if (requesterUserId !== settlement.payeeId && !isSuperAdmin) {
+      throw new Error('ACCESS_DENIED: Only recipient can confirm settlement');
+    }
+    if (settlement.status !== 'PENDING_CONFIRMATION' && settlement.status !== 'DISPUTED') {
+      throw new Error(`INVALID_TRANSITION: Settlement is in state ${settlement.status}, cannot confirm`);
+    }
+
+    const wasDisputed = settlement.status === 'DISPUTED';
+    settlement.status = 'CONFIRMED';
+    settlement.confirmedAt = new Date().toISOString();
+    settlement.confirmedBy = requesterUserId;
+    settlement.confirmationMethod = wasDisputed ? 'ADMIN_RESOLUTION' : 'MANUAL';
+    this.save(this.state);
+    return settlement;
+  }
+
+  public disputeSettlementPayment(
+    requesterUserId: string,
+    settlementId: string,
+    reason: string
+  ): SettlementPayment {
+    const trimmedReason = (reason || '').trim();
+    if (!trimmedReason) {
+      throw new Error('INVALID_ARGUMENT: Dispute reason cannot be empty');
+    }
+    const settlement = this.state.settlementPayments.find((s) => s.id === settlementId);
+    if (!settlement) {
+      throw new Error(`NOT_FOUND: Settlement ${settlementId} does not exist`);
+    }
+    const member = this.state.roomMembers.find(
+      (rm) => rm.roomId === settlement.roomId && rm.userId === requesterUserId
+    );
+    if (!member) {
+      throw new Error('ACCESS_DENIED: User has no affiliation with this room');
+    }
+    const isSuperAdmin = this.state.users.find((u) => u.id === requesterUserId)?.role === 'SUPER_ADMIN';
+    if (requesterUserId !== settlement.payeeId && !isSuperAdmin) {
+      throw new Error('ACCESS_DENIED: Only recipient can dispute settlement');
+    }
+    if (settlement.status !== 'PENDING_CONFIRMATION') {
+      throw new Error(`INVALID_TRANSITION: Settlement is in state ${settlement.status}, cannot dispute`);
+    }
+
+    settlement.status = 'DISPUTED';
+    settlement.disputedAt = new Date().toISOString();
+    settlement.disputedBy = requesterUserId;
+    settlement.disputeReason = trimmedReason;
+    this.save(this.state);
+    return settlement;
+  }
+
+  public cancelSettlementPayment(
+    requesterUserId: string,
+    settlementId: string
+  ): SettlementPayment {
+    const settlement = this.state.settlementPayments.find((s) => s.id === settlementId);
+    if (!settlement) {
+      throw new Error(`NOT_FOUND: Settlement ${settlementId} does not exist`);
+    }
+    const isSuperAdmin = this.state.users.find((u) => u.id === requesterUserId)?.role === 'SUPER_ADMIN';
+    if (requesterUserId !== settlement.payerId && !isSuperAdmin) {
+      throw new Error('ACCESS_DENIED: Only payer can cancel settlement');
+    }
+    if (settlement.status !== 'PENDING_CONFIRMATION') {
+      throw new Error(`INVALID_TRANSITION: Settlement is in state ${settlement.status}, cannot cancel`);
+    }
+
+    settlement.status = 'CANCELLED';
+    settlement.cancelledAt = new Date().toISOString();
+    this.save(this.state);
+    return settlement;
+  }
+
+  public submitSettlementEvidence(
+    requesterUserId: string,
+    settlementId: string,
+    utr: string,
+    evidenceUrl?: string
+  ): SettlementPayment {
+    const trimmedUtr = (utr || '').trim();
+    if (!trimmedUtr) {
+      throw new Error('INVALID_ARGUMENT: Bank UTR/Transaction reference is required');
+    }
+    const settlement = this.state.settlementPayments.find((s) => s.id === settlementId);
+    if (!settlement) {
+      throw new Error(`NOT_FOUND: Settlement ${settlementId} does not exist`);
+    }
+    const isSuperAdmin = this.state.users.find((u) => u.id === requesterUserId)?.role === 'SUPER_ADMIN';
+    if (requesterUserId !== settlement.payerId && !isSuperAdmin) {
+      throw new Error('ACCESS_DENIED: Only payer can submit evidence');
+    }
+    if (settlement.status !== 'DISPUTED') {
+      throw new Error('INVALID_TRANSITION: Evidence can only be submitted for DISPUTED settlements');
+    }
+
+    settlement.evidenceUtr = trimmedUtr;
+    if (evidenceUrl) settlement.evidenceUrl = evidenceUrl.trim();
+    this.save(this.state);
+    return settlement;
+  }
+
+  public processSettlementAutoConfirmations(asOfTime?: Date): number {
+    const now = asOfTime || new Date();
+    let count = 0;
+    for (const settlement of this.state.settlementPayments) {
+      if (settlement.status === 'PENDING_CONFIRMATION' && settlement.confirmationDeadline) {
+        if (new Date(settlement.confirmationDeadline).getTime() <= now.getTime()) {
+          settlement.status = 'AUTO_CONFIRMED';
+          settlement.confirmedAt = now.toISOString();
+          settlement.confirmationMethod = 'AUTOMATIC';
+          count++;
+        }
+      }
+    }
+    if (count > 0) {
+      this.save(this.state);
+    }
+    return count;
+  }
+
+  /**
+   * Reverts / removes an optimistic settlement payment that was rejected
+   * by the server on offline queue replay (e.g. OVERSETTLEMENT_EXCEEDS_DEBT).
+   */
+  public revertDiscardedSettlement(settlementId: string): boolean {
+    const idx = this.state.settlementPayments.findIndex((s) => s.id === settlementId);
+    if (idx !== -1) {
+      this.state.settlementPayments.splice(idx, 1);
+      this.save(this.state);
+      return true;
+    }
+    return false;
   }
 
   public leaveRoom(

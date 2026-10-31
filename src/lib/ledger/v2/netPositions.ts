@@ -61,8 +61,11 @@ export function calculateMemberNetPositionsV2(
       }
     }
 
-    // 2. Process Settlements
+    // 2. Process Settlements (Active & Provisional; Disputed and Cancelled are excluded)
     for (const s of settlements) {
+      if (s.status === 'DISPUTED' || s.status === 'CANCELLED') {
+        continue;
+      }
       assertIntegerPaise(s.amountPaise, `Settlement amount for ${s.id}`);
       if (s.payerId === userId) {
         settlementsSentPaise = addPaise(settlementsSentPaise, s.amountPaise);

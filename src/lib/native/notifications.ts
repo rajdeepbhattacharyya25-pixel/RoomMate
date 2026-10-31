@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { playNotificationSound, playSuccessSound } from './notificationSound';
+import { playNotificationSound, playSuccessSoundThrottled } from './notificationSound';
 
 export const EXPENSES_CHANNEL_ID = 'roommate_expenses_channel';
 export const SETTLEMENTS_CHANNEL_ID = 'roommate_settlements_channel';
@@ -147,12 +147,14 @@ export async function sendLocalSettlementNotification(data: {
   payerName: string;
   payeeName: string;
   paymentMethod: string;
+  customTitle?: string;
+  customBody?: string;
 }): Promise<void> {
-  const notifTitle = `Settlement Recorded: ₹${data.amount.toFixed(2)}`;
-  const notifBody = `${data.payerName} paid ${data.payeeName} via ${data.paymentMethod}. All balances updated.`;
+  const notifTitle = data.customTitle || `Settlement Recorded: ₹${data.amount.toFixed(2)}`;
+  const notifBody = data.customBody || `${data.payerName} paid ${data.payeeName} via ${data.paymentMethod}. All balances updated.`;
 
-  // Play success chime for settlements
-  playSuccessSound();
+  // Play success chime for settlements (throttled to avoid burst spam)
+  playSuccessSoundThrottled();
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -285,7 +287,7 @@ export async function sendLocalJoinApprovalNotification(data: {
 }): Promise<void> {
   const notifTitle = `🎉 You're in! Welcome to ${data.roomName}`;
   const notifBody = `${data.adminName} approved your request. Tap to enter your shared room ledger.`;
-  playSuccessSound();
+  playSuccessSoundThrottled();
 
   if (Capacitor.isNativePlatform()) {
     try {

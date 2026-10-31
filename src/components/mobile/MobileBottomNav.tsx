@@ -27,9 +27,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       aria-label="Bottom Navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#12121A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-[#27354A] px-2 pt-1.5 w-full md:max-w-[395px] mx-auto transition-all shadow-[0_-2px_10px_rgba(0,0,0,0.03)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.4)]"
+      className={`${
+        isNative ? 'fixed' : 'fixed md:absolute'
+      } bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#12121A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-[#27354A] px-2 pt-1.5 w-full md:max-w-[395px] mx-auto transition-all shadow-[0_-2px_10px_rgba(0,0,0,0.03)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.4)]`}
       style={{
-        paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
+        paddingBottom: isNative ? 'max(env(safe-area-inset-bottom, 16px), 16px)' : '16px',
       }}
     >
       <div className="flex items-center justify-around relative">

@@ -142,6 +142,18 @@ export interface ExpenseSplit {
   createdAt: string;
 }
 
+export type SettlementStatus =
+  | 'PENDING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'AUTO_CONFIRMED'
+  | 'DISPUTED'
+  | 'CANCELLED';
+
+export type SettlementConfirmationMethod =
+  | 'MANUAL'
+  | 'AUTOMATIC'
+  | 'ADMIN_RESOLUTION';
+
 export interface SettlementPayment {
   id: string;
   roomId: string;
@@ -153,6 +165,18 @@ export interface SettlementPayment {
   notes?: string;
   paymentDate: string;
   createdAt: string;
+  status?: SettlementStatus;
+  confirmationDeadline?: string;
+  reminderSentAt?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmationMethod?: SettlementConfirmationMethod;
+  disputedAt?: string;
+  disputedBy?: string;
+  disputeReason?: string;
+  evidenceUtr?: string;
+  evidenceUrl?: string;
+  cancelledAt?: string;
 }
 
 export interface AuditLog {
@@ -215,6 +239,7 @@ export type NotificationType =
   | 'ACCOUNT_SECURITY'
   | 'PAYMENT_FAILED'
   | 'EXPENSE_DISPUTE'
+  | 'SETTLEMENT_DISPUTED'
   | 'ROOM_POLICY_CHANGED'
   // MEDIUM Priority (Shared bills & active room changes)
   | 'EXPENSE_ADDED'
@@ -223,6 +248,7 @@ export type NotificationType =
   | 'MEMBER_JOINED'
   | 'EXPENSE_MODIFIED'
   | 'SETTLEMENT_REMINDER'
+  | 'SETTLEMENT_CONFIRMED'
   | 'BUDGET_THRESHOLD_REACHED'
   // LOW / CASUAL Priority (Informational & settled state)
   | 'EXPENSE_SETTLED'
@@ -239,6 +265,7 @@ export type NotificationActionType =
   | 'VIEW_DETAILS'
   | 'VIEW_BALANCE'
   | 'FORCE_LOGOUT'
+  | 'UPDATE_UPI'
   | 'NONE';
 
 export interface InAppNotification {
@@ -416,4 +443,49 @@ export interface SystemIncident {
   createdAt: string;
   resolvedAt?: string;
 }
+
+// Track 4: Room Ledger Audit & Certified Statement Types
+export type ReconciliationPeriodStatus = 'OPEN' | 'LOCKED' | 'CERTIFIED';
+export type StatementSignoffStatus = 'PENDING' | 'SIGNED' | 'DISPUTED';
+
+export interface RoomReconciliationPeriod {
+  id: string;
+  roomId: string;
+  periodYear: number;
+  periodMonth: number; // 1-12
+  status: ReconciliationPeriodStatus;
+  lockedAt?: string;
+  lockedBy?: string;
+  unlockedAt?: string;
+  unlockedBy?: string;
+  unlockReason?: string;
+  revisionCount: number;
+  certifiedAt?: string;
+  certifiedSealHash?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoomStatementSignoff {
+  id: string;
+  periodId: string;
+  roomId: string;
+  userId: string;
+  userName?: string;
+  userAvatar?: string;
+  userEmail?: string;
+  status: StatementSignoffStatus;
+  signedAt?: string;
+  disputeReason?: string;
+  signatureStamp?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoomStatementData {
+  period: RoomReconciliationPeriod | null;
+  signoffs: RoomStatementSignoff[];
+  hasPeriod: boolean;
+}
+
 

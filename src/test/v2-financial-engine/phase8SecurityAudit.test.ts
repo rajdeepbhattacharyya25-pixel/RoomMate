@@ -211,22 +211,15 @@ describe('Phase 8 — External Attack-Surface, DAST & Security Regression Suite'
 
     it('realtime event handlers trigger authoritative V2 fetch and never calculate local balances', () => {
       let registeredHandlers: Array<() => void> = [];
-      vi.spyOn(supabase, 'channel').mockReturnValue({
+      const mockChannel: any = {
         on: vi.fn().mockImplementation((_event, _filter, callback) => {
           registeredHandlers.push(callback);
-          return {
-            on: vi.fn().mockImplementation((_e, _f, cb) => {
-              registeredHandlers.push(cb);
-              return {
-                subscribe: vi.fn(),
-              };
-            }),
-            subscribe: vi.fn(),
-          };
+          return mockChannel;
         }),
         subscribe: vi.fn(),
         unsubscribe: vi.fn(),
-      } as unknown as ReturnType<typeof supabase.channel>);
+      };
+      vi.spyOn(supabase, 'channel').mockReturnValue(mockChannel as unknown as ReturnType<typeof supabase.channel>);
 
       const onDataChange = vi.fn();
       supabaseService.subscribeToRoomUpdates('room-tenant-alpha', onDataChange);

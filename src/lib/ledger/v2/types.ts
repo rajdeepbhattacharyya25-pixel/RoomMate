@@ -37,6 +37,7 @@ export interface SettlementInputV2 {
   amountPaise: Paise;
   paymentDate?: string;
   createdAt?: string;
+  status?: string;
 }
 
 export interface MemberNetPositionV2 {
@@ -124,6 +125,8 @@ export type FinancialErrorCode =
   | 'ACCESS_DENIED'
   | 'OVERSETTLEMENT_EXCEEDS_DEBT'
   | 'OVERSETTLEMENT_EXCEEDS_CREDIT'
+  | 'INVALID_TRANSITION'
+  | 'NOT_FOUND'
   | 'SUPABASE_NOT_CONFIGURED'
   | 'NETWORK_ERROR'
   | 'UNKNOWN_RPC_ERROR';
@@ -137,6 +140,8 @@ export interface RecordSettlementV2Success {
   amount: number;
   amount_paise: number;
   created_at: string;
+  status?: string;
+  confirmation_deadline?: string;
 }
 
 export interface RecordSettlementV2Failure {

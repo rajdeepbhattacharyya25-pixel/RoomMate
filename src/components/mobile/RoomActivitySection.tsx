@@ -59,13 +59,20 @@ export const RoomActivitySection: React.FC<RoomActivitySectionProps> = ({
         const payee = allUsers.find((u) => u.id === s.payeeId);
         const payerName = payer ? payer.name : 'A roommate';
         const payeeName = payee ? payee.name : 'a roommate';
+        const status = s.status || 'CONFIRMED';
+        let statusSuffix = '';
+        if (status === 'PENDING_CONFIRMATION') statusSuffix = ' (Pending Confirmation)';
+        else if (status === 'DISPUTED') statusSuffix = ' (Disputed)';
+        else if (status === 'AUTO_CONFIRMED') statusSuffix = ' (Auto-Confirmed)';
+        else if (status === 'CANCELLED') statusSuffix = ' (Cancelled)';
+
         list.push({
           id: `settle-${s.id}`,
           roomId: room.id,
           type: 'SETTLEMENT_RECORDED',
           actorId: s.payerId,
           actorName: payerName,
-          description: `settled with ${payeeName} via ${s.paymentMethod}`,
+          description: `settled with ${payeeName} via ${s.paymentMethod}${statusSuffix}`,
           amount: s.amount,
           timestamp: s.createdAt || s.paymentDate,
         });

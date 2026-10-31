@@ -12,14 +12,13 @@ import {
   Key,
 } from 'lucide-react';
 import { User } from '../../types';
-import { db, DEFAULT_STAGING_SEEDS } from '../../lib/storage/mockStorage';
+import { db } from '../../lib/storage/mockStorage';
 import {
   checkRateLimit,
   recordMfaFailure,
   resetMfaFailures,
   verifySuperAdminTotp,
   verifyRfc6238Totp,
-  enrollSuperAdminTotp,
   hashMasterPassword,
   getOrCreateDeviceId,
   getDeviceMetadata,
@@ -67,8 +66,9 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
     ? allUsers.find((u) => u.email.toLowerCase().trim() === cleanEmail) ||
       db.getState().users.find((u) => u.email.toLowerCase().trim() === cleanEmail)
     : null;
-  const existingSettings = existingUser ? db.getSuperAdminSecuritySettings(existingUser.id) : null;
-  const isNewPasswordSetup = !existingSettings || !existingSettings.masterPasswordHash;
+  const isAuthorizedAdmin = Boolean(existingUser && existingUser.role === 'SUPER_ADMIN');
+  const existingSettings = isAuthorizedAdmin ? db.getSuperAdminSecuritySettings(existingUser!.id) : null;
+  const isNewPasswordSetup = isAuthorizedAdmin && (!existingSettings || !existingSettings.masterPasswordHash);
 
   useEffect(() => {
     if (!isOpen) {
@@ -142,13 +142,7 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
       }
 
       // Check if user is an authorized platform administrator
-      const isAuthorizedSuperAdmin =
-        (matched && matched.role === 'SUPER_ADMIN') ||
-        cleanEmail === 'admin@roommate.app' ||
-        cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' ||
-        cleanEmail === 'rajdeep.bhattacharyya25@gmail.com';
-
-      if (!isAuthorizedSuperAdmin) {
+      if (!matched || matched.role !== 'SUPER_ADMIN') {
         const probe = recordFailedAdminProbe();
         if (probe.shouldAlertAdmin) {
           dispatchIntrusionAlert(cleanEmail, probe.failedAttempts);
@@ -167,21 +161,6 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
         }
         setIsLoading(false);
         return;
-      }
-
-      // If authorized root admin account not yet instantiated in DB
-      if (!matched) {
-        const masterSeed = DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN')!;
-        const namePart = cleanEmail.split('@')[0];
-        const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-        matched = {
-          ...masterSeed,
-          id: `usr-admin-${cleanEmail.replace(/[^a-z0-9]/g, '-')}`,
-          name: (cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' || cleanEmail === 'rajdeep.bhattacharyya25@gmail.com') ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
-          email: cleanEmail,
-          role: 'SUPER_ADMIN',
-        };
-        db.upsertUser(matched);
       }
 
       if (matched.isSuspended) {
@@ -285,16 +264,11 @@ export const SuperAdminLoginModal: React.FC<SuperAdminLoginModalProps> = ({
             settings = db.getSuperAdminSecuritySettings(matchedAdmin.id);
           }
         } else {
-          // No Supabase factor AND no local secret — the TOTP secret is lost (enrolled on
-          // a different browser/origin). Must re-enroll to regain access.
-          const enrollResult = await enrollSuperAdminTotp('RoomMate Console');
-          setEnrollmentData(enrollResult);
-          setMfaCode('');
+          // Authenticator not found on this device — must authenticate using one-time emergency recovery code
           setError(
-            'Your previous authenticator setup was tied to a different browser session and cannot be recovered. ' +
-            'Please scan the new QR code below to re-enroll your authenticator app.'
+            'Authenticator configuration not recognized on this device. Please authenticate using one of your emergency backup recovery codes.'
           );
-          setStep('MFA_ENROLLMENT');
+          setStep('RECOVERY');
           setIsLoading(false);
           return;
         }

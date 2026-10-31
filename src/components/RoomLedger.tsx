@@ -20,7 +20,13 @@ import {
 import { CanonicalRoomSummaryResult } from '../lib/ledger/financialIntegrationService';
 import { DbFinancialSummaryV2, FinancialDataState } from '../lib/ledger/v2';
 import { isSupabaseConfigured } from '../lib/supabase/client';
-import { isUuid } from '../lib/storage/cloudStorageAdapter';
+import {
+  isUuid,
+  confirmSettlementCloud,
+  disputeSettlementCloud,
+  cancelSettlementCloud,
+  submitSettlementEvidenceCloud,
+} from '../lib/storage/cloudStorageAdapter';
 import { UserAvatar } from './common/UserAvatar';
 import { formatInrExact } from '../lib/utils/currencyFormatter';
 import {
@@ -42,7 +48,24 @@ import {
   AlertTriangle,
   CheckCircle2,
   ShieldAlert,
+  ExternalLink,
+  MessageCircle,
+  Loader2,
+  Clock,
+  X,
+  Upload,
+  Camera,
 } from 'lucide-react';
+import { ParsedReceiptData } from '../lib/ocr/receiptTextParser';
+import { ReceiptCaptureModal } from './ocr/ReceiptCaptureModal';
+import { ReceiptReviewDrawer } from './ocr/ReceiptReviewDrawer';
+import {
+  validatePayeeUpi,
+  generateDynamicUpiQrCode,
+  dispatchUpiNudgeNotification,
+  buildWhatsAppNudgeUrl,
+} from '../lib/payments/upiProfileService';
+import { RoomReconciliationCard } from './reconciliation/RoomReconciliationCard';
 import confetti from 'canvas-confetti';
 
 interface RoomLedgerProps {
@@ -81,6 +104,10 @@ interface RoomLedgerProps {
   onJoinRoom: (code: string) => void;
   onLeaveRoom?: (roomId: string) => Promise<void>;
   onRemoveMember?: (roomId: string, targetUserId: string) => Promise<void>;
+  onConfirmSettlement?: (settlementId: string) => Promise<void>;
+  onDisputeSettlement?: (settlementId: string, reason: string) => Promise<void>;
+  onCancelSettlement?: (settlementId: string) => Promise<void>;
+  onSubmitSettlementEvidence?: (settlementId: string, utr: string, evidenceUrl?: string) => Promise<void>;
 }
 
 export const RoomLedger: React.FC<RoomLedgerProps> = ({
@@ -100,9 +127,16 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   onJoinRoom,
   onLeaveRoom,
   onRemoveMember,
+  onConfirmSettlement,
+  onDisputeSettlement,
+  onCancelSettlement,
+  onSubmitSettlementEvidence,
 }) => {
   // Modals
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [showReceiptCapture, setShowReceiptCapture] = useState(false);
+  const [showReceiptReview, setShowReceiptReview] = useState(false);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceiptData | null>(null);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -125,7 +159,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
-  const [expenseDate, _setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Settle Up Form State
   const [settlePayeeId, setSettlePayeeId] = useState('');
@@ -134,6 +168,15 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [transactionRef, setTransactionRef] = useState('');
   const [settleNotes, setSettleNotes] = useState('');
   const [isSubmittingSettle, setIsSubmittingSettle] = useState(false);
+
+  // Recipient Settlement Confirmation & Dispute State
+  const [disputingSettlementId, setDisputingSettlementId] = useState<string | null>(null);
+  const [disputeReasonInput, setDisputeReasonInput] = useState('');
+  const [evidenceSettlementId, setEvidenceSettlementId] = useState<string | null>(null);
+  const [evidenceUtrInput, setEvidenceUtrInput] = useState('');
+  const [evidenceUrlInput, setEvidenceUrlInput] = useState('');
+  const [settlementActionLoadingId, setSettlementActionLoadingId] = useState<string | null>(null);
+  const [settlementActionError, setSettlementActionError] = useState<string | null>(null);
 
   // Create & Join Room Form State
   const [newRoomName, setNewRoomName] = useState('');
@@ -250,6 +293,8 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [dbFinancialSummary, setDbFinancialSummary] = useState<DbFinancialSummaryV2 | null>(null);
   const [financialError, setFinancialError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
+  // Debt Simplification (Transitive Min-Cash-Flow by default) vs Pairwise Bilateral Audit Ledger
+  const [balanceViewMode, setBalanceViewMode] = useState<'SIMPLIFIED' | 'PAIRWISE_AUDIT'>('SIMPLIFIED');
 
   useEffect(() => {
     if (!activeRoom?.id) return;
@@ -324,7 +369,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       return financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
     }
 
@@ -334,7 +382,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
         const staleSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
           dbFinancialSummary,
           currentUser.id,
-          allUsers
+          allUsers,
+          sharedExpenses,
+          expenseSplits,
+          settlementPayments
         );
         staleSummary.isStale = true;
         staleSummary.error = financialError;
@@ -376,7 +427,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       const prevSummary = financialIntegrationService.adaptDbSummaryToCanonicalRoomSummary(
         dbFinancialSummary,
         currentUser.id,
-        allUsers
+        allUsers,
+        sharedExpenses,
+        expenseSplits,
+        settlementPayments
       );
       prevSummary.financialState = 'LOADING';
       return prevSummary;
@@ -394,6 +448,138 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
       }
     );
   }, [financialState, dbFinancialSummary, financialError, activeRoom, currentUser.id, sharedExpenses, expenseSplits, settlementPayments, allUsers]);
+
+  // Choose debts list based on view mode (SIMPLIFIED by default, or PAIRWISE_AUDIT)
+  const displayDebts = useMemo(() => {
+    if (balanceViewMode === 'PAIRWISE_AUDIT' && summary.pairwiseAuditDebts) {
+      return summary.pairwiseAuditDebts;
+    }
+    return summary.pairwiseDebts;
+  }, [balanceViewMode, summary.pairwiseDebts, summary.pairwiseAuditDebts]);
+
+  // Outstanding debt current user owes to the currently selected settle payee
+  const maxOwedToPayee = useMemo(() => {
+    if (!settlePayeeId) return 0;
+    const found = summary.pairwiseDebts.find(
+      (d) =>
+        (d.userAId === currentUser.id && d.userBId === settlePayeeId && d.netAmount < 0) ||
+        (d.userBId === currentUser.id && d.userAId === settlePayeeId && d.netAmount > 0)
+    );
+    if (!found) return 0;
+    return Math.abs(found.netAmount);
+  }, [settlePayeeId, summary.pairwiseDebts, currentUser.id]);
+
+  // Selected Payee User & Strict UPI Status (NPCI-compliant, no fake @okaxis synthesis)
+  const selectedPayeeUser = useMemo(() => {
+    return allUsers.find((u) => u.id === settlePayeeId);
+  }, [allUsers, settlePayeeId]);
+
+  const payeeUpiStatus = useMemo(() => {
+    return validatePayeeUpi(selectedPayeeUser);
+  }, [selectedPayeeUser]);
+
+  // Settle Amount Debouncing (300ms) for QR code generation
+  const [debouncedSettleAmount, setDebouncedSettleAmount] = useState<number>(0);
+  const [isQrRefreshing, setIsQrRefreshing] = useState(false);
+  const [dynamicQrDataUrl, setDynamicQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    setIsQrRefreshing(true);
+    const timer = setTimeout(() => {
+      const amt = Number(settleAmount) || 0;
+      setDebouncedSettleAmount(amt);
+      setIsQrRefreshing(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [settleAmount]);
+
+  // Generate dynamic QR code locally whenever debounced amount and payee UPI change
+  useEffect(() => {
+    let isMounted = true;
+    const isOversettlement = maxOwedToPayee > 0 && debouncedSettleAmount > maxOwedToPayee;
+
+    if (
+      !payeeUpiStatus.hasValidUpi ||
+      !payeeUpiStatus.upiId ||
+      debouncedSettleAmount <= 0 ||
+      isOversettlement ||
+      !activeRoom
+    ) {
+      setDynamicQrDataUrl('');
+      return;
+    }
+
+    generateDynamicUpiQrCode({
+      upiId: payeeUpiStatus.upiId,
+      payeeName: payeeUpiStatus.payeeName,
+      amount: debouncedSettleAmount,
+      roomName: activeRoom.name,
+      transactionRef,
+    }).then(({ dataUrl, error }) => {
+      if (isMounted) {
+        if (!error && dataUrl) {
+          setDynamicQrDataUrl(dataUrl);
+        } else {
+          setDynamicQrDataUrl('');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [payeeUpiStatus, debouncedSettleAmount, maxOwedToPayee, activeRoom, transactionRef]);
+
+  // Nudge state & Dual dispatch handler
+  const [isNudging, setIsNudging] = useState(false);
+  const [nudgeResultMsg, setNudgeResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [nudgeCooldownSeconds, setNudgeCooldownSeconds] = useState(0);
+
+  const whatsAppNudgeUrl = useMemo(() => {
+    if (!selectedPayeeUser || !activeRoom) return '';
+    const amt = maxOwedToPayee > 0 ? maxOwedToPayee : (Number(settleAmount) || 0);
+    return buildWhatsAppNudgeUrl({
+      payeePhone: selectedPayeeUser.phone,
+      payeeName: selectedPayeeUser.name,
+      payerName: currentUser.name,
+      amount: amt,
+      roomName: activeRoom.name,
+    });
+  }, [selectedPayeeUser, activeRoom, maxOwedToPayee, settleAmount, currentUser.name]);
+
+  const handleSendInAppNudge = async () => {
+    if (!selectedPayeeUser || !activeRoom || isNudging) return;
+    setIsNudging(true);
+    setNudgeResultMsg(null);
+    const amt = maxOwedToPayee > 0 ? maxOwedToPayee : (Number(settleAmount) || 0);
+
+    try {
+      const res = await dispatchUpiNudgeNotification({
+        payerId: currentUser.id,
+        payerName: currentUser.name,
+        payeeId: selectedPayeeUser.id,
+        payeeName: selectedPayeeUser.name,
+        amount: amt,
+        roomId: activeRoom.id,
+        roomName: activeRoom.name,
+        roomMemberIds: roomMembers.filter((m) => m.roomId === activeRoom.id).map((m) => m.userId),
+      });
+
+      if (res.success) {
+        setNudgeResultMsg({ type: 'success', text: res.message });
+        setNudgeCooldownSeconds(300);
+      } else {
+        setNudgeResultMsg({ type: 'error', text: res.message });
+        if (res.cooldownSecondsRemaining) {
+          setNudgeCooldownSeconds(res.cooldownSecondsRemaining);
+        }
+      }
+    } catch {
+      setNudgeResultMsg({ type: 'error', text: 'Failed to send in-app reminder.' });
+    } finally {
+      setIsNudging(false);
+    }
+  };
 
   if (!activeRoom) {
     return (
@@ -538,6 +724,80 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
     }
   };
 
+  const handleConfirmReceipt = async (settlementId: string) => {
+    setSettlementActionLoadingId(settlementId);
+    setSettlementActionError(null);
+    try {
+      if (onConfirmSettlement) {
+        await onConfirmSettlement(settlementId);
+      } else {
+        await confirmSettlementCloud(currentUser.id, settlementId);
+      }
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to confirm settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleDisputeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputingSettlementId || !disputeReasonInput.trim()) return;
+    setSettlementActionLoadingId(disputingSettlementId);
+    setSettlementActionError(null);
+    try {
+      if (onDisputeSettlement) {
+        await onDisputeSettlement(disputingSettlementId, disputeReasonInput.trim());
+      } else {
+        await disputeSettlementCloud(currentUser.id, disputingSettlementId, disputeReasonInput.trim());
+      }
+      setDisputingSettlementId(null);
+      setDisputeReasonInput('');
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to dispute settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleCancelClaim = async (settlementId: string) => {
+    if (!window.confirm('Are you sure you want to cancel this settlement claim? Your balance will be restored.')) return;
+    setSettlementActionLoadingId(settlementId);
+    setSettlementActionError(null);
+    try {
+      if (onCancelSettlement) {
+        await onCancelSettlement(settlementId);
+      } else {
+        await cancelSettlementCloud(currentUser.id, settlementId);
+      }
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to cancel settlement');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
+  const handleEvidenceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!evidenceSettlementId || !evidenceUtrInput.trim()) return;
+    setSettlementActionLoadingId(evidenceSettlementId);
+    setSettlementActionError(null);
+    try {
+      if (onSubmitSettlementEvidence) {
+        await onSubmitSettlementEvidence(evidenceSettlementId, evidenceUtrInput.trim(), evidenceUrlInput.trim() || undefined);
+      } else {
+        await submitSettlementEvidenceCloud(currentUser.id, evidenceSettlementId, evidenceUtrInput.trim(), evidenceUrlInput.trim() || undefined);
+      }
+      setEvidenceSettlementId(null);
+      setEvidenceUtrInput('');
+      setEvidenceUrlInput('');
+    } catch (err: unknown) {
+      setSettlementActionError(err instanceof Error ? err.message : 'Failed to submit evidence');
+    } finally {
+      setSettlementActionLoadingId(null);
+    }
+  };
+
   const copyInvite = () => {
     if (invitation) {
       navigator.clipboard.writeText(invitation.inviteCode);
@@ -633,7 +893,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               onClick={() => setShowJoinModal(true)}
               className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-gray-300 border border-slate-700"
             >
-              Join Another
+              Join Another Room
             </button>
             <button
               onClick={() => setShowCreateRoomModal(true)}
@@ -663,6 +923,17 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               </button>
             )}
             <button
+              onClick={() => setShowReceiptCapture(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 shadow-xs transition-all active:scale-95 cursor-pointer"
+              title="Scan receipt to split line items"
+            >
+              <Camera className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Scan Receipt</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-200/60 dark:bg-indigo-800/60 text-indigo-800 dark:text-indigo-200">
+                AI
+              </span>
+            </button>
+            <button
               onClick={openAddExpense}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30"
             >
@@ -684,6 +955,17 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
           </span>
         </div>
       )}
+
+      {/* Track 4: Monthly Room Ledger Audit & Certified Statement Export */}
+      <RoomReconciliationCard
+        currentUser={currentUser}
+        activeRoom={activeRoom}
+        roomMembers={roomMembers}
+        allUsers={allUsers}
+        sharedExpenses={sharedExpenses}
+        expenseSplits={expenseSplits}
+        settlementPayments={settlementPayments}
+      />
 
       {/* Room Net Standing & Pairwise Debts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -744,16 +1026,63 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 
         {/* Right 2 Cols: Precise Pairwise Debts Matrix */}
         <div className="lg:col-span-2 glass-card p-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>Room Balances & Settlements</span>
+              <span>{balanceViewMode === 'SIMPLIFIED' ? 'Simplified Room Debts' : 'Detailed Bilateral Ledger'}</span>
               <span className="text-[10px] text-gray-400 font-normal">
-                (Who owes who)
+                ({displayDebts.length} active {displayDebts.length === 1 ? 'balance' : 'balances'})
               </span>
             </h3>
+
+            {/* Toggle Segmented Control: Simplified (Default) vs Audit Ledger */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-slate-800 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('SIMPLIFIED')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  balanceViewMode === 'SIMPLIFIED'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Minimizes payments needed across roommates using Splitwise-style transitive simplification"
+              >
+                <Zap className="w-3 h-3 text-amber-300" />
+                <span>Simplified (Default)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalanceViewMode('PAIRWISE_AUDIT')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  balanceViewMode === 'PAIRWISE_AUDIT'
+                    ? 'bg-purple-900/70 text-purple-200 border border-purple-500/40 shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="View original pairwise bilateral debts with full bill and payment breakdown"
+              >
+                <Receipt className="w-3 h-3 text-purple-400" />
+                <span>Audit Ledger</span>
+              </button>
+            </div>
           </div>
 
-          {summary.pairwiseDebts.length === 0 ? (
+          {/* Educational View Banner */}
+          {balanceViewMode === 'SIMPLIFIED' ? (
+            <div className="text-[11px] text-indigo-300/90 bg-indigo-950/40 border border-indigo-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>
+                <strong>Transitive Simplification Active:</strong> Minimizes transactions to settle the room. Original pairwise records and splits remain fully auditable in the Audit Ledger.
+              </span>
+            </div>
+          ) : (
+            <div className="text-[11px] text-purple-300/90 bg-purple-950/40 border border-purple-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span>
+                <strong>Bilateral Audit Ledger:</strong> Shows direct bill obligations and payments between each pair of roommates.
+              </span>
+            </div>
+          )}
+
+          {displayDebts.length === 0 ? (
             <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-[var(--border-subtle)]">
               <Check className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
               <p className="text-xs text-gray-300 font-semibold">You're all settled 🎉</p>
@@ -761,7 +1090,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             </div>
           ) : (
             <div className="space-y-2">
-              {summary.pairwiseDebts.map((debt, idx) => {
+              {displayDebts.map((debt, idx) => {
                 const bOwesA = debt.netAmount > 0;
                 const creditor = bOwesA ? debt.userAName : debt.userBName;
                 const debtor = bOwesA ? debt.userBName : debt.userAName;
@@ -807,7 +1136,9 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-[var(--text-subtle)]">
-                          Bills: {formatInrExact(bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA)} | Direct Paid: {formatInrExact(bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB)}
+                          {balanceViewMode === 'PAIRWISE_AUDIT'
+                            ? `Bills: ${formatInrExact(bOwesA ? debt.explanation.aPaidForB : debt.explanation.bPaidForA)} | Direct Paid: ${formatInrExact(bOwesA ? debt.explanation.settlementsBToA : debt.explanation.settlementsAToB)}`
+                            : 'Splitwise transitive transfer to balance room accounts'}
                         </span>
                       </div>
                     </div>
@@ -831,7 +1162,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                             setSettleAmount(String(absAmount));
                             setShowSettleModal(true);
                           }}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40 cursor-pointer"
                         >
                           Settle up
                         </button>
@@ -936,25 +1267,164 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             <p className="text-xs text-[var(--text-subtle)] py-6 text-center">No payment transfers recorded yet.</p>
           ) : (
             <div className="space-y-2">
+              {settlementActionError && (
+                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+                  <span>{settlementActionError}</span>
+                  <button onClick={() => setSettlementActionError(null)} className="text-gray-400 hover:text-white">✕</button>
+                </div>
+              )}
               {roomSettlements.map((pmt) => {
                 const payer = allUsers.find((u) => u.id === pmt.payerId);
                 const payee = allUsers.find((u) => u.id === pmt.payeeId);
+                const isPayer = pmt.payerId === currentUser.id;
+                const isPayee = pmt.payeeId === currentUser.id;
+                const status = pmt.status || 'CONFIRMED';
+                const isPending = status === 'PENDING_CONFIRMATION';
+                const isDisputed = status === 'DISPUTED';
+                const isCancelled = status === 'CANCELLED';
 
                 return (
-                  <div key={pmt.id} className="p-3 rounded-xl bg-slate-950/60 border border-[var(--border-subtle)] space-y-1">
+                  <div key={pmt.id} className="p-3 rounded-xl bg-slate-950/60 border border-[var(--border-subtle)] space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold text-white">
-                      <div className="flex items-center gap-1">
-                        <span>{pmt.payerId === currentUser.id ? 'You' : payer?.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>{isPayer ? 'You' : (payer?.name || 'Roommate')}</span>
                         <ArrowRight className="w-3 h-3 text-emerald-400" />
-                        <span>{pmt.payeeId === currentUser.id ? 'You' : payee?.name}</span>
+                        <span>{isPayee ? 'You' : (payee?.name || 'Roommate')}</span>
                       </div>
-                      <span className="text-emerald-400 font-extrabold">+₹{pmt.amount}</span>
+                      <span className={`font-extrabold ${isDisputed || isCancelled ? 'text-gray-500 line-through' : 'text-emerald-400'}`}>
+                        +₹{pmt.amount}
+                      </span>
                     </div>
+
+                    {/* Status Badge */}
+                    <div className="flex items-center justify-between text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            Pending Confirmation
+                          </span>
+                        )}
+                        {status === 'CONFIRMED' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            Confirmed
+                          </span>
+                        )}
+                        {status === 'AUTO_CONFIRMED' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 border border-teal-500/30 font-semibold">
+                            <CheckCircle2 className="w-3 h-3 text-teal-400" />
+                            Auto-Confirmed (72h)
+                          </span>
+                        )}
+                        {isDisputed && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 font-semibold">
+                            <AlertTriangle className="w-3 h-3 text-rose-400" />
+                            Disputed
+                          </span>
+                        )}
+                        {isCancelled && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/30 font-semibold">
+                            <X className="w-3 h-3 text-gray-400" />
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[var(--text-subtle)]">{pmt.paymentDate}</span>
+                    </div>
+
                     <div className="flex items-center justify-between text-[10px] text-[var(--text-subtle)]">
                       <span>Method: {pmt.paymentMethod}</span>
-                      <span>{pmt.paymentDate}</span>
+                      {pmt.confirmationDeadline && isPending && (
+                        <span>Deadline: {new Date(pmt.confirmationDeadline).toLocaleDateString()}</span>
+                      )}
                     </div>
+
                     {pmt.notes && <p className="text-[10px] text-gray-400 italic">{pmt.notes}</p>}
+
+                    {/* Dispute Info */}
+                    {isDisputed && pmt.disputeReason && (
+                      <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-500/20 text-[11px] text-rose-300 space-y-1">
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Dispute Reason:</span>
+                        </div>
+                        <p className="italic text-gray-300 pl-4">"{pmt.disputeReason}"</p>
+                        {pmt.evidenceUtr && (
+                          <p className="text-emerald-400 font-mono text-[10px] pt-1">
+                            Proof UTR: {pmt.evidenceUtr}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 pt-1">
+                      {isPending && isPayee && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmReceipt(pmt.id)}
+                            disabled={settlementActionLoadingId === pmt.id}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Confirm Receipt</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDisputingSettlementId(pmt.id);
+                              setDisputeReasonInput('');
+                            }}
+                            disabled={settlementActionLoadingId === pmt.id}
+                            className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Dispute</span>
+                          </button>
+                        </>
+                      )}
+
+                      {isPending && isPayer && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelClaim(pmt.id)}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-300 text-[10px] font-medium cursor-pointer"
+                        >
+                          Cancel Claim
+                        </button>
+                      )}
+
+                      {isDisputed && isPayer && !pmt.evidenceUtr && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvidenceSettlementId(pmt.id);
+                            setEvidenceUtrInput('');
+                            setEvidenceUrlInput('');
+                          }}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Submit UTR Proof</span>
+                        </button>
+                      )}
+
+                      {isDisputed && isPayee && pmt.evidenceUtr && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmReceipt(pmt.id)}
+                          disabled={settlementActionLoadingId === pmt.id}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Acknowledge & Confirm</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -979,6 +1449,35 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 className="text-gray-400 hover:text-white text-xs font-bold"
               >
                 ✕
+              </button>
+            </div>
+
+            {/* Quick Action: Scan Receipt via OCR / Gemini AI */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>Have a receipt?</span>
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-500/30">AI / OCR</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--text-muted)]">
+                    Scan to extract line items, taxes & split with roommates
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddExpenseModal(false);
+                  setShowReceiptCapture(true);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 active:scale-95 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Scan Receipt</span>
               </button>
             </div>
 
@@ -1095,9 +1594,39 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 
               {/* Participants Selector (Point-in-Time Frozen) */}
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1.5">
-                  Split Among ({selectedParticipants.length} selected)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[var(--text-muted)] block">
+                    Split Among ({selectedParticipants.length} of {currentMembers.length} selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParticipants(currentMembers.map((m) => m.userId))}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParticipants([currentUser.id])}
+                      className="text-[10px] text-gray-400 hover:text-gray-300 font-medium cursor-pointer"
+                    >
+                      Just Me
+                    </button>
+                  </div>
+                </div>
+
+                {splitMethod === 'EQUAL' && numAmount > 0 && selectedParticipants.length > 0 && (
+                  <div className="mb-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-300 flex items-center justify-between">
+                    <span>
+                      ₹{numAmount.toLocaleString('en-IN')} split equally among {selectedParticipants.length} roommates
+                    </span>
+                    <span className="font-bold text-white tabular-nums">
+                      = ₹{(numAmount / selectedParticipants.length).toFixed(2)}/person
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {currentMembers.map((m) => {
                     const isChecked = selectedParticipants.includes(m.userId);
@@ -1305,9 +1834,20 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
-                  Amount Paid (₹) *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-[var(--text-muted)] block">
+                    Amount Paid (₹) *
+                  </label>
+                  {maxOwedToPayee > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSettleAmount(String(maxOwedToPayee))}
+                      className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded cursor-pointer"
+                    >
+                      Fill Full Balance ({formatInrExact(maxOwedToPayee)})
+                    </button>
+                  )}
+                </div>
                 <input
                   type="number"
                   step="0.01"
@@ -1317,6 +1857,12 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   className="w-full"
                   required
                 />
+                {maxOwedToPayee > 0 && Number(settleAmount) > maxOwedToPayee && (
+                  <p className="text-[11px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Amount exceeds outstanding balance ({formatInrExact(maxOwedToPayee)}). Over-settlement is prohibited.</span>
+                  </p>
+                )}
                 <p className="text-[10px] text-[var(--text-subtle)] mt-1">
                   Supports partial payments! (e.g. ₹25 owed - ₹20 paid = ₹5 remaining)
                 </p>
@@ -1353,6 +1899,121 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 </div>
               </div>
 
+              {/* Dynamic NPCI UPI QR & Payee-First Profile Verification */}
+              {paymentMethod === 'UPI' && settlePayeeId && (
+                <>
+                  {!payeeUpiStatus.hasValidUpi ? (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 text-left animate-in fade-in">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-amber-400">Your roommate hasn&apos;t added a UPI ID yet.</h4>
+                          <p className="text-[11px] text-gray-300 mt-0.5 leading-relaxed">
+                            {selectedPayeeUser?.name || 'Roommate'} needs to configure their UPI ID in Settings before you can pay them via UPI QR.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dual-dispatch nudge: In-App notification + optional WhatsApp reminder */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSendInAppNudge}
+                          disabled={isNudging || nudgeCooldownSeconds > 0}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        >
+                          {isNudging ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Sending...</span>
+                            </>
+                          ) : nudgeCooldownSeconds > 0 ? (
+                            <span>Nudge sent (Wait {nudgeCooldownSeconds}s)</span>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Send In-App Reminder</span>
+                            </>
+                          )}
+                        </button>
+
+                        {whatsAppNudgeUrl && (
+                          <a
+                            href={whatsAppNudgeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WhatsApp Nudge</span>
+                            <ExternalLink className="w-3 h-3 opacity-80" />
+                          </a>
+                        )}
+                      </div>
+
+                      {nudgeResultMsg && (
+                        <p className={`text-[11px] font-semibold ${nudgeResultMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {nudgeResultMsg.text}
+                        </p>
+                      )}
+
+                      <p className="text-[10px] text-gray-400 border-t border-amber-500/20 pt-1.5">
+                        💡 You can still log an external settlement via Cash or Bank Transfer below.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-900 border border-indigo-500/30 text-center space-y-3 relative animate-in fade-in">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-left">
+                        <div>
+                          <span className="text-xs font-bold text-white flex items-center gap-1">
+                            <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Instant UPI QR</span>
+                          </span>
+                          <span className="text-[11px] text-gray-400">Pay to {payeeUpiStatus.upiId}</span>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          NPCI Dynamic
+                        </span>
+                      </div>
+
+                      {isQrRefreshing ? (
+                        <div className="py-8 space-y-2">
+                          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin mx-auto" />
+                          <p className="text-xs font-bold text-indigo-300">
+                            Updating QR for {formatInrExact(Number(settleAmount) || 0)}...
+                          </p>
+                        </div>
+                      ) : dynamicQrDataUrl ? (
+                        <div className="space-y-2">
+                          <div className="inline-block p-2.5 bg-white rounded-xl shadow-md">
+                            <img
+                              src={dynamicQrDataUrl}
+                              alt="UPI QR Code"
+                              className="w-36 h-36 mx-auto object-contain bg-white"
+                            />
+                          </div>
+                          <div>
+                            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
+                              <span>Exact Amount:</span>
+                              <span className="font-mono">{formatInrExact(debouncedSettleAmount)}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-300 mt-1">
+                              Scan with GPay, PhonePe, Paytm, or BHIM to pay {selectedPayeeUser?.name}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 py-3">Enter an amount above to generate a dynamic UPI QR.</p>
+                      )}
+
+                      <p className="text-[10px] text-amber-400/90 bg-amber-950/40 border border-amber-500/20 p-2 rounded-lg">
+                        ⚠️ Scanning the QR code does NOT automatically record the settlement. Click <strong>Record Settlement</strong> below after payment.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
               <div>
                 <label className="text-xs font-semibold text-[var(--text-muted)] block mb-1">
                   Notes (Optional)
@@ -1384,6 +2045,10 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   <p className="text-[11px] text-gray-400">
                     You are paying {allUsers.find((u) => u.id === settlePayeeId)?.name || 'Roommate'}.
                   </p>
+                  <p className="text-[10px] text-amber-400/90 flex items-center gap-1.5 pt-1.5 border-t border-slate-800/80">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>Settlements enter <strong>Pending Confirmation</strong> until verified by your roommate, or automatically confirmed after 72 hours.</span>
+                  </p>
                 </div>
               )}
 
@@ -1397,8 +2062,14 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingSettle || !settlePayeeId || !settleAmount || Number(settleAmount) <= 0}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                  disabled={
+                    isSubmittingSettle ||
+                    !settlePayeeId ||
+                    !settleAmount ||
+                    Number(settleAmount) <= 0 ||
+                    (maxOwedToPayee > 0 && Number(settleAmount) > maxOwedToPayee)
+                  }
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
                 >
                   {isSubmittingSettle ? (
                     <>
@@ -1408,6 +2079,143 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                   ) : (
                     <span>Confirm payment</span>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dispute Settlement Modal */}
+      {disputingSettlementId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="glass-card max-w-md w-full p-6 border-rose-500/30 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-rose-500/20">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-bold text-white">Dispute Settlement</h3>
+              </div>
+              <button
+                onClick={() => setDisputingSettlementId(null)}
+                className="text-gray-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Did not receive this payment? Disputing will <strong>immediately reinstate the outstanding balance</strong> across your room ledger and notify the payer to provide bank proof (UTR).
+            </p>
+
+            <form onSubmit={handleDisputeSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Reason for Dispute *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Funds not credited in bank account, incorrect UPI ID used, etc."
+                  value={disputeReasonInput}
+                  onChange={(e) => setDisputeReasonInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDisputingSettlementId(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!disputeReasonInput.trim() || settlementActionLoadingId === disputingSettlementId}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {settlementActionLoadingId === disputingSettlementId ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  )}
+                  <span>Submit Dispute</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Evidence / Proof Modal */}
+      {evidenceSettlementId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="glass-card max-w-md w-full p-6 border-indigo-500/30 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-indigo-500/20">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">Submit Payment Proof</h3>
+              </div>
+              <button
+                onClick={() => setEvidenceSettlementId(null)}
+                className="text-gray-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Provide your 12-digit UPI Transaction ID or Bank Reference (UTR) from your payment app so your roommate can verify and confirm the funds.
+            </p>
+
+            <form onSubmit={handleEvidenceSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Bank Reference / UTR Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 427819283741"
+                  value={evidenceUtrInput}
+                  onChange={(e) => setEvidenceUtrInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Payment Screenshot URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={evidenceUrlInput}
+                  onChange={(e) => setEvidenceUrlInput(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEvidenceSettlementId(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!evidenceUtrInput.trim() || settlementActionLoadingId === evidenceSettlementId}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {settlementActionLoadingId === evidenceSettlementId ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  <span>Submit Proof</span>
                 </button>
               </div>
             </form>
@@ -1940,6 +2748,55 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             )}
           </div>
         </div>
+      )}
+      {/* Smart Receipt OCR & Itemized Split Modals */}
+      <ReceiptCaptureModal
+        isOpen={showReceiptCapture}
+        onClose={() => setShowReceiptCapture(false)}
+        roomId={activeRoom.id}
+        onScanComplete={(data) => {
+          setParsedReceipt(data);
+          setShowReceiptReview(true);
+        }}
+      />
+
+      {parsedReceipt && (
+        <ReceiptReviewDrawer
+          isOpen={showReceiptReview}
+          onClose={() => {
+            setShowReceiptReview(false);
+            setParsedReceipt(null);
+          }}
+          parsedData={parsedReceipt}
+          members={currentMembers}
+          currentUserId={currentUser.id}
+          onSaveExpense={(expenseData) => {
+            onAddSharedExpense({
+              roomId: activeRoom.id,
+              paidBy: expenseData.paidBy,
+              title: expenseData.title,
+              totalAmount: expenseData.totalAmount,
+              category: expenseData.category,
+              splitMethod: expenseData.splitMethod,
+              participantUserIds: expenseData.participantUserIds,
+              customValues: expenseData.customValues,
+              notes: expenseData.notes,
+              expenseDate: expenseData.expenseDate,
+            });
+            confetti({
+              particleCount: 70,
+              spread: 60,
+              origin: { y: 0.7 },
+            });
+          }}
+          onSwitchToManual={(prefill) => {
+            setTitle(prefill.title);
+            setAmount(prefill.amount.toString());
+            setNotes(prefill.notes);
+            if (prefill.date) setExpenseDate(prefill.date);
+            setShowAddExpenseModal(true);
+          }}
+        />
       )}
     </div>
   );

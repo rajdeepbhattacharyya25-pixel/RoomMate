@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { hapticImpact } from '../../lib/native/haptics';
 import { registerBackButtonHandler } from '../../lib/native/backButton';
@@ -47,6 +48,20 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
   const currentDrag = useRef<number>(0);
   const sheetRef = useRef<HTMLDivElement>(null);
 
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
+    if (typeof document !== 'undefined') {
+      return document.getElementById('mobile-phone-frame') || document.body;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const frame = document.getElementById('mobile-phone-frame');
+      setPortalNode(frame || document.body);
+    }
+  }, []);
+
   // Synchronize rendering and visibility when parent toggles `isOpen`
   useEffect(() => {
     if (isOpen) {
@@ -65,6 +80,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         openRafRef.current = r2;
       });
       openRafRef.current = r1;
+
+      // Fallback timer ensures visibility fires even if RAF is throttled or delayed
+      const fallbackTimer = setTimeout(() => {
+        setIsVisible(true);
+      }, 35);
+
+      return () => {
+        clearTimeout(fallbackTimer);
+      };
     } else {
       // Parent set isOpen to false -> animate down and unmount
       if (openRafRef.current) {
@@ -178,11 +202,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
     ? `translateY(${Math.max(0, dragOffset)}px)`
     : 'translateY(0)';
 
-  return (
+  const isPhoneFrame = portalNode?.id === 'mobile-phone-frame';
+
+  const sheetContent = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed md:absolute inset-0 z-50 flex items-end justify-center select-none"
+      className={`${
+        isPhoneFrame ? 'absolute' : 'fixed'
+      } inset-0 z-50 flex flex-col justify-end items-center overflow-hidden`}
     >
       {/* Dimmed Backdrop with fade in/out animation; clicking outside triggers animated close */}
       <div
@@ -190,7 +218,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         style={{
           opacity: backdropOpacity,
         }}
-        className="absolute inset-0 bg-black/55 backdrop-blur-xs transition-opacity duration-250 ease-out"
+        className="absolute inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-xs transition-opacity duration-250 ease-out"
         aria-label="Close sheet overlay"
       />
 
@@ -199,15 +227,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
         style={{
-          maxHeight,
+          maxHeight: maxHeight || '88%',
           transform: sheetTransform,
           transition: isDragging
             ? 'none'
             : 'transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease-out',
-          // Generous safe-area padding at the bottom so it never merges with Android's 3-button navigation bar
-          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 20px), 56px)',
         }}
-        className={`relative z-10 w-full max-w-[420px] bg-white dark:bg-[#12121A] border-t border-slate-200/90 dark:border-[#27354A] rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden will-change-transform ${className}`}
+        className={`relative z-10 w-full ${
+          isPhoneFrame ? '' : 'max-w-[420px]'
+        } bg-white dark:bg-[#12121A] border-t border-slate-200/90 dark:border-[#27354A] rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] flex flex-col min-h-0 overflow-hidden will-change-transform pb-safe ${className}`}
       >
         {/* Swipe / Drag Zone (Touch-to-dismiss handle) */}
         <div
@@ -259,10 +287,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         </div>
 
         {/* Scrollable Content Container */}
-        <div className={`px-5 pt-1 overflow-y-auto overscroll-contain flex-1 ${contentClassName}`}>
+        <div
+          className={`px-5 pt-1 pb-20 overflow-y-auto overscroll-contain flex-1 min-h-0 ${contentClassName}`}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {children}
         </div>
       </div>
     </div>
   );
+
+  return portalNode ? createPortal(sheetContent, portalNode) : sheetContent;
 };

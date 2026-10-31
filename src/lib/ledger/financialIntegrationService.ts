@@ -44,6 +44,95 @@ export interface CanonicalRoomSummaryResult extends RoomFinancialSummary {
   financialState?: FinancialDataState;
   isStale?: boolean;
   error?: string | null;
+  pairwiseAuditDebts?: PairwiseDebt[];
+}
+
+function round2(num: number): number {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Calculates raw, unsimplified bilateral pairwise debts between members.
+ * Preserves the exact auditable trail of who paid for whom and direct settlement transfers.
+ */
+export function calculateRoomPairwiseDebts(
+  expenses: SharedExpense[],
+  splits: ExpenseSplit[],
+  settlements: SettlementPayment[],
+  users: User[]
+): PairwiseDebt[] {
+  const userMap = new Map<string, User>(users.map((u) => [u.id, u]));
+  const activeExpenses = expenses.filter((e) => !e.isDeleted);
+  const expenseMap = new Map<string, SharedExpense>(activeExpenses.map((e) => [e.id, e]));
+
+  const rawObligations = new Map<string, number>();
+  const rawSettlements = new Map<string, number>();
+  const getPairKey = (payerId: string, debtorId: string) => `${payerId}:::${debtorId}`;
+
+  // 1. Process Expense Splits
+  for (const split of splits) {
+    const expense = expenseMap.get(split.sharedExpenseId);
+    if (!expense) continue;
+
+    const payerId = expense.paidBy;
+    const debtorId = split.userId;
+
+    if (payerId !== debtorId) {
+      const key = getPairKey(payerId, debtorId);
+      const current = rawObligations.get(key) || 0;
+      rawObligations.set(key, round2(current + split.shareAmount));
+    }
+  }
+
+  // 2. Process Settlement Payments
+  for (const pmt of settlements) {
+    if (pmt.status === 'DISPUTED' || pmt.status === 'CANCELLED') {
+      continue;
+    }
+    const payerId = pmt.payerId;
+    const payeeId = pmt.payeeId;
+
+    const key = getPairKey(payerId, payeeId);
+    const current = rawSettlements.get(key) || 0;
+    rawSettlements.set(key, round2(current + pmt.amount));
+  }
+
+  // 3. Consolidate Unique Pairs
+  const allUserIds = Array.from(userMap.keys());
+  const pairwiseResults: PairwiseDebt[] = [];
+
+  for (let i = 0; i < allUserIds.length; i++) {
+    for (let j = i + 1; j < allUserIds.length; j++) {
+      const uA = allUserIds[i];
+      const uB = allUserIds[j];
+
+      const bOwesAForBills = rawObligations.get(getPairKey(uA, uB)) || 0;
+      const aOwesBForBills = rawObligations.get(getPairKey(uB, uA)) || 0;
+
+      const aPaidBDirectly = rawSettlements.get(getPairKey(uA, uB)) || 0;
+      const bPaidADirectly = rawSettlements.get(getPairKey(uB, uA)) || 0;
+
+      const netAmount = round2(bOwesAForBills - aOwesBForBills + aPaidBDirectly - bPaidADirectly);
+
+      if (Math.abs(netAmount) >= 0.01) {
+        pairwiseResults.push({
+          userAId: uA,
+          userBId: uB,
+          userAName: userMap.get(uA)?.name || 'Unknown',
+          userBName: userMap.get(uB)?.name || 'Unknown',
+          netAmount,
+          explanation: {
+            aPaidForB: bOwesAForBills,
+            bPaidForA: aOwesBForBills,
+            settlementsAToB: aPaidBDirectly,
+            settlementsBToA: bPaidADirectly,
+          },
+        });
+      }
+    }
+  }
+
+  return pairwiseResults;
 }
 
 /**
@@ -98,6 +187,7 @@ export function adaptLegacySettlementToV2(settlement: SettlementPayment): Settle
     amountPaise: rupeesToPaise(settlement.amount),
     paymentDate: settlement.paymentDate,
     createdAt: settlement.createdAt,
+    status: settlement.status,
   };
 }
 
@@ -189,6 +279,8 @@ export function calculateCanonicalRoomSummary(
     };
   });
 
+  const pairwiseAuditDebts = calculateRoomPairwiseDebts(roomExpenses, roomSplits, roomSettlements, users);
+
   return {
     roomId,
     totalRoomExpenses,
@@ -196,6 +288,7 @@ export function calculateCanonicalRoomSummary(
     myTotalShare,
     myNetBalance,
     pairwiseDebts,
+    pairwiseAuditDebts,
     v2Summary,
     isZeroSumVerified: v2Summary.isZeroSumVerified,
     netDiscrepancyPaise: v2Summary.netDiscrepancyPaise,
@@ -216,7 +309,10 @@ export function calculateCanonicalRoomSummary(
 export function adaptDbSummaryToCanonicalRoomSummary(
   dbSummary: DbFinancialSummaryV2,
   currentUserId: string,
-  users: User[]
+  users: User[],
+  expenses?: SharedExpense[],
+  splits?: ExpenseSplit[],
+  settlements?: SettlementPayment[]
 ): CanonicalRoomSummaryResult {
   const userMap = new Map<string, User>(users.map((u) => [u.id, u]));
   const netMap = new Map<string, MemberNetPositionV2>();
@@ -311,6 +407,15 @@ export function adaptDbSummaryToCanonicalRoomSummary(
     generatedAt: dbSummary.generated_at || new Date().toISOString(),
   };
 
+  let pairwiseAuditDebts: PairwiseDebt[] | undefined;
+  if (expenses) {
+    const activeExpenses = expenses.filter((e) => e.roomId === dbSummary.room_id && !e.isDeleted);
+    const activeExpenseIds = new Set(activeExpenses.map((e) => e.id));
+    const activeSplits = (splits || []).filter((s) => activeExpenseIds.has(s.sharedExpenseId));
+    const activeSettlements = (settlements || []).filter((s) => s.roomId === dbSummary.room_id);
+    pairwiseAuditDebts = calculateRoomPairwiseDebts(activeExpenses, activeSplits, activeSettlements, users);
+  }
+
   return {
     roomId: dbSummary.room_id,
     totalRoomExpenses,
@@ -318,6 +423,7 @@ export function adaptDbSummaryToCanonicalRoomSummary(
     myTotalShare,
     myNetBalance,
     pairwiseDebts,
+    pairwiseAuditDebts,
     v2Summary,
     isZeroSumVerified: v2Summary.isZeroSumVerified,
     netDiscrepancyPaise: v2Summary.netDiscrepancyPaise,
@@ -354,5 +460,40 @@ export const financialIntegrationService = {
     amount: number
   ): Promise<RecordSettlementV2Result> {
     return supabaseService.recordRoomSettlementV2(roomId, payerId, payeeId, amount);
+  },
+
+  /**
+   * Confirms receipt of a settlement payment
+   */
+  async confirmRoomSettlement(settlementId: string): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.confirmRoomSettlement(settlementId);
+  },
+
+  /**
+   * Disputes a settlement payment
+   */
+  async disputeRoomSettlement(
+    settlementId: string,
+    reason: string
+  ): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.disputeRoomSettlement(settlementId, reason);
+  },
+
+  /**
+   * Cancels a pending settlement claim
+   */
+  async cancelRoomSettlement(settlementId: string): Promise<{ success: boolean; error?: string; status?: string }> {
+    return supabaseService.cancelRoomSettlement(settlementId);
+  },
+
+  /**
+   * Submits evidence / UTR for a disputed settlement
+   */
+  async submitSettlementEvidence(
+    settlementId: string,
+    utr: string,
+    evidenceUrl?: string
+  ): Promise<{ success: boolean; error?: string; evidenceUtr?: string }> {
+    return supabaseService.submitSettlementEvidence(settlementId, utr, evidenceUrl);
   },
 };

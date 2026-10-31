@@ -255,10 +255,10 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   };
 
   return (
-    <div className={`min-h-screen ${isNative ? 'bg-[#F9F9FF] dark:bg-[#0B0B10] w-full flex flex-col' : 'bg-[#F1F5F9] dark:bg-[#07070B] flex flex-col items-center justify-start lg:py-6'} text-[#111827] dark:text-[#F8FAFC] selection:bg-indigo-100 dark:selection:bg-indigo-900/60 selection:text-indigo-900 dark:selection:text-indigo-200 transition-colors duration-150`}>
+    <div className={`min-h-screen ${isNative ? 'bg-[#F9F9FF] dark:bg-[#0B0B10] w-full flex flex-col' : 'bg-[#F1F5F9] dark:bg-[#07070B] flex flex-col items-center justify-center p-2 md:py-4'} text-[#111827] dark:text-[#F8FAFC] selection:bg-indigo-100 dark:selection:bg-indigo-900/60 selection:text-indigo-900 dark:selection:text-indigo-200 transition-colors duration-150`}>
       {/* Top Banner on Desktop Screens */}
       {!isNative && (
-        <header className="w-full max-w-lg mb-3 px-4 flex items-center justify-between hidden md:flex">
+        <header className="w-full max-w-lg mb-2 px-4 flex items-center justify-between hidden md:flex shrink-0">
           <div className="flex items-center space-x-2 text-xs text-slate-600 dark:text-slate-400">
             <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             <span className="font-semibold text-slate-900 dark:text-slate-100">iOS Simulator</span>
@@ -315,7 +315,10 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       )}
 
       {/* Frame Container */}
-      <div className={isNative ? 'w-full min-h-screen bg-[#F9F9FF] dark:bg-[#0B0B10] relative flex flex-col overflow-x-hidden transition-colors duration-150' : 'w-full md:max-w-[395px] md:h-[852px] md:rounded-[48px] bg-[#F9F9FF] dark:bg-[#0B0B10] md:border-[10px] md:border-slate-800 dark:md:border-slate-700 shadow-2xl relative flex flex-col overflow-hidden md:ring-1 md:ring-slate-300 dark:md:ring-slate-800 transition-colors duration-150'}>
+      <div
+        id="mobile-phone-frame"
+        className={isNative ? 'w-full min-h-screen bg-[#F9F9FF] dark:bg-[#0B0B10] relative flex flex-col overflow-x-hidden transition-colors duration-150' : 'w-full md:max-w-[395px] md:h-[min(852px,calc(100vh-3.5rem))] md:max-h-[852px] md:rounded-[48px] bg-[#F9F9FF] dark:bg-[#0B0B10] md:border-[10px] md:border-slate-800 dark:md:border-slate-700 shadow-2xl relative flex flex-col overflow-hidden md:ring-1 md:ring-slate-300 dark:md:ring-slate-800 transition-colors duration-150'}
+      >
         {/* Safe-area top spacer — prevents content from merging with the phone's real status bar */}
         <div
           className="w-full shrink-0 bg-[#F9F9FF] dark:bg-[#0B0B10] transition-colors duration-150"
@@ -326,7 +329,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         <MobileOfflineBanner />
 
         {/* Scrollable Screen Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-none relative pb-nav-safe">
+        <div className="flex-1 overflow-y-auto scrollbar-none pb-nav-safe">
           {activeTab === 'dashboard' && (
             <MobileDashboard
               currentUser={currentUser}
@@ -379,6 +382,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               settlementPayments={settlementPayments}
               allUsers={allUsers}
               rooms={rooms}
+              activeRoom={activeRoom}
             />
           )}
 

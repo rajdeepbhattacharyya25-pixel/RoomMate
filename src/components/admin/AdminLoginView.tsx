@@ -13,10 +13,9 @@ import {
   Key,
   Download,
   Clock,
-  RefreshCw,
 } from 'lucide-react';
 import { User } from '../../types';
-import { db, DEFAULT_STAGING_SEEDS } from '../../lib/storage/mockStorage';
+import { db } from '../../lib/storage/mockStorage';
 import {
   checkRateLimit,
   recordMfaFailure,
@@ -37,6 +36,10 @@ import {
   superAdminStoreRecoveryCodesCloud,
   superAdminVerifyRecoveryCodeCloud,
 } from '../../lib/storage/cloudStorageAdapter';
+import {
+  recordFailedAdminProbe,
+  dispatchIntrusionAlert,
+} from '../../lib/auth/intrusionDetectionService';
 
 interface AdminLoginViewProps {
   onLoginSuccess: (adminUser: User) => void;
@@ -64,14 +67,15 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
   const [copiedCodes, setCopiedCodes] = useState(false);
   const [lockoutRemaining, setLockoutRemaining] = useState<number | null>(null);
 
-  // Dynamic check for first-time password setup for the entered email
+  // Dynamic check for first-time password setup for authorized admin accounts only
   const cleanEmail = email.toLowerCase().trim();
   const existingUser = cleanEmail
     ? allUsers.find((u) => u.email.toLowerCase().trim() === cleanEmail) ||
       db.getState().users.find((u) => u.email.toLowerCase().trim() === cleanEmail)
     : null;
-  const existingSettings = existingUser ? db.getSuperAdminSecuritySettings(existingUser.id) : null;
-  const isNewPasswordSetup = !existingSettings || !existingSettings.masterPasswordHash;
+  const isAuthorizedAdmin = Boolean(existingUser && existingUser.role === 'SUPER_ADMIN');
+  const existingSettings = isAuthorizedAdmin ? db.getSuperAdminSecuritySettings(existingUser!.id) : null;
+  const isNewPasswordSetup = isAuthorizedAdmin && (!existingSettings || !existingSettings.masterPasswordHash);
 
   // MFA Enrollment States
   const [enrollmentData, setEnrollmentData] = useState<TotpEnrollmentResult | null>(null);
@@ -126,22 +130,24 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
         matched = db.getState().users.find((u) => u.email.toLowerCase().trim() === cleanEmail);
       }
 
-      // Provision or promote to SuperAdmin
-      if (!matched) {
-        const masterSeed = DEFAULT_STAGING_SEEDS.users.find((u) => u.role === 'SUPER_ADMIN')!;
-        const namePart = cleanEmail.split('@')[0];
-        const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-        matched = {
-          ...masterSeed,
-          id: `usr-admin-${cleanEmail.replace(/[^a-z0-9]/g, '-')}`,
-          name: (cleanEmail === 'rajdeepbhattacharya.slsn9a@gmail.com' || cleanEmail === 'rajdeep.bhattacharyya25@gmail.com') ? 'Rajdeep Bhattacharyya' : (cleanEmail === 'admin@roommate.app' ? masterSeed.name : formattedName),
-          email: cleanEmail,
-          role: 'SUPER_ADMIN',
-        };
-        db.upsertUser(matched);
-      } else if (matched.role !== 'SUPER_ADMIN') {
-        matched.role = 'SUPER_ADMIN';
-        db.upsertUser(matched);
+      // Strict Zero-Trust Authorization Gate: User MUST already exist and have verified role === 'SUPER_ADMIN'
+      if (!matched || matched.role !== 'SUPER_ADMIN') {
+        const probe = recordFailedAdminProbe();
+        if (probe.shouldAlertAdmin) {
+          dispatchIntrusionAlert(cleanEmail, probe.failedAttempts);
+        }
+        if (probe.isLocked) {
+          setLockoutRemaining(probe.remainingSeconds);
+          setError(
+            probe.isBlacklisted
+              ? 'Access Denied: Device permanently blacklisted due to repeated intrusion probes.'
+              : `Security lockout active. Please wait ${Math.ceil(probe.remainingSeconds / 60)} minutes.`
+          );
+        } else {
+          setError('Access Denied: You do not have platform administrator privileges.');
+        }
+        setIsLoading(false);
+        return;
       }
 
       if (matched.isSuspended) {
@@ -368,24 +374,6 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
     }
   };
 
-  const handleResetMfaAndReEnroll = async () => {
-    if (!matchedAdmin) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      db.resetSuperAdminMfa(matchedAdmin.id);
-      const enrollResult = await enrollSuperAdminTotp('RoomMate Console');
-      const recoveryCodes = generateRecoveryCodes(8);
-      setEnrollmentData(enrollResult);
-      setGeneratedRecoveryCodes(recoveryCodes);
-      setMfaCode('');
-      setStep('MFA_ENROLLMENT');
-    } catch (err: any) {
-      setError(err?.message || 'Failed to regenerate authenticator credentials.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // ---------------------------------------------------------------------------
   // STEP 2C: Emergency Recovery Code Verification
@@ -729,18 +717,6 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
                   className="text-indigo-600 hover:text-indigo-800 font-semibold transition-colors"
                 >
                   Lost device? Use Recovery Code
-                </button>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={handleResetMfaAndReEnroll}
-                  disabled={isLoading || isLocked}
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 font-medium transition-colors py-1.5 px-3 rounded-lg hover:bg-slate-50"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Re-scan QR / Reset Authenticator</span>
                 </button>
               </div>
             </form>
