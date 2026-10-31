@@ -27,6 +27,7 @@ import { enqueueOfflineItem } from './offlineQueue';
 import { validateStrict4DigitPin, hashPin, clearResidentSession, createResidentToken } from '../auth/jwtService';
 import { isNativeApp } from '../platform/deviceDetector';
 import { isGoogleDefaultAvatar } from '../utils/avatarUtils';
+import { sendRoommatePushEvent } from '../firebase/pushService';
 
 export const IS_LIVE_SYNC_ENABLED =
   isSupabaseConfigured && import.meta.env.VITE_USE_LIVE_SUPABASE === 'true';
@@ -476,6 +477,25 @@ export async function addSharedExpenseCloud(data: {
     }
   }
 
+  // Trigger FCM push to other room participants (excluding creator/payer)
+  try {
+    const otherParticipants = (data.participantUserIds || []).filter((uid) => uid !== data.paidBy);
+    if (otherParticipants.length > 0) {
+      sendRoommatePushEvent({
+        eventType: 'NEW_SHARED_EXPENSE',
+        recipientUserIds: otherParticipants,
+        actorId: data.paidBy,
+        roomId: data.roomId,
+        senderName: db.getState().users.find((u) => u.id === data.paidBy)?.name || 'Roommate',
+        title: `New Shared Bill: ${data.title}`,
+        body: `A new bill of ₹${data.totalAmount} was added for ${data.category}.`,
+        extraData: { expenseId: localExpense.id },
+      }).catch((err) => console.warn('[Push] Expense push dispatch notice:', err));
+    }
+  } catch {
+    // Non-blocking
+  }
+
   return { expense: localExpense, splits: localSplits };
 }
 
@@ -514,6 +534,18 @@ export async function recordSettlementCloud(data: {
       status: (v2Result.status as SettlementPayment['status']) || 'PENDING_CONFIRMATION',
       confirmationDeadline: v2Result.confirmation_deadline,
     });
+
+    sendRoommatePushEvent({
+      eventType: 'SETTLEMENT_RECORDED',
+      recipientUserIds: [data.payeeId],
+      actorId: data.payerId,
+      roomId: data.roomId,
+      senderName: db.getState().users.find((u) => u.id === data.payerId)?.name || 'Roommate',
+      title: 'Settlement Payment Claimed',
+      body: `A roommate recorded a payment of ₹${data.amount}. Please verify and confirm receipt.`,
+      extraData: { settlementId: localSettlement.id },
+    }).catch((err) => console.warn('[Push] Settlement recorded push notice:', err));
+
     return localSettlement;
   }
 
@@ -538,7 +570,18 @@ export async function confirmSettlementCloud(
       throw new Error(res.error || 'Failed to confirm settlement');
     }
   }
-  return db.confirmSettlementPayment(userId, settlementId);
+  const settlement = db.confirmSettlementPayment(userId, settlementId);
+  sendRoommatePushEvent({
+    eventType: 'SETTLEMENT_CONFIRMED',
+    recipientUserIds: [settlement.payerId],
+    actorId: userId,
+    roomId: settlement.roomId,
+    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+    title: 'Settlement Confirmed',
+    body: `Your payment of ₹${settlement.amount} was confirmed by the payee.`,
+    extraData: { settlementId },
+  }).catch((err) => console.warn('[Push] Settlement confirm push notice:', err));
+  return settlement;
 }
 
 // Dispute Settlement in Cloud + Local
@@ -553,7 +596,18 @@ export async function disputeSettlementCloud(
       throw new Error(res.error || 'Failed to dispute settlement');
     }
   }
-  return db.disputeSettlementPayment(userId, settlementId, reason);
+  const settlement = db.disputeSettlementPayment(userId, settlementId, reason);
+  sendRoommatePushEvent({
+    eventType: 'SETTLEMENT_DISPUTED',
+    recipientUserIds: [settlement.payerId],
+    actorId: userId,
+    roomId: settlement.roomId,
+    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+    title: 'Settlement Disputed: Payment Not Received',
+    body: `Your payment claim of ₹${settlement.amount} was disputed: "${reason}". Please provide bank UTR proof.`,
+    extraData: { settlementId, reason },
+  }).catch((err) => console.warn('[Push] Settlement dispute push notice:', err));
+  return settlement;
 }
 
 // Cancel Settlement Claim in Cloud + Local
@@ -567,7 +621,18 @@ export async function cancelSettlementCloud(
       throw new Error(res.error || 'Failed to cancel settlement');
     }
   }
-  return db.cancelSettlementPayment(userId, settlementId);
+  const settlement = db.cancelSettlementPayment(userId, settlementId);
+  sendRoommatePushEvent({
+    eventType: 'SETTLEMENT_CANCELLED',
+    recipientUserIds: [settlement.payeeId],
+    actorId: userId,
+    roomId: settlement.roomId,
+    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+    title: 'Settlement Claim Cancelled',
+    body: `The pending settlement of ₹${settlement.amount} was cancelled by the payer.`,
+    extraData: { settlementId },
+  }).catch((err) => console.warn('[Push] Settlement cancel push notice:', err));
+  return settlement;
 }
 
 // Submit Settlement Evidence in Cloud + Local
@@ -583,7 +648,18 @@ export async function submitSettlementEvidenceCloud(
       throw new Error(res.error || 'Failed to submit settlement evidence');
     }
   }
-  return db.submitSettlementEvidence(userId, settlementId, utr, evidenceUrl);
+  const settlement = db.submitSettlementEvidence(userId, settlementId, utr, evidenceUrl);
+  sendRoommatePushEvent({
+    eventType: 'EVIDENCE_SUBMITTED',
+    recipientUserIds: [settlement.payeeId],
+    actorId: userId,
+    roomId: settlement.roomId,
+    senderName: db.getState().users.find((u) => u.id === userId)?.name || 'Roommate',
+    title: 'Payment Proof Submitted',
+    body: `Payer submitted bank reference (UTR: ${utr}) for disputed settlement of ₹${settlement.amount}.`,
+    extraData: { settlementId, utr },
+  }).catch((err) => console.warn('[Push] Evidence submit push notice:', err));
+  return settlement;
 }
 
 // Leave Room in Cloud + Local (Atomic via Postgres RPC)

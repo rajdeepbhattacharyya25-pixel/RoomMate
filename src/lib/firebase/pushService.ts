@@ -414,15 +414,24 @@ export async function sendPushNotificationToMembers(params: {
 export type RoommatePushEventType =
   | 'NEW_SHARED_EXPENSE'
   | 'EXPENSE_UPDATED'
+  | 'EXPENSE_DELETED'
   | 'SETTLEMENT_RECORDED'
+  | 'SETTLEMENT_CONFIRMED'
+  | 'SETTLEMENT_DISPUTED'
+  | 'SETTLEMENT_CANCELLED'
+  | 'SETTLEMENT_AUTO_CONFIRMED'
+  | 'EVIDENCE_SUBMITTED'
   | 'PAYMENT_REMINDER'
   | 'ROOM_INVITATION'
   | 'JOIN_REQUEST'
-  | 'JOIN_APPROVED';
+  | 'JOIN_APPROVED'
+  | 'MEMBER_LEFT'
+  | 'MEMBER_REMOVED';
 
 export interface RoommatePushEventParams {
   eventType: RoommatePushEventType;
   recipientUserIds: string[];
+  actorId?: string;
   roomId: string;
   roomName?: string;
   senderName: string;
@@ -435,23 +444,45 @@ export interface RoommatePushEventParams {
 /**
  * Standardized RoomMate push event dispatcher.
  * Maps event types to logical channels and packages contextual data for tap handling.
+ * Automatically filters out actorId so actors never receive push notifications for their own actions.
  */
 export async function sendRoommatePushEvent(params: RoommatePushEventParams): Promise<boolean> {
+  if (!params.recipientUserIds || params.recipientUserIds.length === 0) {
+    return false;
+  }
+
+  const effectiveRecipients = params.actorId
+    ? params.recipientUserIds.filter((uid) => uid !== params.actorId)
+    : params.recipientUserIds;
+
+  if (effectiveRecipients.length === 0) {
+    return true; // No third-party recipients to notify after filtering self-actor
+  }
+
   let channelId = EXPENSES_CHANNEL_ID;
-  if (params.eventType === 'SETTLEMENT_RECORDED') {
+  if (
+    params.eventType === 'SETTLEMENT_RECORDED' ||
+    params.eventType === 'SETTLEMENT_CONFIRMED' ||
+    params.eventType === 'SETTLEMENT_DISPUTED' ||
+    params.eventType === 'SETTLEMENT_CANCELLED' ||
+    params.eventType === 'SETTLEMENT_AUTO_CONFIRMED' ||
+    params.eventType === 'EVIDENCE_SUBMITTED'
+  ) {
     channelId = SETTLEMENTS_CHANNEL_ID;
   } else if (params.eventType === 'PAYMENT_REMINDER') {
     channelId = NUDGES_CHANNEL_ID;
   } else if (
     params.eventType === 'ROOM_INVITATION' ||
     params.eventType === 'JOIN_REQUEST' ||
-    params.eventType === 'JOIN_APPROVED'
+    params.eventType === 'JOIN_APPROVED' ||
+    params.eventType === 'MEMBER_LEFT' ||
+    params.eventType === 'MEMBER_REMOVED'
   ) {
     channelId = REQUESTS_CHANNEL_ID;
   }
 
   return sendPushNotificationToMembers({
-    recipientUserIds: params.recipientUserIds,
+    recipientUserIds: effectiveRecipients,
     title: params.title,
     body: params.body,
     channelId,

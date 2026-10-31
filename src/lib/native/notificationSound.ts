@@ -164,3 +164,32 @@ export function playSuccessSound(): void {
     // Silently fail
   }
 }
+
+let lastNotificationPlayTime = 0;
+
+/**
+ * Play notification sound throttled to at most once per minIntervalMs (default: 2000ms).
+ * Prevents audio ping spam when multiple rapid realtime events arrive.
+ */
+export function playNotificationSoundThrottled(minIntervalMs: number = 2000): boolean {
+  const now = Date.now();
+  if (now - lastNotificationPlayTime < minIntervalMs) {
+    return false;
+  }
+  lastNotificationPlayTime = now;
+  playNotificationSound();
+  return true;
+}
+
+/**
+ * Play celebration sound throttled to at most once per minIntervalMs (default: 2000ms).
+ */
+export function playSuccessSoundThrottled(minIntervalMs: number = 2000): boolean {
+  const now = Date.now();
+  if (now - lastNotificationPlayTime < minIntervalMs) {
+    return false;
+  }
+  lastNotificationPlayTime = now;
+  playSuccessSound();
+  return true;
+}
