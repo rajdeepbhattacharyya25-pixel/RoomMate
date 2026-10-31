@@ -17,7 +17,7 @@ import {
   Room,
 } from '../../types';
 import { UserBudgetConfig } from '../storage/budgetService';
-import { isNativeApp } from '../platform/deviceDetector';
+import { saveFileToDevice } from './fileDownloadService';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -319,36 +319,13 @@ export function gatherMonthlyExportData(params: {
 // ─── Download Trigger ───────────────────────────────────────────
 
 export async function downloadFile(blob: Blob, filename: string): Promise<void> {
-  if (isNativeApp()) {
-    // On Capacitor (Android/iOS), try to use Share API for native share sheet
-    try {
-      const file = new File([blob], filename, { type: blob.type });
-      if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: filename,
-        });
-        return;
-      }
-    } catch {
-      // Fallback to standard download if share fails
-    }
-  }
-
-  // Standard web download
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-
-  // Cleanup after a short delay
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  }, 250);
+  await saveFileToDevice({
+    blob,
+    filename,
+    shareTitle: filename,
+    shareText: `RoomMate Expense Report: ${filename}`,
+    autoShareOnMobile: true,
+  });
 }
 
 // ─── Filename Generator ─────────────────────────────────────────

@@ -61,6 +61,7 @@ import {
   dispatchUpiNudgeNotification,
   buildWhatsAppNudgeUrl,
 } from '../lib/payments/upiProfileService';
+import { RoomReconciliationCard } from './reconciliation/RoomReconciliationCard';
 import confetti from 'canvas-confetti';
 
 interface RoomLedgerProps {
@@ -936,6 +937,17 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
           </span>
         </div>
       )}
+
+      {/* Track 4: Monthly Room Ledger Audit & Certified Statement Export */}
+      <RoomReconciliationCard
+        currentUser={currentUser}
+        activeRoom={activeRoom}
+        roomMembers={roomMembers}
+        allUsers={allUsers}
+        sharedExpenses={sharedExpenses}
+        expenseSplits={expenseSplits}
+        settlementPayments={settlementPayments}
+      />
 
       {/* Room Net Standing & Pairwise Debts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

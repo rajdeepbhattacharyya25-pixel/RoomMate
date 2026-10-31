@@ -78,6 +78,7 @@ import { JoinRoomModal } from './JoinRoomModal';
 import { JoinRequestReviewModal } from './JoinRequestReviewModal';
 import { useBackButton } from '../../lib/native/backButton';
 import { RoomActivitySection } from './RoomActivitySection';
+import { RoomReconciliationCard } from '../reconciliation/RoomReconciliationCard';
 import { CurrencyInput } from '../common/CurrencyInput';
 import {
   RoomExportFormat,
@@ -1421,6 +1422,19 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Track 4: Monthly Reconciliation & Certified Audit Card */}
+      {activeRoom && (
+        <RoomReconciliationCard
+          currentUser={currentUser}
+          activeRoom={activeRoom}
+          roomMembers={roomMembers}
+          allUsers={allUsers}
+          sharedExpenses={sharedExpenses}
+          expenseSplits={expenseSplits}
+          settlementPayments={settlementPayments}
+        />
       )}
 
       {/* Roommate Balances (Person-to-Person Settlement Cards) */}

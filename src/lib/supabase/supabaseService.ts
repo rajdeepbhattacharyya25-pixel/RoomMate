@@ -704,8 +704,116 @@ export class SupabaseService {
     }
   }
 
+  // ─── Track 4: Room Ledger Audit & Statement RPCs ───────────
+
   /**
-   * Subscribe to real-time changes on shared expenses and settlements
+   * Locks monthly room reconciliation period (Room Admin only)
+   */
+  async lockRoomPeriod(
+    roomId: string,
+    year: number,
+    month: number
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await (supabase.rpc as any)('lock_room_period_v2', {
+        p_room_id: roomId,
+        p_year: year,
+        p_month: month,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error locking room period' };
+    }
+  }
+
+  /**
+   * Unlocks monthly room reconciliation period with required reason (Room Admin only)
+   */
+  async unlockRoomPeriod(
+    roomId: string,
+    year: number,
+    month: number,
+    reason: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await (supabase.rpc as any)('unlock_room_period_v2', {
+        p_room_id: roomId,
+        p_year: year,
+        p_month: month,
+        p_reason: reason,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error unlocking room period' };
+    }
+  }
+
+  /**
+   * Signs off on or disputes a monthly audit statement
+   */
+  async signRoomStatement(
+    periodId: string,
+    status: 'SIGNED' | 'DISPUTED',
+    reason?: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await (supabase.rpc as any)('sign_room_statement_v2', {
+        p_period_id: periodId,
+        p_status: status,
+        p_reason: reason || null,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error signing room statement' };
+    }
+  }
+
+  /**
+   * Fetches room reconciliation statement and signoff roster
+   */
+  async getRoomReconciliationStatement(
+    roomId: string,
+    year: number,
+    month: number
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await (supabase.rpc as any)('get_room_reconciliation_statement_v2', {
+        p_room_id: roomId,
+        p_year: year,
+        p_month: month,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error fetching statement' };
+    }
+  }
+
+  /**
+   * Subscribe to real-time changes on shared expenses, settlements, and reconciliation
    */
   subscribeToRoomUpdates(roomId: string, onChange: () => void) {
     if (!isSupabaseConfigured) return () => {};
@@ -720,6 +828,16 @@ export class SupabaseService {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'settlement_payments', filter: `room_id=eq.${roomId}` },
+        () => onChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'room_reconciliation_periods', filter: `room_id=eq.${roomId}` },
+        () => onChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'room_statement_signoffs', filter: `room_id=eq.${roomId}` },
         () => onChange()
       )
       .subscribe();

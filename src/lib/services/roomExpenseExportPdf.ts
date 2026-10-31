@@ -75,6 +75,94 @@ export async function generateRoomPdfBlob(dataset: RoomExportDataset): Promise<B
   y += 8;
 
   // ═══════════════════════════════════════════════════════
+  // 1.5 RECONCILIATION AUDIT BADGE & SIGN-OFFS (TRACK 4)
+  // ═══════════════════════════════════════════════════════
+  if (dataset.reconciliation) {
+    const rec = dataset.reconciliation;
+    checkPageBreak(35);
+
+    // Audit Seal Box
+    if (rec.isCertified) {
+      doc.setFillColor(236, 253, 245); // emerald-50
+      doc.setDrawColor(5, 150, 105);   // emerald-600
+    } else {
+      doc.setFillColor(255, 251, 235); // amber-50
+      doc.setDrawColor(217, 119, 6);   // amber-600
+    }
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, y, contentWidth, 18, 2, 2, 'FD');
+
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica', 'bold');
+    if (rec.isCertified) {
+      doc.setTextColor(4, 120, 87); // emerald-700
+      doc.text('OFFICIALLY CERTIFIED STATEMENT • UNANIMOUS ROOMMATE SIGN-OFF', margin + 4, y + 6);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(6, 95, 70);
+      doc.text(`SHA-256 Audit Seal: ${rec.sealHash || 'N/A'}`, margin + 4, y + 11);
+      doc.text(`Certified On: ${rec.period?.certifiedAt ? new Date(rec.period.certifiedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Verified'} (Revision #${rec.period?.revisionCount || 1})`, margin + 4, y + 15);
+    } else {
+      doc.setTextColor(180, 83, 9); // amber-700
+      doc.text('PROVISIONAL RECONCILIATION STATEMENT • SIGN-OFF IN PROGRESS', margin + 4, y + 6);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(146, 64, 14);
+      doc.text('Status: Awaiting all roommates to sign and approve final balances.', margin + 4, y + 11);
+      doc.text(`Audit Revision #${rec.period?.revisionCount || 1} • Period Locked on ${rec.period?.lockedAt ? new Date(rec.period.lockedAt).toLocaleDateString('en-IN') : 'Month-End'}`, margin + 4, y + 15);
+    }
+
+    y += 24;
+
+    // Room Financial Sign-off Table
+    if (rec.signoffs && rec.signoffs.length > 0) {
+      checkPageBreak(30);
+      doc.setFontSize(11);
+      doc.setTextColor(...darkText);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Room Financial Sign-off Ledger', margin, y);
+      y += 4;
+
+      const signoffRows = rec.signoffs.map((s) => [
+        s.userName || 'Roommate',
+        s.status === 'SIGNED' ? 'APPROVED & SIGNED' : s.status === 'DISPUTED' ? 'DISPUTED' : 'PENDING REVIEW',
+        s.signedAt ? new Date(s.signedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
+        s.signatureStamp ? `${s.signatureStamp.slice(0, 18)}...` : (s.disputeReason ? `Dispute: ${s.disputeReason.slice(0, 20)}` : 'Awaiting Sign-off'),
+      ]);
+
+      (doc as any).autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Roommate', 'Sign-Off Status', 'Signed Date', 'Verification Stamp / Note']],
+        body: signoffRows,
+        theme: 'grid',
+        headStyles: {
+          fillColor: indigo as unknown as number[],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        bodyStyles: {
+          fontSize: 7.5,
+          textColor: darkText as unknown as number[],
+        },
+        alternateRowStyles: {
+          fillColor: lightBg as unknown as number[],
+        },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 40, fontStyle: 'bold' },
+          2: { cellWidth: 30 },
+          3: { cellWidth: contentWidth - 115 },
+        },
+      });
+
+      y = (doc as any).lastAutoTable?.finalY ?? y + 25;
+      y += 8;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
   // 2. MONTHLY SUMMARY (EXECUTIVE KPI BOX)
   // ═══════════════════════════════════════════════════════
   checkPageBreak(50);

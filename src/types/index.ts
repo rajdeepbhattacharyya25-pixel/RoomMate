@@ -444,3 +444,48 @@ export interface SystemIncident {
   resolvedAt?: string;
 }
 
+// Track 4: Room Ledger Audit & Certified Statement Types
+export type ReconciliationPeriodStatus = 'OPEN' | 'LOCKED' | 'CERTIFIED';
+export type StatementSignoffStatus = 'PENDING' | 'SIGNED' | 'DISPUTED';
+
+export interface RoomReconciliationPeriod {
+  id: string;
+  roomId: string;
+  periodYear: number;
+  periodMonth: number; // 1-12
+  status: ReconciliationPeriodStatus;
+  lockedAt?: string;
+  lockedBy?: string;
+  unlockedAt?: string;
+  unlockedBy?: string;
+  unlockReason?: string;
+  revisionCount: number;
+  certifiedAt?: string;
+  certifiedSealHash?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoomStatementSignoff {
+  id: string;
+  periodId: string;
+  roomId: string;
+  userId: string;
+  userName?: string;
+  userAvatar?: string;
+  userEmail?: string;
+  status: StatementSignoffStatus;
+  signedAt?: string;
+  disputeReason?: string;
+  signatureStamp?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoomStatementData {
+  period: RoomReconciliationPeriod | null;
+  signoffs: RoomStatementSignoff[];
+  hasPeriod: boolean;
+}
+
+
