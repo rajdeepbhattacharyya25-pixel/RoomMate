@@ -266,3 +266,4 @@ describe('Personal Expense Export & Integrity (CSV, Excel, PDF)', () => {
     expect(blob.size).toBeGreaterThan(1000);
   });
 });
+
