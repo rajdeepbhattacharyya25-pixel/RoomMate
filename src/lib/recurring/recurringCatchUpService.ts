@@ -10,6 +10,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../supabase/client';
+import { db } from '../storage/mockStorage';
 import {
   RecurringRule,
   RecurringFrequencyType,
@@ -373,11 +374,72 @@ export async function executeRecurringCycle(
   }
 
   // Local fallback execution
+  let generatedSharedId: string | undefined;
+  let generatedPersonalId: string | undefined;
+
+  const rules = getStoredRules();
+  const ruleIdx = rules.findIndex((r) => r.id === ruleId);
+  const activeRule = ruleObj || (ruleIdx >= 0 ? rules[ruleIdx] : undefined);
+
+  // Codex P2: For non-skipped shared cycles, create real ledger entries and splits.
+  // Never mark a shared cycle completed without the corresponding financial record.
+  if (action !== 'SKIP' && activeRule) {
+    if (activeRule.scope === 'SHARED' && activeRule.roomId) {
+      try {
+        let participants = activeRule.splitParticipantIds || [];
+        if (participants.length === 0) {
+          participants = db
+            .getState()
+            .roomMembers.filter((m) => m.roomId === activeRule.roomId && m.status === 'ACTIVE')
+            .map((m) => m.userId);
+        }
+        if (!participants.includes(activeRule.userId)) {
+          participants.push(activeRule.userId);
+        }
+
+        const sharedExp = db.createSharedExpense(activeRule.userId, {
+          roomId: activeRule.roomId,
+          paidBy: activeRule.userId,
+          title: activeRule.title,
+          totalAmount: amount,
+          category: (activeRule.category as any) || 'General',
+          splitMethod: (activeRule.splitMethod as any) || 'EQUAL',
+          participantUserIds: participants,
+          customValues: activeRule.customSplitValues,
+          notes: `Auto-generated recurring bill (${cycleDate})`,
+          expenseDate: cycleDate,
+        });
+        generatedSharedId = sharedExp.id;
+      } catch (err) {
+        console.warn('[RecurringCatchUp] Local shared expense creation failed:', err);
+        return {
+          success: false,
+          status: 'SKIPPED',
+          amount,
+          message: `Local shared ledger creation failed: ${err instanceof Error ? err.message : String(err)}`,
+          rule: activeRule,
+          cycleDate,
+        };
+      }
+    } else if (activeRule.scope === 'PERSONAL') {
+      try {
+        const persExp = db.createPersonalExpense(activeRule.userId, {
+          title: activeRule.title,
+          amount: amount,
+          category: (activeRule.category as any) || 'Food',
+          notes: `Auto-generated recurring bill (${cycleDate})`,
+          expenseDate: cycleDate,
+        });
+        generatedPersonalId = persExp.id;
+      } catch (err) {
+        console.warn('[RecurringCatchUp] Local personal expense creation failed:', err);
+      }
+    }
+  }
+
   setStoredExecution(ruleId, cycleDate, action);
 
   // Advance next_execution_date on stored rule
-  const rules = getStoredRules();
-  const ruleIdx = rules.findIndex((r) => r.id === ruleId);
   if (ruleIdx >= 0) {
     const r = rules[ruleIdx];
     const nextDate = computeNextExecutionDate(r, cycleDate);
@@ -394,8 +456,10 @@ export async function executeRecurringCycle(
     success: true,
     executionId: `local_exec_${Date.now()}`,
     status: action === 'SKIP' ? 'SKIPPED' : action === 'AUTO_LOG' ? 'AUTO_LOGGED' : 'MANUALLY_CONFIRMED',
+    generatedPersonalId,
+    generatedSharedId,
     amount,
-    rule: ruleObj,
+    rule: activeRule,
     cycleDate,
   };
 }

@@ -78,6 +78,31 @@
 
 ---
 
+## 🔍 PR #2 Codex Review Remediations & Technical Hardening
+
+| Priority | Issue / Finding | File(s) Remediated | Solution Implemented |
+| :--- | :--- | :--- | :--- |
+| **P1** | Settlement transitions after period lock | `supabase/migrations/20261031120000_room_reconciliation_lock_and_statements.sql` | 1. Narrowly allowed settlement status transitions (`CONFIRMED`, `DISPUTED`, `CANCELLED`) in `LOCKED` periods while strictly forbidding alteration of financial invariants (`amount`, `payer`, `payee`, `room`, `date`).<br>2. In `sign_room_statement_v2()`, added pre-certification safeguard raising `UNRESOLVED_SETTLEMENTS` if pending/disputed settlements exist in the period. |
+| **P1** | Failed cloud signing must not certify locally | `src/lib/storage/reconciliationAdapter.ts` | When live sync is active (`isLiveSyncActive()`), any failure or rejection from authoritative cloud RPC `signRoomStatement` propagates directly to the caller, never silently falling through to local mock certification. |
+| **P2** | Monthly recurrence anchor | `supabase/migrations/20261031140000_recurring_bills_engine.sql` | Added anchored target-day logic preserving `day_of_month` and `is_last_day_of_month`. Tested in real PostgreSQL: Oct 31 → Nov 30 → Dec 31 and Jan 31 → Feb 28 → Mar 31. |
+| **P2** | Shared recurring local fallback | `src/lib/recurring/recurringCatchUpService.ts` | When executing shared recurring cycles in local mode, created real shared expenses and splits in local ledger before recording cycle. Uncreated or failed shared cycles are never marked completed. |
+| **P2** | Offline settlement cancellation ID mapping | `src/lib/storage/offlineQueue.ts` | On queue flush, when `RECORD_SETTLEMENT` returns authoritative server UUID, automatically remaps `settlementId` in trailing queued items (`CANCEL_SETTLEMENT`, `CONFIRM`, `DISPUTE`, `SUBMIT_EVIDENCE`) from temporary local ID to server UUID. |
+| **UX** | Mobile bottom sheet cutoff & Bills modal | `src/components/mobile/MobileBottomSheet.tsx` | Added `-webkit-overflow-scrolling: touch`, increased scroll padding to `pb-20`, and resolved unscrollable cutoff for Add Private Expense and Recurring Bills bottom sheets. |
+
+---
+
+## 🧪 Comprehensive Verification Summary
+
+- **PostgreSQL Engine Security Test:** `src/test/security/realPostgresPhase10.test.ts` (25/25 passed in real PGlite engine).
+- **Unit & Integration Suite:** 83 test files passed, **849 tests passed** (0 failures).
+- **Static Analysis:** `oxlint src` passed with **0 errors and 0 warnings** across 299 files.
+- **Type Checking:** `tsc -b` passed with 0 errors.
+- **Production Build:** Vite production bundle compiled in 4.55s with asset checksums generated.
+
+---
+
+---
+
 ## ⚠️ Known Production Limitations
 
 1. **Deferred Schema Migrations:** Tables for Track 4 monthly certified statements and Track 5 recurring rules exist in staging only. They will be applied to production in a separate, dedicated maintenance window following owner confirmation.
@@ -89,3 +114,4 @@
 
 - **Web Production Rollback:** In the Vercel dashboard for `roommate26.vercel.app`, instantly promote the previously verified stable deployment (Commit `2d91226`).
 - **Database Safety:** Since **zero migrations were run on production Supabase**, no database rollback or schema reversion is required.
+

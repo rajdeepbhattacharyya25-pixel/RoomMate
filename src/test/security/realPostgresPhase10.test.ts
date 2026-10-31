@@ -135,6 +135,9 @@ describe('Real PostgreSQL Engine - Phase 10 Database-Level Security & Integrity 
         payment_method TEXT NOT NULL DEFAULT 'UPI',
         transaction_ref TEXT,
         notes TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING_CONFIRMATION',
+        confirmed_at TIMESTAMPTZ,
+        confirmed_by UUID,
         payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
       );
@@ -597,6 +600,147 @@ describe('Real PostgreSQL Engine - Phase 10 Database-Level Security & Integrity 
           WHERE id = '${expenseId}';
         `)
       ).rejects.toThrow(/PERIOD_LOCKED: Cannot move transaction into locked period 2026-10 \(CERTIFIED\)/);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 7. Codex P1: Settlement Transitions & Unresolved Settlement Safeguards
+  // --------------------------------------------------------------------------
+  describe('Codex P1: Settlement Transitions and Unresolved Settlement Safeguards', () => {
+    let pendingSettlementId: string;
+
+    beforeAll(async () => {
+      // Create a settlement in November 2026 (status: PENDING_CONFIRMATION)
+      await db.exec(`SET request.jwt.claim.sub = '${BOB_ID}';`);
+      const res = await db.query<{ id: string }>(`
+        INSERT INTO public.settlement_payments (
+          room_id, payer_id, payee_id, amount, payment_method, payment_date, status
+        ) VALUES (
+          '${ROOM_ID}', '${BOB_ID}', '${ALICE_ID}', 250.00, 'UPI', '2026-11-10', 'PENDING_CONFIRMATION'
+        ) RETURNING id;
+      `);
+      pendingSettlementId = res.rows[0].id;
+
+      // Alice (ROOM_ADMIN) locks November 2026
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      const lockRes = await db.query<{ lock_room_period_v2: any }>(`
+        SELECT public.lock_room_period_v2('${ROOM_ID}', 2026, 11);
+      `);
+      expect(lockRes.rows[0].lock_room_period_v2.period_id).toBeDefined();
+    });
+
+    it('blocks tampering with financial terms (amount) of settlement in LOCKED period', async () => {
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      await expect(
+        db.exec(`
+          UPDATE public.settlement_payments
+          SET amount = 300.00
+          WHERE id = '${pendingSettlementId}';
+        `)
+      ).rejects.toThrow(/PERIOD_LOCKED: Cannot alter financial terms \(amount, payer, payee, date\) of a settlement in locked period 2026-11/);
+    });
+
+    it('allows narrow terminal state transition (PENDING_CONFIRMATION -> CONFIRMED) in LOCKED period without altering terms', async () => {
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      await db.exec(`
+        UPDATE public.settlement_payments
+        SET status = 'CONFIRMED',
+            confirmed_at = now(),
+            confirmed_by = '${ALICE_ID}'
+        WHERE id = '${pendingSettlementId}';
+      `);
+
+      const check = await db.query<{ status: string }>(`
+        SELECT status FROM public.settlement_payments WHERE id = '${pendingSettlementId}';
+      `);
+      expect(check.rows[0].status).toBe('CONFIRMED');
+    });
+
+    it('blocks certification of a period if any settlement remains PENDING_CONFIRMATION or DISPUTED', async () => {
+      // Add another settlement in December 2026 that remains disputed
+      await db.exec(`SET request.jwt.claim.sub = '${BOB_ID}';`);
+      await db.exec(`
+        INSERT INTO public.settlement_payments (
+          room_id, payer_id, payee_id, amount, payment_method, payment_date, status
+        ) VALUES (
+          '${ROOM_ID}', '${BOB_ID}', '${ALICE_ID}', 150.00, 'UPI', '2026-12-05', 'DISPUTED'
+        );
+      `);
+
+      // Alice locks December 2026
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      const lockRes = await db.query<{ lock_room_period_v2: any }>(`
+        SELECT public.lock_room_period_v2('${ROOM_ID}', 2026, 12);
+      `);
+      const decPeriodId = lockRes.rows[0].lock_room_period_v2.period_id;
+
+      // Alice and Bob sign
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      await db.exec(`SELECT public.sign_room_statement_v2('${decPeriodId}', 'SIGNED');`);
+      await db.exec(`SET request.jwt.claim.sub = '${BOB_ID}';`);
+      await db.exec(`SELECT public.sign_room_statement_v2('${decPeriodId}', 'SIGNED');`);
+
+      // Charlie's sign would complete unanimous consent, but must fail due to disputed settlement!
+      await db.exec(`SET request.jwt.claim.sub = '${CHARLIE_ID}';`);
+      await expect(
+        db.exec(`SELECT public.sign_room_statement_v2('${decPeriodId}', 'SIGNED');`)
+      ).rejects.toThrow(/UNRESOLVED_SETTLEMENTS: Cannot certify reconciliation period 2026-12 containing pending or disputed settlements/);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 8. Codex P2: Anchored Monthly Recurrence (Oct 31 -> Nov 30 -> Dec 31)
+  // --------------------------------------------------------------------------
+  describe('Codex P2: Anchored Monthly Recurrence Calculation in Real PostgreSQL', () => {
+    it('anchors monthly cycle to last day of month across months with varying lengths (Oct 31 -> Nov 30 -> Dec 31)', async () => {
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      
+      // Rule configured with day_of_month = 31 starting on Oct 31, 2026
+      const res = await db.query<{ id: string }>(`
+        INSERT INTO public.recurring_expense_rules (
+          user_id, scope, title, amount, category, frequency, day_of_month, is_last_day_of_month, start_date, next_execution_date, status
+        ) VALUES (
+          '${ALICE_ID}', 'PERSONAL', 'Gym Membership', 1200.00, 'Health', 'MONTHLY', 31, false, '2026-10-31', '2026-10-31', 'ACTIVE'
+        ) RETURNING id;
+      `);
+      const ruleId = res.rows[0].id;
+
+      // Cycle 1: Execute on 2026-10-31 -> next execution date should be clamped to 2026-11-30 (Nov has 30 days)
+      const cycle1 = await db.query<{ execute_recurring_cycle_secure: any }>(`
+        SELECT public.execute_recurring_cycle_secure('${ruleId}', '2026-10-31'::date, NULL, 'CONFIRM_LOG');
+      `);
+      expect(cycle1.rows[0].execute_recurring_cycle_secure.next_execution_date).toBe('2026-11-30');
+
+      // Cycle 2: Execute on 2026-11-30 -> next execution date should re-expand to 2026-12-31 (Dec has 31 days)
+      const cycle2 = await db.query<{ execute_recurring_cycle_secure: any }>(`
+        SELECT public.execute_recurring_cycle_secure('${ruleId}', '2026-11-30'::date, NULL, 'CONFIRM_LOG');
+      `);
+      expect(cycle2.rows[0].execute_recurring_cycle_secure.next_execution_date).toBe('2026-12-31');
+    });
+
+    it('anchors monthly cycle when is_last_day_of_month is explicitly true (Jan 31 -> Feb 28 -> Mar 31)', async () => {
+      await db.exec(`SET request.jwt.claim.sub = '${ALICE_ID}';`);
+      
+      const res = await db.query<{ id: string }>(`
+        INSERT INTO public.recurring_expense_rules (
+          user_id, scope, title, amount, category, frequency, is_last_day_of_month, start_date, next_execution_date, status
+        ) VALUES (
+          '${ALICE_ID}', 'PERSONAL', 'End-of-Month Savings', 5000.00, 'Other', 'MONTHLY', true, '2027-01-31', '2027-01-31', 'ACTIVE'
+        ) RETURNING id;
+      `);
+      const ruleId = res.rows[0].id;
+
+      // Executing Jan 31 -> next should be Feb 28, 2027
+      const cycle1 = await db.query<{ execute_recurring_cycle_secure: any }>(`
+        SELECT public.execute_recurring_cycle_secure('${ruleId}', '2027-01-31'::date, NULL, 'CONFIRM_LOG');
+      `);
+      expect(cycle1.rows[0].execute_recurring_cycle_secure.next_execution_date).toBe('2027-02-28');
+
+      // Executing Feb 28 -> next should be Mar 31, 2027
+      const cycle2 = await db.query<{ execute_recurring_cycle_secure: any }>(`
+        SELECT public.execute_recurring_cycle_secure('${ruleId}', '2027-02-28'::date, NULL, 'CONFIRM_LOG');
+      `);
+      expect(cycle2.rows[0].execute_recurring_cycle_secure.next_execution_date).toBe('2027-03-31');
     });
   });
 });

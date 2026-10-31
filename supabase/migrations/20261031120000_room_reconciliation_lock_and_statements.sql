@@ -253,9 +253,9 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- 3. On UPDATE: Remediation 4 - Validate BOTH OLD and NEW periods
+  -- 3. On UPDATE: Remediation 4 & Codex P1 - Validate BOTH OLD and NEW periods
   IF TG_OP = 'UPDATE' THEN
-    -- Check OLD period (cannot modify or move out of locked period)
+    -- Check OLD period (cannot modify or move out of locked/certified period)
     v_old_room_id := OLD.room_id;
     IF TG_TABLE_NAME = 'shared_expenses' THEN
       v_old_tx_date := COALESCE(OLD.expense_date, OLD.created_at);
@@ -273,9 +273,29 @@ BEGIN
         AND period_year = v_old_year
         AND period_month = v_old_month;
 
-      IF v_old_status IN ('LOCKED', 'CERTIFIED') THEN
-        RAISE EXCEPTION 'PERIOD_LOCKED: Cannot modify or move transaction out of locked period %-% (%)',
-          v_old_year, v_old_month, v_old_status;
+      -- If CERTIFIED: strict terminal freeze, no modifications allowed under any condition
+      IF v_old_status = 'CERTIFIED' THEN
+        RAISE EXCEPTION 'PERIOD_LOCKED: Cannot modify transaction in cryptographically certified period %-% (CERTIFIED)',
+          v_old_year, v_old_month;
+      END IF;
+
+      -- If LOCKED:
+      IF v_old_status = 'LOCKED' THEN
+        IF TG_TABLE_NAME = 'settlement_payments' THEN
+          -- Codex P1: Allow pending settlements to reach valid terminal states (CONFIRMED, DISPUTED, CANCELLED)
+          -- provided financial invariants (amount, payer, payee, room, date) remain STRICTLY UNTOUCHED.
+          IF OLD.amount IS DISTINCT FROM NEW.amount
+             OR OLD.room_id IS DISTINCT FROM NEW.room_id
+             OR OLD.payer_id IS DISTINCT FROM NEW.payer_id
+             OR OLD.payee_id IS DISTINCT FROM NEW.payee_id
+             OR COALESCE(OLD.payment_date, OLD.created_at::date) IS DISTINCT FROM COALESCE(NEW.payment_date, NEW.created_at::date) THEN
+            RAISE EXCEPTION 'PERIOD_LOCKED: Cannot alter financial terms (amount, payer, payee, date) of a settlement in locked period %-%',
+              v_old_year, v_old_month;
+          END IF;
+        ELSE
+          RAISE EXCEPTION 'PERIOD_LOCKED: Cannot modify or move transaction out of locked period %-% (%)',
+            v_old_year, v_old_month, v_old_status;
+        END IF;
       END IF;
     END IF;
 
@@ -298,8 +318,10 @@ BEGIN
         AND period_month = v_new_month;
 
       IF v_new_status IN ('LOCKED', 'CERTIFIED') THEN
-        RAISE EXCEPTION 'PERIOD_LOCKED: Cannot move transaction into locked period %-% (%)',
-          v_new_year, v_new_month, v_new_status;
+        IF v_old_year IS DISTINCT FROM v_new_year OR v_old_month IS DISTINCT FROM v_new_month OR v_old_room_id IS DISTINCT FROM v_new_room_id THEN
+          RAISE EXCEPTION 'PERIOD_LOCKED: Cannot move transaction into locked period %-% (%)',
+            v_new_year, v_new_month, v_new_status;
+        END IF;
       END IF;
     END IF;
 
@@ -626,10 +648,22 @@ BEGIN
   FROM public.room_statement_signoffs
   WHERE period_id = p_period_id;
 
-  -- Remediation 5: Deterministic Canonical Statement Digest
+  -- Remediation 5 & Codex P1: Deterministic Canonical Statement Digest
   IF v_total_count > 0 AND v_pending_count = v_total_count THEN
     v_month_start := make_timestamptz(v_period.period_year, v_period.period_month, 1, 0, 0, 0, 'UTC');
     v_month_end := (v_month_start + INTERVAL '1 month' - INTERVAL '1 millisecond');
+
+    -- Codex P1: Prevent certifying periods containing unresolved settlements
+    IF EXISTS (
+      SELECT 1 FROM public.settlement_payments
+      WHERE room_id = v_period.room_id
+        AND COALESCE(payment_date, created_at::date) >= v_month_start::date
+        AND COALESCE(payment_date, created_at::date) <= v_month_end::date
+        AND status IN ('PENDING_CONFIRMATION', 'DISPUTED')
+    ) THEN
+      RAISE EXCEPTION 'UNRESOLVED_SETTLEMENTS: Cannot certify reconciliation period %-% containing pending or disputed settlements. All settlements must reach a confirmed or cancelled terminal state before certification.',
+        v_period.period_year, v_period.period_month;
+    END IF;
 
     -- 1. Canonical Expenses digest
     SELECT COALESCE(

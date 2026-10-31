@@ -386,6 +386,28 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; failed
             throw new Error(`[OfflineQueue] ${rpcRes.error}`);
           }
 
+          // Codex P2: Remap temporary local settlement ID to authoritative server ID
+          // across all remaining queued items (CANCEL, CONFIRM, DISPUTE, SUBMIT_EVIDENCE).
+          const serverSettlementId = (rpcRes as any).settlement_id;
+          const localSettlementId = data.localSettlementId;
+
+          if (serverSettlementId && localSettlementId && localSettlementId !== serverSettlementId) {
+            for (const remainingItem of queue) {
+              if (
+                remainingItem.type === 'CANCEL_SETTLEMENT' ||
+                remainingItem.type === 'CONFIRM_SETTLEMENT' ||
+                remainingItem.type === 'DISPUTE_SETTLEMENT' ||
+                remainingItem.type === 'SUBMIT_SETTLEMENT_EVIDENCE'
+              ) {
+                const p = remainingItem.payload as any;
+                if (p.settlementId === localSettlementId) {
+                  p.settlementId = serverSettlementId;
+                }
+              }
+            }
+            saveQueue(queue);
+          }
+
           success = true;
           break;
         }

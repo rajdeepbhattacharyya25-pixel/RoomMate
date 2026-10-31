@@ -363,4 +363,57 @@ describe('Track 3: Offline Mutation Queue & Edge-Case Replay Hardening Suite', (
     expect(queue).toHaveLength(1);
     expect(queue[0].type).toBe('SUBMIT_SETTLEMENT_EVIDENCE');
   });
+
+  it('Codex P2: remaps local settlement ID to server UUID for subsequent CANCEL_SETTLEMENT on queue replay', async () => {
+    clearOfflineQueue();
+
+    const localId = 'local-settlement-temp-777';
+    const serverUuid = 'b5f6a7b8-1234-4567-89ab-cdef01234567';
+
+    // 1. Enqueue RECORD_SETTLEMENT with localSettlementId
+    enqueueOfflineItem('RECORD_SETTLEMENT', {
+      localSettlementId: localId,
+      roomId: TEST_ROOM_ID,
+      payerId: USER_PAYER_ID,
+      payeeId: USER_PAYEE_ID,
+      amount: 400,
+    });
+
+    // 2. Enqueue CANCEL_SETTLEMENT targeting the same local settlement ID
+    enqueueOfflineItem('CANCEL_SETTLEMENT', {
+      settlementId: localId,
+      roomId: TEST_ROOM_ID,
+      userId: USER_PAYER_ID,
+    });
+
+    const queueBefore = getOfflineQueue();
+    expect(queueBefore).toHaveLength(2);
+    expect((queueBefore[1].payload as any).settlementId).toBe(localId);
+
+    // Mock server RPC responses
+    vi.spyOn(supabaseService, 'recordRoomSettlementV2').mockResolvedValueOnce({
+      success: true,
+      settlement_id: serverUuid,
+      room_id: TEST_ROOM_ID,
+      payer_id: USER_PAYER_ID,
+      payee_id: USER_PAYEE_ID,
+      amount: 400,
+      amount_paise: 40000,
+      created_at: new Date().toISOString(),
+    });
+
+    const cancelSpy = vi.spyOn(supabaseService, 'cancelRoomSettlement').mockResolvedValueOnce({
+      success: true,
+      data: { id: serverUuid, status: 'CANCELLED' },
+    });
+
+    // Flush the queue
+    const report = await flushOfflineQueue();
+    expect(report.syncedCount).toBe(2);
+    expect(report.failedCount).toBe(0);
+
+    // Verify that cancelRoomSettlement was called with the remapped SERVER UUID, not the local ID
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(cancelSpy).toHaveBeenCalledWith(serverUuid);
+  });
 });

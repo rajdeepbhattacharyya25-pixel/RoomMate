@@ -17,6 +17,16 @@ import {
 import { supabaseService } from '../supabase/supabaseService';
 import { IS_LIVE_SYNC_ENABLED } from './cloudStorageAdapter';
 
+let isLiveSyncOverride: boolean | null = null;
+export function setLiveReconciliationSyncForTesting(enabled: boolean | null) {
+  isLiveSyncOverride = enabled;
+}
+
+function isLiveSyncActive(): boolean {
+  if (isLiveSyncOverride !== null) return isLiveSyncOverride;
+  return IS_LIVE_SYNC_ENABLED;
+}
+
 // In-memory / local storage key helper
 const memoryStore = new Map<string, string>();
 
@@ -91,7 +101,7 @@ export async function fetchReconciliationData(
   _users: User[] = []
 ): Promise<RoomStatementData> {
   // 1. Try Supabase RPC if live sync enabled
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (isLiveSyncActive()) {
     try {
       const res = await supabaseService.getRoomReconciliationStatement(roomId, year, month);
       if (res.success && res.data) {
@@ -176,7 +186,7 @@ export async function lockPeriodCloud(
     return joinedAt <= monthEnd && (!leftAt || leftAt >= monthStart);
   });
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (isLiveSyncActive()) {
     try {
       const res = await supabaseService.lockRoomPeriod(roomId, year, month);
       if (res.success) {
@@ -249,7 +259,7 @@ export async function unlockPeriodCloud(
     throw new Error('An audit reason is required to unlock monthly reconciliation.');
   }
 
-  if (IS_LIVE_SYNC_ENABLED) {
+  if (isLiveSyncActive()) {
     try {
       const res = await supabaseService.unlockRoomPeriod(roomId, year, month, reason);
       if (res.success) {
@@ -316,15 +326,14 @@ export async function signStatementCloud(
     throw new Error('A dispute reason is required when flagging a statement.');
   }
 
-  if (IS_LIVE_SYNC_ENABLED) {
-    try {
-      const res = await supabaseService.signRoomStatement(periodId, status, reason);
-      if (res.success) {
-        return fetchReconciliationData(roomId, year, month, members, users);
-      }
-    } catch (err) {
-      console.warn('[ReconciliationAdapter] Live sign failed, falling back to local:', err);
+  if (isLiveSyncActive()) {
+    // Codex P1: Never fall through to mock/local certification when live cloud sync is active.
+    // Authoritative RPC error or rejection must propagate directly to the caller.
+    const res = await supabaseService.signRoomStatement(periodId, status, reason);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to sign statement on cloud server.');
     }
+    return fetchReconciliationData(roomId, year, month, members, users);
   }
 
   const existing = getStoredReconciliation(roomId, year, month);

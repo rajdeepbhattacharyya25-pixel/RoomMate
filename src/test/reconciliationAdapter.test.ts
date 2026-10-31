@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   fetchReconciliationData,
   lockPeriodCloud,
@@ -6,6 +6,7 @@ import {
   signStatementCloud,
   isTransactionDateLocked,
   clearReconciliationStore,
+  setLiveReconciliationSyncForTesting,
 } from '../lib/storage/reconciliationAdapter';
 import { RoomMember, User, RoomReconciliationPeriod } from '../types';
 
@@ -74,6 +75,11 @@ describe('reconciliationAdapter (Track 4)', () => {
 
   beforeEach(() => {
     clearReconciliationStore();
+    setLiveReconciliationSyncForTesting(false);
+  });
+
+  afterEach(() => {
+    setLiveReconciliationSyncForTesting(null);
   });
 
   it('initializes open period when no prior reconciliation exists', async () => {
@@ -225,5 +231,33 @@ describe('reconciliationAdapter (Track 4)', () => {
     expect(isTransactionDateLocked('2026-09-15', periods).isLocked).toBe(true);
     expect(isTransactionDateLocked('2026-10-15', periods).isLocked).toBe(false);
     expect(isTransactionDateLocked('2026-11-01', periods).isLocked).toBe(false);
+  });
+
+  it('Codex P1: propagates error and never falls through to local certification when live sync fails', async () => {
+    const { supabaseService } = await import('../lib/supabase/supabaseService');
+
+    setLiveReconciliationSyncForTesting(true);
+
+    const spy = vi.spyOn(supabaseService, 'signRoomStatement').mockResolvedValueOnce({
+      success: false,
+      error: 'UNRESOLVED_SETTLEMENTS: Pending settlements present in period',
+    });
+
+    await expect(
+      signStatementCloud(
+        'period-test-1',
+        roomId,
+        year,
+        month,
+        adminId,
+        'SIGNED',
+        undefined,
+        mockMembers,
+        mockUsers
+      )
+    ).rejects.toThrow('UNRESOLVED_SETTLEMENTS: Pending settlements present in period');
+
+    spy.mockRestore();
+    setLiveReconciliationSyncForTesting(false);
   });
 });

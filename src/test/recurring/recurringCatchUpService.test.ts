@@ -150,4 +150,61 @@ describe('Phase 3: Client Catch-Up & Recurring Rules Synchronization', () => {
     await deleteRecurringRule(rule.id);
     expect((await getRecurringRules('student-alex')).length).toBe(0);
   });
+
+  it('Codex P2: creates shared expense and splits in local ledger during shared recurring fallback', async () => {
+    const { db } = await import('../../lib/storage/mockStorage');
+    const roomId = 'room-shared-rec-1';
+    const userId = 'student-alex';
+    const roommateId = 'student-sam';
+
+    // Seed room and members
+    const state = db.getState();
+    state.rooms.push({
+      id: roomId,
+      name: 'Flat 302',
+      description: 'Shared flat',
+      createdBy: userId,
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z',
+      isArchived: false,
+    });
+    state.roomMembers.push(
+      { id: 'rm-1', roomId, userId, role: 'ROOM_ADMIN', status: 'ACTIVE', joinedAt: '2026-09-01T00:00:00Z' },
+      { id: 'rm-2', roomId, userId: roommateId, role: 'MEMBER', status: 'ACTIVE', joinedAt: '2026-09-01T00:00:00Z' }
+    );
+    db.save(state);
+
+    const rule = await createRecurringRule({
+      userId,
+      roomId,
+      scope: 'SHARED',
+      title: 'Shared Broadband',
+      amount: 1000,
+      category: 'Wi-Fi',
+      frequency: 'MONTHLY',
+      dayOfMonth: 5,
+      startDate: '2026-10-01',
+      autoLog: false,
+      status: 'ACTIVE',
+      splitMethod: 'EQUAL',
+      splitParticipantIds: [userId, roommateId],
+    });
+
+    const result = await executeRecurringCycle(rule.id, '2026-11-05', 1000, 'CONFIRM_LOG');
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('MANUALLY_CONFIRMED');
+    expect(result.generatedSharedId).toBeDefined();
+
+    // Verify shared expense was recorded in mockStorage
+    const sharedExpenses = db.getRoomExpenses(userId, roomId);
+    const createdExp = sharedExpenses.find((e) => e.id === result.generatedSharedId);
+    expect(createdExp).toBeDefined();
+    expect(createdExp?.title).toBe('Shared Broadband');
+    expect(createdExp?.totalAmount).toBe(1000);
+
+    // Verify splits were created (500 each)
+    const splits = db.getState().expenseSplits.filter((s) => s.sharedExpenseId === result.generatedSharedId);
+    expect(splits).toHaveLength(2);
+    expect(splits.every((s) => s.shareAmount === 500)).toBe(true);
+  });
 });

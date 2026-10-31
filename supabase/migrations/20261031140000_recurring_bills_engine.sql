@@ -371,6 +371,9 @@ DECLARE
     v_shares_weight BIGINT;
     v_custom_paise_map BIGINT[];
     v_diff_paise BIGINT;
+    v_next_month_start DATE;
+    v_days_in_next_month INT;
+    v_target_day INT;
 BEGIN
     IF v_caller_id IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: User must be signed in to execute recurring bills';
@@ -684,9 +687,17 @@ BEGIN
         reviewed_by = EXCLUDED.reviewed_by
     RETURNING id INTO v_exec_id;
 
-    -- 5. Calculate next execution date based on frequency
+    -- 5. Calculate next execution date based on frequency (Codex P2: Anchored monthly recurrence)
     IF v_rule.frequency = 'MONTHLY' THEN
-        v_next_date := p_cycle_date + INTERVAL '1 month';
+        v_next_month_start := (date_trunc('month', p_cycle_date) + INTERVAL '1 month')::date;
+        v_days_in_next_month := EXTRACT(DAY FROM ((v_next_month_start + INTERVAL '1 month' - INTERVAL '1 day')::date))::INT;
+        
+        IF v_rule.is_last_day_of_month THEN
+            v_next_date := (v_next_month_start + INTERVAL '1 month' - INTERVAL '1 day')::date;
+        ELSE
+            v_target_day := COALESCE(v_rule.day_of_month, EXTRACT(DAY FROM v_rule.start_date)::INT);
+            v_next_date := (v_next_month_start + (LEAST(v_target_day, v_days_in_next_month) - 1) * INTERVAL '1 day')::date;
+        END IF;
     ELSIF v_rule.frequency = 'WEEKLY' THEN
         v_next_date := p_cycle_date + INTERVAL '1 week';
     ELSIF v_rule.frequency = 'CUSTOM_INTERVAL' AND v_rule.interval_count IS NOT NULL THEN
