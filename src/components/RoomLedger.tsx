@@ -54,7 +54,11 @@ import {
   Clock,
   X,
   Upload,
+  Camera,
 } from 'lucide-react';
+import { ParsedReceiptData } from '../lib/ocr/receiptTextParser';
+import { ReceiptCaptureModal } from './ocr/ReceiptCaptureModal';
+import { ReceiptReviewDrawer } from './ocr/ReceiptReviewDrawer';
 import {
   validatePayeeUpi,
   generateDynamicUpiQrCode,
@@ -130,6 +134,9 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
 }) => {
   // Modals
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [showReceiptCapture, setShowReceiptCapture] = useState(false);
+  const [showReceiptReview, setShowReceiptReview] = useState(false);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceiptData | null>(null);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -152,7 +159,7 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
-  const [expenseDate, _setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Settle Up Form State
   const [settlePayeeId, setSettlePayeeId] = useState('');
@@ -916,6 +923,14 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
               </button>
             )}
             <button
+              onClick={() => setShowReceiptCapture(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 shadow-sm transition-all active:scale-95"
+              title="Scan receipt to split line items"
+            >
+              <Camera className="w-4 h-4 text-indigo-400" />
+              <span>Scan Receipt</span>
+            </button>
+            <button
               onClick={openAddExpense}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30"
             >
@@ -1431,6 +1446,35 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
                 className="text-gray-400 hover:text-white text-xs font-bold"
               >
                 ✕
+              </button>
+            </div>
+
+            {/* Quick Action: Scan Receipt via OCR / Gemini AI */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>Have a receipt?</span>
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-500/30">AI / OCR</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--text-muted)]">
+                    Scan to extract line items, taxes & split with roommates
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddExpenseModal(false);
+                  setShowReceiptCapture(true);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 active:scale-95 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Scan Receipt</span>
               </button>
             </div>
 
@@ -2701,6 +2745,55 @@ export const RoomLedger: React.FC<RoomLedgerProps> = ({
             )}
           </div>
         </div>
+      )}
+      {/* Smart Receipt OCR & Itemized Split Modals */}
+      <ReceiptCaptureModal
+        isOpen={showReceiptCapture}
+        onClose={() => setShowReceiptCapture(false)}
+        roomId={activeRoom.id}
+        onScanComplete={(data) => {
+          setParsedReceipt(data);
+          setShowReceiptReview(true);
+        }}
+      />
+
+      {parsedReceipt && (
+        <ReceiptReviewDrawer
+          isOpen={showReceiptReview}
+          onClose={() => {
+            setShowReceiptReview(false);
+            setParsedReceipt(null);
+          }}
+          parsedData={parsedReceipt}
+          members={currentMembers}
+          currentUserId={currentUser.id}
+          onSaveExpense={(expenseData) => {
+            onAddSharedExpense({
+              roomId: activeRoom.id,
+              paidBy: expenseData.paidBy,
+              title: expenseData.title,
+              totalAmount: expenseData.totalAmount,
+              category: expenseData.category,
+              splitMethod: expenseData.splitMethod,
+              participantUserIds: expenseData.participantUserIds,
+              customValues: expenseData.customValues,
+              notes: expenseData.notes,
+              expenseDate: expenseData.expenseDate,
+            });
+            confetti({
+              particleCount: 70,
+              spread: 60,
+              origin: { y: 0.7 },
+            });
+          }}
+          onSwitchToManual={(prefill) => {
+            setTitle(prefill.title);
+            setAmount(prefill.amount.toString());
+            setNotes(prefill.notes);
+            if (prefill.date) setExpenseDate(prefill.date);
+            setShowAddExpenseModal(true);
+          }}
+        />
       )}
     </div>
   );

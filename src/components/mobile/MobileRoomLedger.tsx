@@ -87,6 +87,9 @@ import {
   MONTH_NAMES,
 } from '../../lib/services/roomExpenseExportService';
 import { hapticImpact, hapticSelection, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
+import { ParsedReceiptData } from '../../lib/ocr/receiptTextParser';
+import { ReceiptCaptureModal } from '../ocr/ReceiptCaptureModal';
+import { ReceiptReviewDrawer } from '../ocr/ReceiptReviewDrawer';
 
 interface MobileRoomLedgerProps {
   currentUser: User;
@@ -233,6 +236,9 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   const [showUpiPayModal, setShowUpiPayModal] = useState(false);
   const [activeProofData, setActiveProofData] = useState<SettlementReceiptData | null>(null);
   const [showProofModal, setShowProofModal] = useState(false);
+  const [showReceiptCapture, setShowReceiptCapture] = useState(false);
+  const [showReceiptReview, setShowReceiptReview] = useState(false);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceiptData | null>(null);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [reviewingJoinRequest, setReviewingJoinRequest] = useState<(RoomJoinRequest & { user: User; room?: Room }) | null>(null);
@@ -1362,12 +1368,12 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
             )
           )}
 
-          {/* Primary Financial Action: Full Width Add Bill / Split */}
-          <div>
+          {/* Primary Financial Action: Add Bill & Scan Receipt */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleOpenSplit}
               disabled={activeRoom.isFrozen}
-              className={`w-full h-11 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 shadow-xs transition-all ${
+              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all ${
                 activeRoom.isFrozen
                   ? 'bg-slate-100 dark:bg-[#1C1C25] text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-[#27354A] cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-98'
@@ -1378,7 +1384,23 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
               ) : (
                 <Plus className="w-4 h-4 stroke-[2.5]" />
               )}
-              <span>{activeRoom.isFrozen ? 'Ledger Frozen (Read Only)' : '+ Add Bill / Split'}</span>
+              <span>{activeRoom.isFrozen ? 'Frozen' : 'Add Bill'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                hapticImpact('MEDIUM');
+                setShowReceiptCapture(true);
+              }}
+              disabled={activeRoom.isFrozen}
+              className={`h-11 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 border transition-all ${
+                activeRoom.isFrozen
+                  ? 'opacity-40 cursor-not-allowed border-slate-700'
+                  : 'bg-indigo-950/60 hover:bg-indigo-900/70 border-indigo-500/40 text-indigo-300 active:scale-98'
+              }`}
+            >
+              <Camera className="w-4 h-4 text-indigo-400" />
+              <span>Scan Receipt</span>
             </button>
           </div>
 
@@ -2095,6 +2117,35 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
 
         {/* Form Body */}
         <div className="space-y-4 pb-4">
+          {/* Quick Action: Scan Receipt via OCR / Gemini AI */}
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>Have a receipt?</span>
+                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-semibold border border-indigo-500/30">AI / OCR</span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Scan to extract items, taxes & split with roommates
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSplitModal(false);
+                setShowReceiptCapture(true);
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 active:scale-95 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Scan</span>
+            </button>
+          </div>
+
               {/* Hero Input & Details Card */}
               <div className="bg-white dark:bg-[#1C1C25] rounded-2xl border border-slate-200/80 dark:border-[#27354A] p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] space-y-3">
                 {/* Big Prominent Amount Input */}
@@ -3268,6 +3319,57 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
           expenseSplits={expenseSplits}
           settlementPayments={settlementPayments}
           allUsers={allUsers}
+        />
+      )}
+      {/* Smart Receipt OCR & Itemized Split Modals */}
+      {activeRoom && (
+        <ReceiptCaptureModal
+          isOpen={showReceiptCapture}
+          onClose={() => setShowReceiptCapture(false)}
+          roomId={activeRoom.id}
+          onScanComplete={(data) => {
+            setParsedReceipt(data);
+            setShowReceiptReview(true);
+          }}
+        />
+      )}
+
+      {activeRoom && parsedReceipt && (
+        <ReceiptReviewDrawer
+          isOpen={showReceiptReview}
+          onClose={() => {
+            setShowReceiptReview(false);
+            setParsedReceipt(null);
+          }}
+          parsedData={parsedReceipt}
+          members={activeUserObjects.map((u) => ({
+            userId: u.id,
+            name: u.name,
+            avatarUrl: u.avatarUrl,
+          }))}
+          currentUserId={currentUser.id}
+          onSaveExpense={(expenseData) => {
+            onAddSharedExpense({
+              roomId: activeRoom.id,
+              paidBy: expenseData.paidBy,
+              title: expenseData.title,
+              totalAmount: expenseData.totalAmount,
+              category: expenseData.category,
+              splitMethod: expenseData.splitMethod,
+              participantUserIds: expenseData.participantUserIds,
+              customValues: expenseData.customValues,
+              notes: expenseData.notes,
+              expenseDate: expenseData.expenseDate,
+            });
+            hapticSuccess();
+          }}
+          onSwitchToManual={(prefill) => {
+            setTitle(prefill.title);
+            setAmount(prefill.amount.toString());
+            setNotes(prefill.notes);
+            if (prefill.date) setExpenseDate(prefill.date);
+            setShowSplitModal(true);
+          }}
         />
       )}
     </div>
