@@ -106,7 +106,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
           onChange={handleChange}
           disabled={disabled}
           placeholder={placeholder}
-          className={`w-full bg-transparent border-0 outline-none tabular-nums text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal ${sizeConfig.input} ${className}`}
+          className={`w-full bg-transparent border-0 outline-none tabular-nums text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${sizeConfig.input} ${className}`}
           {...restProps}
         />
         {showClear && stringVal && !disabled && (

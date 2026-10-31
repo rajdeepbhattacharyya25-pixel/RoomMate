@@ -315,7 +315,10 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       )}
 
       {/* Frame Container */}
-      <div className={isNative ? 'w-full min-h-screen bg-[#F9F9FF] dark:bg-[#0B0B10] relative flex flex-col overflow-x-hidden transition-colors duration-150' : 'w-full md:max-w-[395px] md:h-[852px] md:rounded-[48px] bg-[#F9F9FF] dark:bg-[#0B0B10] md:border-[10px] md:border-slate-800 dark:md:border-slate-700 shadow-2xl relative flex flex-col overflow-hidden md:ring-1 md:ring-slate-300 dark:md:ring-slate-800 transition-colors duration-150'}>
+      <div
+        id="mobile-phone-frame"
+        className={isNative ? 'w-full min-h-screen bg-[#F9F9FF] dark:bg-[#0B0B10] relative flex flex-col overflow-x-hidden transition-colors duration-150' : 'w-full md:max-w-[395px] md:h-[852px] md:rounded-[48px] bg-[#F9F9FF] dark:bg-[#0B0B10] md:border-[10px] md:border-slate-800 dark:md:border-slate-700 shadow-2xl relative flex flex-col overflow-hidden md:ring-1 md:ring-slate-300 dark:md:ring-slate-800 transition-colors duration-150'}
+      >
         {/* Safe-area top spacer — prevents content from merging with the phone's real status bar */}
         <div
           className="w-full shrink-0 bg-[#F9F9FF] dark:bg-[#0B0B10] transition-colors duration-150"

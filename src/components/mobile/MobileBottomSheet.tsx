@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { hapticImpact } from '../../lib/native/haptics';
 import { registerBackButtonHandler } from '../../lib/native/backButton';
@@ -46,6 +47,20 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
   const touchStartTime = useRef<number>(0);
   const currentDrag = useRef<number>(0);
   const sheetRef = useRef<HTMLDivElement>(null);
+
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
+    if (typeof document !== 'undefined') {
+      return document.getElementById('mobile-phone-frame') || document.body;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const frame = document.getElementById('mobile-phone-frame');
+      setPortalNode(frame || document.body);
+    }
+  }, []);
 
   // Synchronize rendering and visibility when parent toggles `isOpen`
   useEffect(() => {
@@ -178,11 +193,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
     ? `translateY(${Math.max(0, dragOffset)}px)`
     : 'translateY(0)';
 
-  return (
+  const isPhoneFrame = portalNode?.id === 'mobile-phone-frame';
+
+  const sheetContent = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed md:absolute inset-0 z-50 flex flex-col justify-end items-center select-none overflow-hidden"
+      className={`${
+        isPhoneFrame ? 'absolute' : 'fixed'
+      } inset-0 z-50 flex flex-col justify-end items-center select-none overflow-hidden`}
     >
       {/* Dimmed Backdrop with fade in/out animation; clicking outside triggers animated close */}
       <div
@@ -205,7 +224,9 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
             ? 'none'
             : 'transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease-out',
         }}
-        className={`relative z-10 w-full max-w-[420px] bg-white dark:bg-[#12121A] border-t border-slate-200/90 dark:border-[#27354A] rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] flex flex-col min-h-0 overflow-hidden will-change-transform pb-safe ${className}`}
+        className={`relative z-10 w-full ${
+          isPhoneFrame ? '' : 'max-w-[420px]'
+        } bg-white dark:bg-[#12121A] border-t border-slate-200/90 dark:border-[#27354A] rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] flex flex-col min-h-0 overflow-hidden will-change-transform pb-safe ${className}`}
       >
         {/* Swipe / Drag Zone (Touch-to-dismiss handle) */}
         <div
@@ -263,4 +284,6 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
       </div>
     </div>
   );
+
+  return portalNode ? createPortal(sheetContent, portalNode) : sheetContent;
 };
