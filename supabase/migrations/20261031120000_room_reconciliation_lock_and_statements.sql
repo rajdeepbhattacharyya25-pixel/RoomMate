@@ -12,14 +12,23 @@
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- 1. HARDENED SAFETY ENVIRONMENT CHECK (Multi-Vector Production Guard)
+-- 1. HARDENED SAFETY ENVIRONMENT CHECK (Fail-Closed Staging Guard)
 -- ----------------------------------------------------------------------------
 DO $$
 BEGIN
+  -- Strict Fail-Closed Check: Explicitly require roommate.environment IN ('staging', 'local', 'test')
+  IF current_setting('roommate.environment', true) IS NULL 
+     OR current_setting('roommate.environment', true) NOT IN ('staging', 'local', 'test') THEN
+    RAISE EXCEPTION 'MIGRATION_BLOCKED: This migration contains staging/local DDL and can only be executed in environments where roommate.environment is explicitly set to ''staging'', ''local'', or ''test''. Refusing to run in unknown or production environment.';
+  END IF;
+
+  -- Defense-in-depth: explicitly block any connection identifying as production pbzaaskftrmnvocczhat
   IF COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'iss', '') LIKE '%pbzaaskftrmnvocczhat%'
      OR COALESCE(current_setting('app.settings.project_ref', true), '') = 'pbzaaskftrmnvocczhat'
+     OR COALESCE(current_setting('roommate.project_ref', true), '') = 'pbzaaskftrmnvocczhat'
      OR current_user LIKE '%pbzaaskftrmnvocczhat%'
-     OR inet_server_addr()::text LIKE '%pbzaaskftrmnvocczhat%' THEN
+     OR inet_server_addr()::text LIKE '%pbzaaskftrmnvocczhat%'
+     OR current_database() LIKE '%pbzaaskftrmnvocczhat%' THEN
     RAISE EXCEPTION 'SAFETY TRIGGERED: Migration blocked against production project pbzaaskftrmnvocczhat!';
   END IF;
 END $$;
@@ -49,6 +58,14 @@ CREATE TABLE IF NOT EXISTS public.room_reconciliation_periods (
 CREATE INDEX IF NOT EXISTS idx_reconciliation_room_period 
   ON public.room_reconciliation_periods(room_id, period_year, period_month);
 
+-- Idempotent Column Additions for Upgrading Existing Staging Tables
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS revision_count INT NOT NULL DEFAULT 1;
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS certified_at TIMESTAMPTZ;
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS certified_seal_hash TEXT;
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS unlock_reason TEXT;
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ;
+ALTER TABLE public.room_reconciliation_periods ADD COLUMN IF NOT EXISTS unlocked_by UUID REFERENCES public.profiles(id);
+
 -- ----------------------------------------------------------------------------
 -- 3. CREATE TABLE public.room_statement_signoffs
 -- ----------------------------------------------------------------------------
@@ -70,6 +87,16 @@ CREATE INDEX IF NOT EXISTS idx_signoffs_period
   ON public.room_statement_signoffs(period_id);
 CREATE INDEX IF NOT EXISTS idx_signoffs_room_user 
   ON public.room_statement_signoffs(room_id, user_id);
+
+-- Idempotent Column Additions for Upgrading Existing Staging Tables
+ALTER TABLE public.room_statement_signoffs ADD COLUMN IF NOT EXISTS signature_stamp TEXT;
+ALTER TABLE public.room_statement_signoffs ADD COLUMN IF NOT EXISTS dispute_reason TEXT;
+
+-- Finding F Clarification:
+-- signature_stamp is an audit verification digest (SHA-256 hash over user_id, period_id, and sign timestamp).
+-- It provides tamper-evident audit logging for the ledger approval event, not cryptographic PKI non-repudiation.
+COMMENT ON COLUMN public.room_statement_signoffs.signature_stamp IS 
+  'Audit verification digest (SHA-256 over user_id, period_id, and timestamp). Tamper-evident ledger approval audit record, not an asymmetric PKI digital signature.';
 
 -- ----------------------------------------------------------------------------
 -- 4. ROW LEVEL SECURITY (RLS)
@@ -344,6 +371,19 @@ BEGIN
   v_month_start := make_timestamptz(p_year, p_month, 1, 0, 0, 0, 'UTC');
   v_month_end := (v_month_start + INTERVAL '1 month' - INTERVAL '1 millisecond');
 
+  -- Finding E / Remediation 10: Check existing status with FOR UPDATE lock
+  -- Certified periods are terminal and cryptographically sealed. Re-locking or downgrading is strictly forbidden.
+  SELECT status INTO v_period_status
+  FROM public.room_reconciliation_periods
+  WHERE room_id = p_room_id
+    AND period_year = p_year
+    AND period_month = p_month
+  FOR UPDATE;
+
+  IF v_period_status = 'CERTIFIED' THEN
+    RAISE EXCEPTION 'PERIOD_CERTIFIED: Reconciliation period %-% is already certified and cannot be locked or modified.', p_year, p_month;
+  END IF;
+
   -- 4. Upsert reconciliation period to LOCKED
   INSERT INTO public.room_reconciliation_periods (
     room_id, period_year, period_month, status, locked_at, locked_by, updated_at
@@ -357,7 +397,12 @@ BEGIN
     locked_at = clock_timestamp(),
     locked_by = v_caller_id,
     updated_at = clock_timestamp()
+  WHERE room_reconciliation_periods.status != 'CERTIFIED'
   RETURNING id, status INTO v_period_id, v_period_status;
+
+  IF v_period_id IS NULL THEN
+    RAISE EXCEPTION 'PERIOD_CERTIFIED: Reconciliation period %-% is already certified and cannot be locked or modified.', p_year, p_month;
+  END IF;
 
   -- 5. Seed sign-offs for historical members active during this month
   FOR v_member IN

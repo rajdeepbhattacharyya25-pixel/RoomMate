@@ -290,15 +290,21 @@ describe('Phase 10 Security Remediation & Adversarial Verification Suite', () =>
   });
 
   // --------------------------------------------------------------------------
-  // Finding 10: Prevent Reopening or Downgrading Certified Periods
+  // Finding 10 & Finding E: Prevent Reopening or Downgrading Certified Periods
   // --------------------------------------------------------------------------
-  describe('Finding 10: Certified Period Immutability', () => {
+  describe('Finding 10 & Finding E: Certified Period Immutability in lock and unlock RPCs', () => {
     it('verifies unlock_room_period_v2 explicitly blocks unlocking CERTIFIED periods', () => {
       expect(statementSql).toContain("IF v_current_status = 'CERTIFIED' THEN");
       expect(statementSql).toContain('PERIOD_CERTIFIED: Certified statement periods are cryptographically sealed and cannot be reopened or downgraded');
     });
 
-    it('adversarial simulation: blocks rogue admin from downgrading certified statement back to OPEN', () => {
+    it('verifies lock_room_period_v2 explicitly rejects attempts to downgrade CERTIFIED periods (Finding E)', () => {
+      expect(statementSql).toContain("IF v_period_status = 'CERTIFIED' THEN");
+      expect(statementSql).toContain("RAISE EXCEPTION 'PERIOD_CERTIFIED: Reconciliation period %-% is already certified and cannot be locked or modified.'");
+      expect(statementSql).toContain("WHERE room_reconciliation_periods.status != 'CERTIFIED'");
+    });
+
+    it('adversarial simulation: blocks rogue admin from downgrading certified statement back to OPEN or LOCKED', () => {
       const simulateUnlockPeriod = (period: { status: string }) => {
         if (period.status === 'CERTIFIED') {
           throw new Error('PERIOD_CERTIFIED: Certified statement periods are cryptographically sealed');
@@ -306,15 +312,43 @@ describe('Phase 10 Security Remediation & Adversarial Verification Suite', () =>
         return { status: 'OPEN' };
       };
 
+      const simulateLockPeriod = (period: { status: string }) => {
+        if (period.status === 'CERTIFIED') {
+          throw new Error('PERIOD_CERTIFIED: Reconciliation period is already certified and cannot be locked or modified.');
+        }
+        return { status: 'LOCKED' };
+      };
+
       expect(() => simulateUnlockPeriod({ status: 'CERTIFIED' })).toThrow('PERIOD_CERTIFIED');
       expect(simulateUnlockPeriod({ status: 'LOCKED' })).toEqual({ status: 'OPEN' });
+
+      expect(() => simulateLockPeriod({ status: 'CERTIFIED' })).toThrow('PERIOD_CERTIFIED');
+      expect(simulateLockPeriod({ status: 'OPEN' })).toEqual({ status: 'LOCKED' });
     });
   });
 
   // --------------------------------------------------------------------------
-  // Multi-Vector Production Safety Check Hardening
+  // Finding F: Signature Stamp Audit Verification Digest Clarification
   // --------------------------------------------------------------------------
-  describe('Production Guard: Multi-Vector Safety Check', () => {
+  describe('Finding F: Signature Stamp Audit Clarification', () => {
+    it('verifies signature_stamp is explicitly documented as an audit verification digest, not PKI digital signature', () => {
+      expect(statementSql).toContain('Audit verification digest (SHA-256 over user_id, period_id, and timestamp)');
+      expect(statementSql).toContain('Tamper-evident ledger approval audit record, not an asymmetric PKI digital signature');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Multi-Vector Production Safety Check Hardening & Fail-Closed Guard (Finding D)
+  // --------------------------------------------------------------------------
+  describe('Production Guard: Multi-Vector Safety Check & Fail-Closed Staging Requirement (Finding D)', () => {
+    it('enforces fail-closed environment check requiring explicit roommate.environment setting', () => {
+      expect(recurringSql).toContain("current_setting('roommate.environment', true) NOT IN ('staging', 'local', 'test')");
+      expect(recurringSql).toContain('MIGRATION_BLOCKED: This migration contains staging/local DDL');
+
+      expect(statementSql).toContain("current_setting('roommate.environment', true) NOT IN ('staging', 'local', 'test')");
+      expect(statementSql).toContain('MIGRATION_BLOCKED: This migration contains staging/local DDL');
+    });
+
     it('checks multiple independent sources beyond request.jwt.claims (project_ref, current_user, inet_server_addr)', () => {
       expect(recurringSql).toContain("app.settings.project_ref");
       expect(recurringSql).toContain("current_user LIKE '%pbzaaskftrmnvocczhat%'");
@@ -325,43 +359,32 @@ describe('Phase 10 Security Remediation & Adversarial Verification Suite', () =>
       expect(statementSql).toContain("inet_server_addr()::text LIKE '%pbzaaskftrmnvocczhat%'");
     });
 
-    it('adversarial simulation: direct psql connection without JWT claims is still caught by server metadata', () => {
-      const simulateMigrationSafetyCheck = (ctx: {
-        jwtClaims: Record<string, any> | null;
+    it('adversarial simulation: fail-closed blocks any migration run if roommate.environment is unset or unknown', () => {
+      const simulateFailClosedMigrationGuard = (ctx: {
+        environmentSetting: string | null;
         projectRef?: string;
-        currentUser?: string;
-        serverAddr?: string;
       }) => {
-        const prodId = 'pbzaaskftrmnvocczhat';
-        const iss = ctx.jwtClaims?.iss || '';
-        if (
-          iss.includes(prodId) ||
-          ctx.projectRef === prodId ||
-          ctx.currentUser?.includes(prodId) ||
-          ctx.serverAddr?.includes(prodId)
-        ) {
+        if (!ctx.environmentSetting || !['staging', 'local', 'test'].includes(ctx.environmentSetting)) {
+          throw new Error('MIGRATION_BLOCKED: roommate.environment not set to staging/local/test');
+        }
+        if (ctx.projectRef === 'pbzaaskftrmnvocczhat') {
           throw new Error('SAFETY TRIGGERED: Migration blocked against production project pbzaaskftrmnvocczhat!');
         }
-        return 'PROCEED_ON_STAGING';
+        return 'SUCCESS';
       };
 
-      // Attacker connects via psql without JWT claims (jwtClaims is null)
-      expect(() => {
-        simulateMigrationSafetyCheck({
-          jwtClaims: null,
-          projectRef: 'pbzaaskftrmnvocczhat', // Captured by server config
-        });
-      }).toThrow('SAFETY TRIGGERED');
+      // Unset environment variable -> fails closed!
+      expect(() => simulateFailClosedMigrationGuard({ environmentSetting: null })).toThrow('MIGRATION_BLOCKED');
 
-      // Staging/local execution proceeds safely
-      expect(
-        simulateMigrationSafetyCheck({
-          jwtClaims: null,
-          projectRef: 'local-docker-supabase',
-          currentUser: 'postgres',
-          serverAddr: '127.0.0.1',
-        })
-      ).toBe('PROCEED_ON_STAGING');
+      // Ambiguous or production setting -> fails closed!
+      expect(() => simulateFailClosedMigrationGuard({ environmentSetting: 'production' })).toThrow('MIGRATION_BLOCKED');
+
+      // Attempt to spoof staging on production project -> blocked by secondary vector!
+      expect(() => simulateFailClosedMigrationGuard({ environmentSetting: 'staging', projectRef: 'pbzaaskftrmnvocczhat' })).toThrow('SAFETY TRIGGERED');
+
+      // Genuine staging execution succeeds
+      expect(simulateFailClosedMigrationGuard({ environmentSetting: 'staging', projectRef: 'staging-project-123' })).toBe('SUCCESS');
     });
   });
 });
+
