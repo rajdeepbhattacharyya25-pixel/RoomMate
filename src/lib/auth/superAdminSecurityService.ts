@@ -70,11 +70,47 @@ const DEVICE_ID_KEY = 'roommate_superadmin_device_id';
 const BIOMETRIC_DEVICE_KEY = 'roommate_superadmin_biometric_active';
 const STEP_UP_CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
-// In-Memory Rate Limiting & Ephemeral Session Assurance
+// Rate Limiting & Persistent Session Assurance
+const RATE_LIMIT_STORAGE_KEY = 'roommate_superadmin_auth_ratelimit';
+
+interface RateLimitStorage {
+  failedAttempts: number;
+  lockedUntil: number | null;
+}
+
 let memoryFailedAttempts = 0;
 let memoryLockoutUntil: number | null = null;
 let inMemoryStepUpTimestamp: number | null = null;
 let inMemoryActiveFactorId: string | null = null;
+
+function getStoredRateLimit(): RateLimitStorage {
+  if (typeof localStorage === 'undefined') {
+    return { failedAttempts: memoryFailedAttempts, lockedUntil: memoryLockoutUntil };
+  }
+  try {
+    const raw = localStorage.getItem(RATE_LIMIT_STORAGE_KEY);
+    if (!raw) return { failedAttempts: memoryFailedAttempts, lockedUntil: memoryLockoutUntil };
+    const parsed = JSON.parse(raw);
+    const failedAttempts = typeof parsed.failedAttempts === 'number' ? parsed.failedAttempts : memoryFailedAttempts;
+    const lockedUntil = typeof parsed.lockedUntil === 'number' ? parsed.lockedUntil : memoryLockoutUntil;
+    memoryFailedAttempts = failedAttempts;
+    memoryLockoutUntil = lockedUntil;
+    return { failedAttempts, lockedUntil };
+  } catch {
+    return { failedAttempts: memoryFailedAttempts, lockedUntil: memoryLockoutUntil };
+  }
+}
+
+function setStoredRateLimit(state: RateLimitStorage): void {
+  memoryFailedAttempts = state.failedAttempts;
+  memoryLockoutUntil = state.lockedUntil;
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(RATE_LIMIT_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore private browsing error
+  }
+}
 
 export function getActiveTotpFactorId(): string | null {
   return inMemoryActiveFactorId;
@@ -330,39 +366,42 @@ export async function verifyRfc6238Totp(
 }
 
 // -----------------------------------------------------------------------------
-// 4. RATE LIMITING & BRUTE FORCE PROTECTION
+// 4. RATE LIMITING & BRUTE FORCE PROTECTION (PERSISTENT & MEMORY-MIRRORED)
 // -----------------------------------------------------------------------------
 
 export function checkRateLimit(): { isLocked: boolean; remainingSeconds?: number } {
   const now = Date.now();
-  if (memoryLockoutUntil && memoryLockoutUntil > now) {
-    const remaining = Math.ceil((memoryLockoutUntil - now) / 1000);
+  const current = getStoredRateLimit();
+
+  if (current.lockedUntil && current.lockedUntil > now) {
+    const remaining = Math.ceil((current.lockedUntil - now) / 1000);
     return { isLocked: true, remainingSeconds: remaining };
   }
 
-  if (memoryLockoutUntil && memoryLockoutUntil <= now) {
-    memoryLockoutUntil = null;
-    memoryFailedAttempts = 0;
+  if (current.lockedUntil && current.lockedUntil <= now) {
+    setStoredRateLimit({ failedAttempts: 0, lockedUntil: null });
   }
 
   return { isLocked: false };
 }
 
 export function recordMfaFailure(): { isLocked: boolean; attemptsRemaining: number } {
-  memoryFailedAttempts += 1;
-  const attemptsRemaining = Math.max(0, 5 - memoryFailedAttempts);
+  const current = getStoredRateLimit();
+  const newAttempts = current.failedAttempts + 1;
+  const attemptsRemaining = Math.max(0, 5 - newAttempts);
 
-  if (memoryFailedAttempts >= 5) {
-    memoryLockoutUntil = Date.now() + 15 * 60 * 1000; // 15-minute lockout
+  if (newAttempts >= 5) {
+    const lockoutExpiry = Date.now() + 15 * 60 * 1000; // 15-minute persistent lockout
+    setStoredRateLimit({ failedAttempts: newAttempts, lockedUntil: lockoutExpiry });
     return { isLocked: true, attemptsRemaining: 0 };
   }
 
+  setStoredRateLimit({ failedAttempts: newAttempts, lockedUntil: null });
   return { isLocked: false, attemptsRemaining };
 }
 
 export function resetMfaFailures(): void {
-  memoryFailedAttempts = 0;
-  memoryLockoutUntil = null;
+  setStoredRateLimit({ failedAttempts: 0, lockedUntil: null });
 }
 
 // -----------------------------------------------------------------------------
@@ -472,12 +511,18 @@ export async function verifySuperAdminTotp(
           return { success: true };
         }
       }
-    } catch (err) {
-      console.warn('Supabase MFA challenge unavailable or rejected, trying standard RFC 6238 fallback:', err);
+      // If session was missing or verifyData was empty in real cloud mode
+      recordMfaFailure();
+      return { success: false, error: 'MFA challenge verification failed on server.' };
+    } catch (err: any) {
+      // Fail-closed in genuine cloud mode: Network drops or Supabase errors MUST NOT fall back to mock RFC 6238
+      recordMfaFailure();
+      return { success: false, error: err?.message || 'Server MFA verification failed or network unavailable.' };
     }
   }
 
   // Standard RFC 6238 TOTP verification (Google Authenticator / Authy / 1Password)
+  // ONLY for local mock development mode (factorId starts with 'factor_' or Supabase unconfigured)
   if (fallbackSecret) {
     const ok = await verifyRfc6238Totp(fallbackSecret, code);
     if (ok) {

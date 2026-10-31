@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { User, PersonalExpense, SharedExpense, ExpenseSplit, Room, SettlementPayment } from '../types';
 import {
   Lock,
@@ -10,7 +10,17 @@ import {
   Receipt,
   Info,
   ArrowUpRight,
+  CalendarClock,
 } from 'lucide-react';
+import { PendingBillsBanner } from './recurring/PendingBillsBanner';
+import { RecurringBillsModal } from './recurring/RecurringBillsModal';
+import {
+  getRecurringRules,
+  evaluateRecurringDueBills,
+  executeRecurringCycle,
+  PendingRecurringBill,
+} from '../lib/recurring/recurringCatchUpService';
+import { RecurringRule } from '../lib/recurring/scheduleCalculator';
 
 interface PersonalVaultProps {
   currentUser: User;
@@ -48,6 +58,80 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
   const [category, setCategory] = useState<PersonalExpense['category']>('Food');
   const [notes, setNotes] = useState('');
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Recurring Bills & Subscriptions State
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [pendingBills, setPendingBills] = useState<PendingRecurringBill[]>([]);
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
+
+  const loadRecurringData = useCallback(async () => {
+    try {
+      const rules = await getRecurringRules(currentUser.id, _activeRoom?.id);
+      setRecurringRules(rules);
+      const evalResult = await evaluateRecurringDueBills(currentUser.id, _activeRoom?.id);
+      setPendingBills(evalResult.pendingReviews);
+
+      // Auto-logged personal bills registered directly
+      if (evalResult.autoLogged.length > 0) {
+        for (const item of evalResult.autoLogged) {
+          if (item.status === 'AUTO_LOGGED' && item.rule && item.rule.scope === 'PERSONAL') {
+            onAddExpense({
+              title: item.rule.title,
+              amount: item.amount,
+              category: (item.rule.category as PersonalExpense['category']) || 'Food',
+              notes: `Auto-logged recurring bill (${item.cycleDate || item.rule.nextExecutionDate})`,
+              expenseDate: item.cycleDate || item.rule.nextExecutionDate,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[PersonalVault] Error evaluating recurring bills:', err);
+    }
+  }, [currentUser.id, _activeRoom?.id, onAddExpense]);
+
+  useEffect(() => {
+    loadRecurringData();
+  }, [loadRecurringData]);
+
+  const handleConfirmRecurringBill = async (bill: PendingRecurringBill, confirmedAmount: number) => {
+    await executeRecurringCycle(
+      bill.rule.id,
+      bill.cycleDate,
+      confirmedAmount,
+      'CONFIRM_LOG',
+      bill.rule
+    );
+    if (bill.rule.scope === 'PERSONAL') {
+      onAddExpense({
+        title: bill.rule.title,
+        amount: confirmedAmount,
+        category: (bill.rule.category as PersonalExpense['category']) || 'Food',
+        notes: `Recurring bill confirmed (${bill.cycleDate})`,
+        expenseDate: bill.cycleDate,
+      });
+    }
+    setPendingBills((prev) =>
+      prev.filter((b) => !(b.rule.id === bill.rule.id && b.cycleDate === bill.cycleDate))
+    );
+    const rules = await getRecurringRules(currentUser.id, _activeRoom?.id);
+    setRecurringRules(rules);
+  };
+
+  const handleSkipRecurringBill = async (bill: PendingRecurringBill) => {
+    await executeRecurringCycle(
+      bill.rule.id,
+      bill.cycleDate,
+      bill.dueAmount,
+      'SKIP',
+      bill.rule
+    );
+    setPendingBills((prev) =>
+      prev.filter((b) => !(b.rule.id === bill.rule.id && b.cycleDate === bill.cycleDate))
+    );
+    const rules = await getRecurringRules(currentUser.id, _activeRoom?.id);
+    setRecurringRules(rules);
+  };
 
   // 1. Private Personal Expenses for Current User
   const userExpenses = useMemo(() => {
@@ -183,15 +267,40 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Private Expense</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setShowRecurringModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-indigo-300 hover:text-white border border-indigo-500/30 font-bold text-xs shadow-md transition-all cursor-pointer relative"
+              title="Manage Recurring Bills & Subscriptions"
+            >
+              <CalendarClock className="w-4 h-4 text-indigo-400" />
+              <span>Recurring Bills</span>
+              {pendingBills.length > 0 && (
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center animate-pulse">
+                  {pendingBills.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Private Expense</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* 1-Tap Pending Recurring Bills Banner */}
+      {pendingBills.length > 0 && (
+        <PendingBillsBanner
+          pendingBills={pendingBills}
+          onConfirm={handleConfirmRecurringBill}
+          onSkip={handleSkipRecurringBill}
+        />
+      )}
 
       {/* 4-Column Financial Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -610,6 +719,15 @@ export const PersonalVault: React.FC<PersonalVaultProps> = ({
           </div>
         </div>
       )}
+      {/* Recurring Bills Modal */}
+      <RecurringBillsModal
+        isOpen={showRecurringModal}
+        onClose={() => setShowRecurringModal(false)}
+        userId={currentUser.id}
+        rules={recurringRules}
+        onRulesUpdated={loadRecurringData}
+        activeRoom={_activeRoom}
+      />
     </div>
   );
 };

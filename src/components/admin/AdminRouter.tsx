@@ -758,6 +758,12 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
   };
 
   const handleClearBrowserCache = async () => {
+    if (typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm(
+        'Warning: Clearing local storage will purge offline state and sign out your current session. Do you want to proceed?'
+      );
+      if (!confirmed) return;
+    }
     try {
       localStorage.removeItem('roommate_saas_db_v1');
       localStorage.removeItem('campusflow_saas_db_v3');
@@ -770,8 +776,9 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
     }
   };
 
-  // Strict Authorization Guard: Non-superadmin users are strictly blocked from all admin views including /admin/system-health
+  // Strict Authorization Guard: Non-superadmin users are strictly blocked from all admin views
   if (currentUser.role !== 'SUPER_ADMIN') {
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : `/admin/${currentRoute}`;
     return (
       <div className="min-h-screen bg-[#0a0e17] flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 shadow-lg shadow-rose-500/10">
@@ -779,7 +786,7 @@ export const AdminRouter: React.FC<AdminRouterProps> = ({
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Access Denied: SuperAdmin Required</h2>
         <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
-          The route <code className="text-rose-300 font-mono bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">/admin/system-health</code> and the SuperAdmin platform portal are strictly restricted to authenticated platform administrators.
+          The requested route <code className="text-rose-300 font-mono bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">{currentPath}</code> and the SuperAdmin platform portal are strictly restricted to authenticated platform administrators.
         </p>
         <button
           onClick={() => {

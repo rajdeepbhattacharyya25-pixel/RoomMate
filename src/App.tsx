@@ -443,7 +443,9 @@ export function AppContent() {
             cloudState.users.find((u) => u.email.toLowerCase() === currentUser.email.toLowerCase());
           if (matched) {
             if (currentUser.role === 'SUPER_ADMIN' && matched.role !== 'SUPER_ADMIN') {
-              matched.role = 'SUPER_ADMIN';
+              if (activeTab === 'admin') {
+                setActiveTab('dashboard');
+              }
             }
             setCurrentUser(matched);
           }
@@ -454,7 +456,7 @@ export function AppContent() {
         setIsRealtimeLive(true);
       }
     });
-  }, [isAuthenticated, currentUser.id, currentUser.email, currentUser.role]);
+  }, [isAuthenticated, currentUser.id, currentUser.email, currentUser.role, activeTab]);
 
   // 2. Realtime Room Subscriptions (Multi-Device Broadcast Listener & Native Notifications)
   useEffect(() => {

@@ -31,6 +31,7 @@ import {
   PieChart,
   WifiOff,
   Download,
+  CalendarClock,
 } from 'lucide-react';
 import {
   getUserBudget,
@@ -43,6 +44,15 @@ import { ExportBottomSheet } from './ExportBottomSheet';
 import { ProgressiveFeedControls } from './ProgressiveFeedControls';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { hapticImpact, hapticSelection, hapticSuccess, hapticWarning } from '../../lib/native/haptics';
+import { PendingBillsBanner } from '../recurring/PendingBillsBanner';
+import { RecurringBillsModal } from '../recurring/RecurringBillsModal';
+import {
+  getRecurringRules,
+  evaluateRecurringDueBills,
+  executeRecurringCycle,
+  PendingRecurringBill,
+} from '../../lib/recurring/recurringCatchUpService';
+import { RecurringRule } from '../../lib/recurring/scheduleCalculator';
 import {
   gatherMonthlyExportData,
   exportToFormat,
@@ -62,6 +72,7 @@ interface MobilePersonalVaultProps {
   settlementPayments?: SettlementPayment[];
   allUsers?: User[];
   rooms?: Room[];
+  activeRoom?: Room | null;
 }
 
 type PeriodFilter = 'WEEK' | 'MONTH' | 'ALL';
@@ -139,6 +150,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
   settlementPayments,
   allUsers,
   rooms,
+  activeRoom = null,
 }) => {
   const { isOnline } = useNetworkStatus();
   const now = useMemo(() => new Date(), []);
@@ -171,6 +183,82 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
   const [editAllowanceInput, setEditAllowanceInput] = useState<string>(() => String(getUserBudget(currentUser.id).monthlyAllowance));
   const [editCategoryCaps, setEditCategoryCaps] = useState<Record<string, number>>(() => getUserBudget(currentUser.id).categoryCaps);
   const [showCategoryCapsCard, setShowCategoryCapsCard] = useState<boolean>(true);
+
+  // Recurring Bills & Subscriptions State
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [pendingBills, setPendingBills] = useState<PendingRecurringBill[]>([]);
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
+
+  const loadRecurringData = useCallback(async () => {
+    try {
+      const rules = await getRecurringRules(currentUser.id, activeRoom?.id);
+      setRecurringRules(rules);
+      const evalResult = await evaluateRecurringDueBills(currentUser.id, activeRoom?.id);
+      setPendingBills(evalResult.pendingReviews);
+
+      // Auto-logged personal bills registered directly
+      if (evalResult.autoLogged.length > 0) {
+        for (const item of evalResult.autoLogged) {
+          if (item.status === 'AUTO_LOGGED' && item.rule && item.rule.scope === 'PERSONAL') {
+            onAddExpense({
+              title: item.rule.title,
+              amount: item.amount,
+              category: (item.rule.category as PersonalExpense['category']) || 'Food',
+              notes: `Auto-logged recurring bill (${item.cycleDate || item.rule.nextExecutionDate})`,
+              expenseDate: item.cycleDate || item.rule.nextExecutionDate,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[MobilePersonalVault] Error evaluating recurring bills:', err);
+    }
+  }, [currentUser.id, activeRoom?.id, onAddExpense]);
+
+  useEffect(() => {
+    loadRecurringData();
+  }, [loadRecurringData]);
+
+  const handleConfirmRecurringBill = async (bill: PendingRecurringBill, confirmedAmount: number) => {
+    hapticSuccess();
+    await executeRecurringCycle(
+      bill.rule.id,
+      bill.cycleDate,
+      confirmedAmount,
+      'CONFIRM_LOG',
+      bill.rule
+    );
+    if (bill.rule.scope === 'PERSONAL') {
+      onAddExpense({
+        title: bill.rule.title,
+        amount: confirmedAmount,
+        category: (bill.rule.category as PersonalExpense['category']) || 'Food',
+        notes: `Recurring bill confirmed (${bill.cycleDate})`,
+        expenseDate: bill.cycleDate,
+      });
+    }
+    setPendingBills((prev) =>
+      prev.filter((b) => !(b.rule.id === bill.rule.id && b.cycleDate === bill.cycleDate))
+    );
+    const rules = await getRecurringRules(currentUser.id, activeRoom?.id);
+    setRecurringRules(rules);
+  };
+
+  const handleSkipRecurringBill = async (bill: PendingRecurringBill) => {
+    hapticSelection();
+    await executeRecurringCycle(
+      bill.rule.id,
+      bill.cycleDate,
+      bill.dueAmount,
+      'SKIP',
+      bill.rule
+    );
+    setPendingBills((prev) =>
+      prev.filter((b) => !(b.rule.id === bill.rule.id && b.cycleDate === bill.cycleDate))
+    );
+    const rules = await getRecurringRules(currentUser.id, activeRoom?.id);
+    setRecurringRules(rules);
+  };
 
   // Specific Month Navigation State
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(currentActualMonth);
@@ -710,13 +798,32 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => setShowAddSheet(true)}
-            className="h-9 px-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Add</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                hapticSelection();
+                setShowRecurringModal(true);
+              }}
+              className="h-9 px-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1 active:scale-95 transition-all relative border border-slate-200 dark:border-slate-700 cursor-pointer"
+              title="Recurring Bills & Subscriptions"
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+              <span>Bills</span>
+              {pendingBills.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-black flex items-center justify-center animate-pulse">
+                  {pendingBills.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowAddSheet(true)}
+              className="h-9 px-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Add</span>
+            </button>
+          </div>
         </div>
 
         {/* Period Segmented Control (This Week | This Month | All Time) */}
@@ -948,6 +1055,15 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           </div>
         )}
       </div>
+
+      {/* 1-Tap Pending Recurring Bills Banner */}
+      {pendingBills.length > 0 && (
+        <PendingBillsBanner
+          pendingBills={pendingBills}
+          onConfirm={handleConfirmRecurringBill}
+          onSkip={handleSkipRecurringBill}
+        />
+      )}
 
       {/* Dynamic Burn Rate Velocity Health Banner */}
       {selectedPeriod === 'MONTH' && velocityInfo && (
@@ -1738,6 +1854,16 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         onClose={() => setShowExportSheet(false)}
         monthLabel={`${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`}
         onExport={handleExport}
+      />
+
+      {/* Recurring Bills Modal */}
+      <RecurringBillsModal
+        isOpen={showRecurringModal}
+        onClose={() => setShowRecurringModal(false)}
+        userId={currentUser.id}
+        rules={recurringRules}
+        onRulesUpdated={loadRecurringData}
+        activeRoom={activeRoom}
       />
     </div>
   );

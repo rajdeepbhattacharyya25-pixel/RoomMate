@@ -379,6 +379,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               settlementPayments={settlementPayments}
               allUsers={allUsers}
               rooms={rooms}
+              activeRoom={activeRoom}
             />
           )}
 

@@ -367,7 +367,7 @@ export const AdminSecurity: React.FC<AdminSecurityProps> = ({
     // If master password hash is already set, verify current password
     if (settings.masterPasswordHash) {
       const currentHash = await hashMasterPassword(currentPassword);
-      if (currentHash !== settings.masterPasswordHash && currentPassword !== 'master_admin_key_2026') {
+      if (currentHash !== settings.masterPasswordHash) {
         setChangePasswordError('Current Master Security Key is incorrect.');
         return;
       }
