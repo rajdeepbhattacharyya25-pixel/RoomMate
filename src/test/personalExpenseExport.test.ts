@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   gatherMonthlyExportData,
-  ExportDataset,
 } from '../lib/services/expenseExportService';
 import { generateCsvBlob } from '../lib/services/expenseExportCsv';
 import { generateXlsxBlob } from '../lib/services/expenseExportXlsx';
