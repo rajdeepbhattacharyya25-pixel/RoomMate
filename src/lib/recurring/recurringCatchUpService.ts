@@ -44,6 +44,15 @@ export interface ExecuteCycleResult {
 const RECURRING_RULES_STORAGE_KEY = 'roommate_recurring_rules_v1';
 const RECURRING_EXECUTIONS_STORAGE_KEY = 'roommate_recurring_executions_v1';
 
+// Circuit breaker / Feature flag: Remote Supabase sync is disabled until production
+// migration 20261031140000_recurring_bills_engine.sql is approved and applied to pbzaaskftrmnvocczhat.
+// This prevents 404 network spam and guarantees 100% offline-first local storage reliability.
+let isRemoteRecurringTableAvailable = false;
+
+export function enableRemoteRecurringSync(enabled: boolean = true) {
+  isRemoteRecurringTableAvailable = enabled;
+}
+
 // In-Memory Fallback Map (for Node.js test environment or when localStorage is unavailable)
 let inMemoryRules: RecurringRule[] = [];
 let inMemoryExecutions: Record<string, string> = {};
@@ -102,7 +111,7 @@ export async function getRecurringRules(
   userId: string,
   roomId?: string
 ): Promise<RecurringRule[]> {
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured && isRemoteRecurringTableAvailable) {
     try {
       let query = (supabase as any)
         .from('recurring_expense_rules')
@@ -139,8 +148,8 @@ export async function getRecurringRules(
           updatedAt: row.updated_at,
         }));
       }
-    } catch (err) {
-      console.warn('[RecurringCatchUp] Supabase fetch failed, using local storage:', err);
+    } catch {
+      // Gracefully fall back to local storage
     }
   }
 
@@ -171,7 +180,7 @@ export async function createRecurringRule(
     updatedAt: now,
   };
 
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured && isRemoteRecurringTableAvailable) {
     try {
       const { data, error } = await (supabase as any)
         .from('recurring_expense_rules')
@@ -204,8 +213,8 @@ export async function createRecurringRule(
       if (!error && data) {
         newRule.id = data.id;
       }
-    } catch (err) {
-      console.warn('[RecurringCatchUp] Cloud create failed, saved locally:', err);
+    } catch {
+      // Saved locally
     }
   }
 
@@ -220,7 +229,7 @@ export async function createRecurringRule(
  * Deletes a recurring rule.
  */
 export async function deleteRecurringRule(ruleId: string): Promise<boolean> {
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured && isRemoteRecurringTableAvailable) {
     try {
       await (supabase as any).from('recurring_expense_rules').delete().eq('id', ruleId);
     } catch {

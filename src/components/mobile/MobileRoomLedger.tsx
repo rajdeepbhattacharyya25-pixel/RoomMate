@@ -176,6 +176,18 @@ const SHARED_QUICK_CHIPS = [
   'Cleaning Items 🧼',
 ];
 
+const SHARED_QUICK_CHIP_MAP: Record<string, { title: string; category: SharedExpense['category'] }> = {
+  'WiFi Bill 📶': { title: 'WiFi Bill', category: 'Wi-Fi' },
+  'Room Groceries 🛒': { title: 'Room Groceries', category: 'Groceries' },
+  'Electricity ⚡': { title: 'Electricity', category: 'Electricity' },
+  'Maid / Cook 🧹': { title: 'Maid / Cook', category: 'Cleaning' },
+  'Water Cans 💧': { title: 'Water Cans', category: 'Water' },
+  'Dinner Swiggy 🍕': { title: 'Dinner Swiggy', category: 'Food' },
+  'Flat Rent 🏠': { title: 'Flat Rent', category: 'Rent' },
+  'Gas Cylinder ⛽': { title: 'Gas Cylinder', category: 'Gas' },
+  'Cleaning Items 🧼': { title: 'Cleaning Items', category: 'Cleaning' },
+};
+
 export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
   currentUser,
   allUsers,
@@ -2266,7 +2278,13 @@ export const MobileRoomLedger: React.FC<MobileRoomLedgerProps> = ({
                               type="button"
                               onClick={() => {
                                 hapticSelection();
-                                setTitle(cleanName);
+                                const chipConfig = SHARED_QUICK_CHIP_MAP[chip];
+                                if (chipConfig) {
+                                  setTitle(chipConfig.title);
+                                  setCategory(chipConfig.category);
+                                } else {
+                                  setTitle(cleanName);
+                                }
                                 if (splitValidationErrors.title) {
                                   setSplitValidationErrors((prev) => ({ ...prev, title: undefined }));
                                 }
