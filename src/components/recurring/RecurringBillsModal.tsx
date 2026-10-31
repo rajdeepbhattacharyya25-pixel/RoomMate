@@ -33,7 +33,7 @@ export const RecurringBillsModal: React.FC<RecurringBillsModalProps> = ({
   isOpen,
   onClose,
   userId,
-  rules,
+  rules = [],
   onRulesUpdated,
   activeRoom,
   isMobileView = false,
@@ -54,7 +54,8 @@ export const RecurringBillsModal: React.FC<RecurringBillsModalProps> = ({
   const [scope, setScope] = useState<RecurringScopeType>('PERSONAL');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
+  // For desktop dialog, unmount when closed. For mobile view, MobileBottomSheet manages its own animated visibility.
+  if (!isOpen && !isMobileView) return null;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

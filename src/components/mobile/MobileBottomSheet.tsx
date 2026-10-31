@@ -80,6 +80,15 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         openRafRef.current = r2;
       });
       openRafRef.current = r1;
+
+      // Fallback timer ensures visibility fires even if RAF is throttled or delayed
+      const fallbackTimer = setTimeout(() => {
+        setIsVisible(true);
+      }, 35);
+
+      return () => {
+        clearTimeout(fallbackTimer);
+      };
     } else {
       // Parent set isOpen to false -> animate down and unmount
       if (openRafRef.current) {
@@ -201,7 +210,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
       aria-modal="true"
       className={`${
         isPhoneFrame ? 'absolute' : 'fixed'
-      } inset-0 z-50 flex flex-col justify-end items-center select-none overflow-hidden`}
+      } inset-0 z-50 flex flex-col justify-end items-center overflow-hidden`}
     >
       {/* Dimmed Backdrop with fade in/out animation; clicking outside triggers animated close */}
       <div
@@ -278,7 +287,7 @@ export const MobileBottomSheet: React.FC<MobileBottomSheetProps> = ({
         </div>
 
         {/* Scrollable Content Container */}
-        <div className={`px-5 pt-1 pb-6 overflow-y-auto overscroll-contain flex-1 min-h-0 ${contentClassName}`}>
+        <div className={`px-5 pt-1 pb-12 overflow-y-auto overscroll-contain flex-1 min-h-0 ${contentClassName}`}>
           {children}
         </div>
       </div>

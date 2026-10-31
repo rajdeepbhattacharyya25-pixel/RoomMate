@@ -1476,7 +1476,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
         title="Add Private Expense"
         subtitle="Saved securely in your personal vault"
         icon={<Lock className="w-4.5 h-4.5" />}
-        maxHeight="88%"
+        maxHeight="92%"
       >
         {!isOnline && (
           <div className="mb-2.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-700 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
@@ -1487,7 +1487,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleCreate} className="space-y-3 pb-2">
+        <form onSubmit={handleCreate} className="space-y-3 pb-8">
           {/* Amount Display with Currency */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between mb-1">
@@ -1656,7 +1656,7 @@ export const MobilePersonalVault: React.FC<MobilePersonalVaultProps> = ({
           </div>
 
           {/* Submit */}
-          <div className="pt-2">
+          <div className="pt-2 pb-6">
             <button
               type="submit"
               className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all cursor-pointer"
